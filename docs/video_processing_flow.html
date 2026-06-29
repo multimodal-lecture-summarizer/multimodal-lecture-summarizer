@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luồng Xử Lý & Lưu Trữ Video - Tài liệu Hệ thống</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-surface: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: var(--bg-surface);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+        }
+
+        h1, h2, h3 {
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-main);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        h1 i {
+            color: var(--primary);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-top: 40px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h2 i {
+            color: var(--primary);
+        }
+
+        p {
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            font-size: 1rem;
+        }
+
+        strong {
+            color: var(--text-main);
+        }
+
+        /* Flow Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px;
+        }
+
+        .tab-btn {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: 0.2s;
+        }
+
+        .tab-btn:hover, .tab-btn.active {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #eef2ff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Flow Visualizer */
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin: 35px 0;
+            position: relative;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.01);
+            transition: 0.2s;
+        }
+
+        .flow-step:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.05);
+        }
+
+        .step-num {
+            background: var(--primary);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Outfit';
+            font-weight: 600;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .step-body {
+            flex: 1;
+        }
+
+        .step-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+            color: var(--text-main);
+        }
+
+        .step-desc {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .step-tech {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .tech-badge {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: monospace;
+            font-weight: 500;
+        }
+
+        /* Storage Schema Visualizer */
+        .storage-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
+        }
+
+        .storage-card {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .storage-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .storage-card h3 i {
+            color: var(--primary);
+        }
+
+        .storage-list {
+            list-style: none;
+        }
+
+        .storage-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--border);
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .storage-list li:last-child {
+            border-bottom: none;
+        }
+
+        .col-name {
+            font-family: monospace;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .col-type {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1><i class="fa-solid fa-circle-nodes"></i> Kiến Trúc Luồng Xử Lý & Lưu Trữ Video</h1>
+        <p>Tài liệu đặc tả kỹ thuật mô tả cách thức hệ thống tiếp nhận video, vận hành pipeline AI đa phương thức bất đồng bộ và tổ chức lưu trữ dữ liệu tại Data Layer.</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('processing')"><i class="fa-solid fa-gears"></i> Luồng Xử Lý AI Pipeline</button>
+            <button class="tab-btn" onclick="switchTab('storage')"><i class="fa-solid fa-database"></i> Kiến Trúc Lưu Trữ Dữ Liệu</button>
+        </div>
+
+        <!-- TAB 1: PROCESSING FLOW -->
+        <div id="processing" class="tab-content active">
+            <h2><i class="fa-solid fa-route"></i> Luồng Xử Lý Bất Đồng Bộ (Asynchronous Pipeline)</h2>
+            <p>Hệ thống sử dụng cơ chế xử lý bất đồng bộ thông qua <strong>FastAPI</strong> kết hợp hàng đợi tác vụ <strong>Celery & Redis</strong>. Luồng dữ liệu chi tiết đi qua các bước sau:</p>
+
+            <div class="flowchart">
+                <div class="flow-step">
+                    <div class="step-num">1</div>
+                    <div class="step-body">
+                        <div class="step-title">Tiếp nhận & Xác thực Đầu vào</div>
+                        <div class="step-desc">Người dùng tải lên file video (MP4/AVI/MKV) từ Frontend hoặc dán URL YouTube. FastAPI tiếp nhận yêu cầu, lưu metadata ban đầu vào PostgreSQL với trạng thái <code>pending</code>.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">FastAPI</span>
+                            <span class="tech-badge">PostgreSQL (videos)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">2</div>
+                    <div class="step-body">
+                        <div class="step-title">Kiểm thử Tiêu chuẩn Hợp lệ (Validation)</div>
+                        <div class="step-desc">Hệ thống tự động đối chiếu thông số video với cấu hình tiêu chuẩn trong bảng <code>video_standards</code> (giới hạn thời lượng, kích thước file, chất lượng audio). Nếu vi phạm, công việc (job) sẽ lập tức chuyển sang trạng thái <code>failed</code> kèm log báo lỗi.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">Python Core</span>
+                            <span class="tech-badge">PostgreSQL (video_standards)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">3</div>
+                    <div class="step-body">
+                        <div class="step-title">Tách Tín Hiệu & Tiền xử lý (Preprocessing)</div>
+                        <div class="step-desc">Tác vụ được đẩy vào hàng đợi Celery. Worker sử dụng FFmpeg để tách phần âm thanh (audio) ra khỏi video (định dạng WAV 16kHz mono) phục vụ phân tích tiếng nói, đồng thời giải nén các khung hình phục vụ Visual Module.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">Celery</span>
+                            <span class="tech-badge">Redis</span>
+                            <span class="tech-badge">FFmpeg</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">4</div>
+                    <div class="step-body">
+                        <div class="step-title">Nhận dạng Giọng nói & Gắn nhãn Thời gian</div>
+                        <div class="step-desc">Audio Module chạy mô hình WhisperX để chuyển đổi giọng nói thành văn bản. WhisperX giúp liên kết chính xác nhãn thời gian ở mức từng từ (word-level timestamps) và lọc tiếng ồn (Noise Reduction).</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">WhisperX (ASR)</span>
+                            <span class="tech-badge">PyTorch</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">5</div>
+                    <div class="step-body">
+                        <div class="step-title">Phát hiện Chuyển cảnh & Mô tả Keyframe</div>
+                        <div class="step-desc">Visual Module chạy PySceneDetect phát hiện điểm chuyển cảnh đột ngột. CLIP nhúng (embed) các frames và nhóm lại bằng K-means để chọn ra keyframe đại diện nhất trong từng scene. Cuối cùng, BLIP-2 tự động sinh mô tả văn bản (captioning) cho từng keyframe đó.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">PySceneDetect</span>
+                            <span class="tech-badge">CLIP (Vision-Language)</span>
+                            <span class="tech-badge">BLIP-2 (Captioning)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">6</div>
+                    <div class="step-body">
+                        <div class="step-title">Hợp nhất Đa phương thức & Tổng hợp (Fusion LLM)</div>
+                        <div class="step-desc">Fusion Module kết hợp thông tin văn bản có mốc thời gian (từ Audio) và mô tả ngữ cảnh hình ảnh (từ Visual) thành một Prompt có cấu trúc. Sau đó gọi LLM để sinh bản tóm tắt tóm lược ý chính, chia chương (chapters) và chuẩn bị dữ liệu RAG.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">LangChain</span>
+                            <span class="tech-badge">GPT-4o / Gemini / Qwen2.5</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-num">7</div>
+                    <div class="step-body">
+                        <div class="step-title">Lưu trữ Dữ liệu & Phục vụ Q&A</div>
+                        <div class="step-desc">Kết quả tóm tắt cuối cùng được lưu vào PostgreSQL. Phần văn bản transcript được bẻ nhỏ, chuyển đổi sang vector và index vào ChromaDB để sẵn sàng phục vụ tính năng Hỏi đáp (RAG). Frontend nhận tín hiệu hoàn tất thông qua WebSocket.</div>
+                        <div class="step-tech">
+                            <span class="tech-badge">PostgreSQL (summaries)</span>
+                            <span class="tech-badge">ChromaDB</span>
+                            <span class="tech-badge">WebSocket</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: STORAGE ARCHITECTURE -->
+        <div id="storage" class="tab-content">
+            <h2><i class="fa-solid fa-server"></i> Kiến Trúc Lưu Trữ Dữ Liệu (Data Layer)</h2>
+            <p>Hệ thống sử dụng cơ chế lưu trữ kết hợp (Hybrid Storage) để lưu trữ tối ưu từng loại dữ liệu khác nhau:</p>
+
+            <div class="storage-grid">
+                <!-- PostgreSQL Tables -->
+                <div class="storage-card" style="grid-column: 1 / -1;">
+                    <h3 style="color: #0369a1;"><i class="fa-solid fa-database"></i> PostgreSQL - Cơ Sở Dữ Liệu Quan Hệ (Relational DB)</h3>
+                    <p style="font-size: 0.95rem; margin-bottom: 15px;">Đóng vai trò là <strong>Primary Database</strong> (SSOT - Single Source of Truth). Quản lý cấu trúc người dùng, tiến trình xử lý của Celery, và toàn bộ metadata kết quả AI. Đảm bảo tính toàn vẹn dữ liệu (ACID).</p>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px;">
+                        
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-film"></i> Bảng: videos</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Quản lý trạng thái xử lý tổng thể, làm đầu vào cho Celery Worker.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (Primary Key)</span></li>
+                                <li><span class="col-name">user_id</span><span class="col-type">UUID (Foreign Key)</span></li>
+                                <li><span class="col-name">file_path</span><span class="col-type">VARCHAR (Local/S3 Path)</span></li>
+                                <li><span class="col-name">status</span><span class="col-type">ENUM (pending/processing/done/failed)</span></li>
+                            </ul>
+                        </div>
+
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-list-check"></i> Bảng: jobs</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Theo dõi chi tiết tiến trình từng bước của AI Pipeline (dùng để update UI qua WebSocket).</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">job_id</span><span class="col-type">UUID (PK)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
+                                <li><span class="col-name">task_name</span><span class="col-type">VARCHAR (vd: whisper_transcribe)</span></li>
+                                <li><span class="col-name">progress</span><span class="col-type">INTEGER (0-100%)</span></li>
+                                <li><span class="col-name">error_log</span><span class="col-type">TEXT (Lưu traceback nếu lỗi)</span></li>
+                            </ul>
+                        </div>
+
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-file-invoice"></i> Bảng: summaries</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu trữ kết quả cuối cùng từ LLM Fusion phục vụ hiển thị trên UI Kết Quả.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">summary_id</span><span class="col-type">UUID (PK)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
+                                <li><span class="col-name">summary_text</span><span class="col-type">TEXT (Văn bản tóm tắt chính)</span></li>
+                                <li><span class="col-name">chapters_json</span><span class="col-type">JSONB (Mảng [start_time, end_time, title])</span></li>
+                                <li><span class="col-name">keyframes_json</span><span class="col-type">JSONB (Mảng [timestamp, image_url, blip_caption])</span></li>
+                            </ul>
+                        </div>
+                        
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-comments"></i> Bảng: qa_logs</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu lịch sử chat của tính năng RAG, dùng để review và fine-tune mô hình sau này.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">qa_id</span><span class="col-type">UUID (PK)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
+                                <li><span class="col-name">question</span><span class="col-type">TEXT (Câu hỏi người dùng)</span></li>
+                                <li><span class="col-name">answer</span><span class="col-type">TEXT (Câu trả lời từ LLM)</span></li>
+                                <li><span class="col-name">retrieved_chunks</span><span class="col-type">JSONB (Các chunk lấy ra từ ChromaDB)</span></li>
+                            </ul>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Non-relational stores -->
+                <div class="storage-card" style="grid-column: 1 / -1; margin-top: 10px;">
+                    <h3 style="color: #047857;"><i class="fa-solid fa-cubes"></i> ChromaDB - Cơ Sở Dữ Liệu Vector (Vector Store)</h3>
+                    <p style="font-size: 0.95rem; margin-bottom: 15px;">Công cụ lõi (Core engine) vận hành tính năng Hỏi Đáp (RAG). Giúp chuyển đổi văn bản (text) thành các điểm trong không gian đa chiều (Vector Space) để tìm kiếm nội dung (Similarity Search) có cùng ngữ nghĩa với câu hỏi người dùng.</p>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px;">
+                        
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-layer-group"></i> Cấu trúc Collection</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Mỗi Video được tạo thành 1 Collection riêng (hoặc dùng chung 1 Collection lớn nhưng filter bằng metadata <code>video_id</code>) để tăng độ chính xác truy vấn.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">Collection Name</span><span class="col-type">`video_${video_id}`</span></li>
+                                <li><span class="col-name">Embedding Model</span><span class="col-type">text-embedding-3-small (hoặc all-MiniLM)</span></li>
+                                <li><span class="col-name">Distance Metric</span><span class="col-type">Cosine Similarity</span></li>
+                            </ul>
+                        </div>
+
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-puzzle-piece"></i> Cấu trúc 1 Document (Chunk)</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Transcript sinh ra từ WhisperX được cắt nhỏ (Chunking) theo sliding window (ví dụ 500 ký tự / chunk, overlap 50 ký tự).</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">id</span><span class="col-type">`chunk_001`</span></li>
+                                <li><span class="col-name">document</span><span class="col-type">Nội dung text (vd: "Trí tuệ nhân tạo là...")</span></li>
+                                <li><span class="col-name">embedding</span><span class="col-type">Float Array [0.12, -0.45, ..., 0.89]</span></li>
+                                <li><span class="col-name">metadata</span><span class="col-type">{"start_time": 12.5, "end_time": 45.0, "speaker": "A"}</span></li>
+                            </ul>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="storage-card" style="grid-column: 1 / -1; margin-top: 10px;">
+                    <h3><i class="fa-solid fa-folder-open"></i> File Storage (Local/S3)</h3>
+                    <p style="font-size: 0.85rem; margin-bottom: 10px;">Lưu trữ vật lý các tệp nhị phân kích thước lớn.</p>
+                    <ul class="storage-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 5px 30px;">
+                        <li><span class="col-name">/uploads/videos/</span><span class="col-type">Video gốc tải lên</span></li>
+                        <li><span class="col-name">/uploads/audios/</span><span class="col-type">WAV Audio sau tiền xử lý</span></li>
+                        <li><span class="col-name">/outputs/keyframes/</span><span class="col-type">Ảnh JPG/PNG trích xuất</span></li>
+                        <li><span class="col-name">/outputs/documents/</span><span class="col-type">Bản xuất PDF/TXT/SRT</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            // Hide all contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            // Deactivate all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // Show selected content & button
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
+</body>
+</html>

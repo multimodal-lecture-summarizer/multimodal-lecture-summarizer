@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Summarizer - Trang chủ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #ffffff;
+            --bg-surface: #f8fafc;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); overflow-x: hidden; }
+        h1, h2, h3 { font-family: 'Outfit', sans-serif; color: var(--text-main); }
+        
+        header { display: flex; justify-content: space-between; align-items: center; padding: 20px 5%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); position: fixed; width: 100%; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
+        .logo { font-size: 1.5rem; font-weight: 800; color: var(--primary); }
+        .nav-links { display: flex; gap: 30px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 500; transition: color 0.3s; }
+        .nav-links a:hover { color: var(--primary); }
+        .btn-primary { background: var(--primary); color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; transition: 0.3s; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2); display: inline-block; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-2px); }
+        .btn-secondary { background: #ffffff; border: 1px solid var(--border); color: var(--text-main); padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; transition: all 0.3s; }
+        .btn-secondary:hover { background: var(--bg-surface); }
+
+        .hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 100px 20px; background-color: var(--bg-surface); }
+        .hero h1 { font-size: 4rem; line-height: 1.1; margin-bottom: 20px; max-width: 800px; }
+        .hero p { font-size: 1.25rem; color: var(--text-muted); max-width: 600px; margin-bottom: 40px; }
+        .hero-btns { display: flex; gap: 20px; }
+
+        .features { padding: 100px 5%; background: var(--bg-main); }
+        .section-title { text-align: center; font-size: 2.5rem; margin-bottom: 60px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+        .card { background: #ffffff; border: 1px solid var(--border); border-radius: 16px; padding: 40px 30px; text-align: center; transition: transform 0.3s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .card:hover { transform: translateY(-10px); border-color: var(--primary); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .card i { font-size: 3rem; color: var(--primary); margin-bottom: 20px; }
+        .card h3 { font-size: 1.5rem; margin-bottom: 15px; }
+        .card p { color: var(--text-muted); line-height: 1.6; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate { animation: fadeIn 1s ease forwards; }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="1_landing.html" class="logo" style="text-decoration: none;"><i class="fa-solid fa-brain"></i> AI.Summarizer</a>
+        <nav class="nav-links">
+            <a href="1_landing.html">Trang chủ</a>
+            <a href="6_history.html">Lịch sử video</a>
+            <a href="5_admin.html">Quản trị</a>
+            <a href="#">Tài liệu</a>
+        </nav>
+        <div>
+            <a href="7_auth.html" class="btn-secondary" style="margin-right: 15px;">Đăng nhập</a>
+            <a href="2_upload.html" class="btn-primary">Bắt đầu ngay</a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <h1 class="animate">Tiết Kiệm Hàng Giờ Xem Video Với Trí Tuệ Nhân Tạo</h1>
+        <p class="animate" style="animation-delay: 0.2s">Hệ thống trích xuất nội dung, tóm tắt văn bản, phân đoạn chapter và hỗ trợ hỏi đáp trực tiếp (RAG) với bất kỳ video học thuật nào bằng các mô hình AI tiên tiến nhất.</p>
+        <div class="hero-btns animate" style="animation-delay: 0.4s">
+            <a href="2_upload.html" class="btn-primary"><i class="fa-solid fa-upload"></i> Xử lý Video Ngay</a>
+            <a href="3_results.html" class="btn-secondary"><i class="fa-brands fa-youtube"></i> Xem Demo Kết Quả</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <h2 class="section-title">Tính Năng Cốt Lõi</h2>
+        <div class="grid">
+            <div class="card">
+                <i class="fa-solid fa-file-lines"></i>
+                <h3>Tóm Tắt Tự Động (LLM)</h3>
+                <p>Sử dụng GPT-4o / Gemini / Qwen2.5 để trích xuất ý chính, tạo bản tóm tắt ngắn gọn nhưng đầy đủ thông tin từ WhisperX transcript.</p>
+            </div>
+            <div class="card">
+                <i class="fa-solid fa-images"></i>
+                <h3>Trích Xuất Keyframe (CLIP)</h3>
+                <p>Mô-đun Vision tự động chọn lọc các frame đại diện quan trọng nhất trong video bằng PySceneDetect và nhúng CLIP.</p>
+            </div>
+            <div class="card">
+                <i class="fa-solid fa-comments"></i>
+                <h3>Hỏi Đáp Tương Tác (RAG)</h3>
+                <p>Lưu trữ nội dung qua ChromaDB. Trò chuyện và đặt câu hỏi, nhận câu trả lời chính xác kèm theo timestamp để xem lại đoạn liên quan.</p>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

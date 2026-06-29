@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q&A với Video - AI Summarizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bg-main: #ffffff; --bg-surface: #f8fafc; --primary: #4f46e5; --text-main: #0f172a; --text-muted: #64748b; --border: #e2e8f0; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        .sidebar { width: 380px; background: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 25px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 15px; background: #ffffff; }
+        .sidebar-header h2 { font-family: 'Outfit'; font-size: 1.2rem; margin: 0; color: var(--text-main); }
+        
+        .sidebar-content { padding: 20px; flex: 1; overflow-y: auto; }
+        .video-mini { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; margin-bottom: 25px; display: flex; justify-content: center; align-items: center; position: relative; }
+        .info-card { background: #ffffff; border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+        .info-card p { margin: 8px 0; color: var(--text-muted); font-size: 0.9rem; display: flex; justify-content: space-between; }
+        .info-card p span { color: var(--text-main); font-weight: 500; }
+        
+        .history-list h3 { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px; }
+        .history-item { padding: 12px; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-bottom: 5px; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-main); }
+        .history-item:hover, .history-item.active { background: #eef2ff; color: var(--primary); }
+        
+        .chat-area { flex: 1; display: flex; flex-direction: column; position: relative; background: var(--bg-main); }
+        .header { padding: 20px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #ffffff; }
+        
+        .messages { flex: 1; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; gap: 25px; }
+        .msg { max-width: 85%; display: flex; gap: 15px; }
+        .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+        .avatar { width: 45px; height: 45px; border-radius: 50%; background: #e2e8f0; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; flex-shrink: 0; color: var(--text-muted); }
+        .msg.bot .avatar { background: var(--primary); color: white; }
+        .bubble { background: #ffffff; padding: 18px 24px; border-radius: 16px; border: 1px solid var(--border); line-height: 1.6; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.02); color: var(--text-main); }
+        .msg.user .bubble { background: var(--primary); border-color: var(--primary); color: white; border-top-right-radius: 4px; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2); }
+        .msg.bot .bubble { border-top-left-radius: 4px; }
+        .ref-badge { display: inline-flex; align-items: center; gap: 8px; background: #eef2ff; color: var(--primary); padding: 6px 12px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; margin-top: 15px; cursor: pointer; border: 1px solid #c7d2fe; transition: 0.2s; }
+        .ref-badge:hover { background: #e0e7ff; }
+        
+        .input-area { padding: 25px 30px; border-top: 1px solid var(--border); background: #ffffff; }
+        .input-box { display: flex; background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 8px; transition: border 0.3s; }
+        .input-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1); }
+        .input-box input { flex: 1; background: transparent; border: none; padding: 12px 15px; color: var(--text-main); outline: none; font-size: 1rem; }
+        .send-btn { background: var(--primary); color: white; border: none; width: 55px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 1.2rem; display: flex; justify-content: center; align-items: center; }
+        .send-btn:hover { background: #4338ca; transform: scale(1.05); }
+        
+        .back-btn { background: #ffffff; color: var(--text-main); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 0.9rem; transition: 0.2s; cursor: pointer; }
+        .back-btn:hover { border-color: var(--primary); background: #f8fafc; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="3_results.html" style="color: var(--text-muted);"><i class="fa-solid fa-arrow-left"></i></a>
+            <h2>Ngữ Cảnh Video (RAG)</h2>
+        </div>
+        <div class="sidebar-content">
+            <div class="video-mini">
+                <i class="fa-solid fa-play" style="font-size: 3rem; color: rgba(255,255,255,0.5);"></i>
+            </div>
+            <div class="info-card">
+                <p>Tên file: <span>MIT_DeepLearning_Lec1.mp4</span></p>
+                <p>Thời lượng: <span>45:10</span></p>
+                <p>Vector Store: <span>ChromaDB</span></p>
+                <p>LLM Backend: <span>Qwen2.5-7B (Local)</span></p>
+            </div>
+            
+            <div class="history-list">
+                <h3>Câu hỏi gần đây</h3>
+                <div class="history-item active"><i class="fa-regular fa-message" style="margin-right: 10px;"></i> Cơ chế của Transformer?</div>
+                <div class="history-item"><i class="fa-regular fa-message" style="margin-right: 10px;"></i> Hạn chế của mạng RNN là gì?</div>
+                <div class="history-item"><i class="fa-regular fa-message" style="margin-right: 10px;"></i> Giải thích Backpropagation</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chat-area">
+        <div class="header">
+            <h3 style="font-family: 'Outfit'; font-weight: 500; font-size: 1.2rem; margin: 0; color: var(--text-main);">
+                <i class="fa-solid fa-robot" style="color: var(--primary); margin-right: 10px;"></i> Trợ lý Video AI
+            </h3>
+            <button class="back-btn"><i class="fa-solid fa-trash-can"></i> Xóa lịch sử</button>
+        </div>
+        
+        <div class="messages">
+            <div class="msg bot">
+                <div class="avatar"><i class="fa-solid fa-brain"></i></div>
+                <div class="bubble">
+                    Chào bạn! Hệ thống RAG đã được nạp toàn bộ Transcript và thông tin Keyframes (BLIP-2) của video. Bạn có muốn hỏi gì về bài giảng này không?
+                </div>
+            </div>
+            
+            <div class="msg user">
+                <div class="avatar"><i class="fa-solid fa-user"></i></div>
+                <div class="bubble">
+                    Giảng viên định nghĩa thế nào về kiến trúc Transformer? Tại sao nó tốt hơn RNN?
+                </div>
+            </div>
+            
+            <div class="msg bot">
+                <div class="avatar"><i class="fa-solid fa-brain"></i></div>
+                <div class="bubble">
+                    Theo bài giảng, kiến trúc Transformer là một mô hình học sâu chủ yếu dựa trên cơ chế <strong>Self-Attention</strong>. Giảng viên giải thích rằng khác với RNN (Recurrent Neural Networks) phải xử lý dữ liệu tuần tự từng từ một, Transformer có khả năng xem xét toàn bộ câu cùng một lúc.<br><br>
+                    Điều này mang lại hai lợi ích chính:
+                    <ul style="margin-top: 10px; padding-left: 20px;">
+                        <li>Khắc phục triệt để vấn đề mất mát thông tin đối với chuỗi văn bản dài.</li>
+                        <li>Cho phép tính toán song bắt trên GPU, giúp tốc độ huấn luyện nhanh hơn rất nhiều.</li>
+                    </ul>
+                    <div class="ref-badge"><i class="fa-solid fa-play"></i> Xem đoạn: 15:20</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <div class="input-box">
+                <input type="text" placeholder="Nhập câu hỏi của bạn để tìm kiếm trong video (Enter để gửi)...">
+                <button class="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
