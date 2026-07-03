@@ -1,0 +1,98 @@
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import type { HistoryItem } from '../types';
+import './HistoryPage.css';
+
+export const HistoryPage: React.FC = () => {
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([
+    {
+      id: 'mit-dl-1',
+      title: 'Bài giảng MIT 6.S191 - Introduction to Deep Learning',
+      duration: '45:10',
+      date: 'Hôm nay, 10:30',
+      status: 'done'
+    },
+    {
+      id: 'ted-ai',
+      title: 'TED Talk - Tương lai của Trí tuệ Nhân tạo',
+      duration: '12:45',
+      date: 'Hôm qua, 15:20',
+      status: 'processing'
+    },
+    {
+      id: 'cs224n-nlp',
+      title: 'CS224N - NLP with Deep Learning',
+      duration: '55:30',
+      date: '25/06/2026',
+      status: 'done'
+    }
+  ]);
+
+  const handleDelete = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa video này khỏi lịch sử?")) {
+      setHistoryItems(prev => prev.filter(item => item.id !== id));
+    }
+  };
+
+  return (
+    <div className="history-page animate-fade-in">
+      <div className="container">
+        <h1>Lịch Sử Video Của Bạn</h1>
+        
+        {historyItems.length === 0 ? (
+          <div className="empty-state">
+            <i className="fa-solid fa-folder-open"></i>
+            <p>Lịch sử của bạn đang trống. Hãy bắt đầu phân tích video mới!</p>
+            <Link to="/upload" className="btn primary" style={{ marginTop: '15px' }}>
+              <i className="fa-solid fa-plus"></i> Upload Video Mới
+            </Link>
+          </div>
+        ) : (
+          historyItems.map((item) => (
+            <div key={item.id} className="history-card">
+              <div className="thumbnail">
+                {item.id === 'ted-ai' ? (
+                  <i className="fa-brands fa-youtube" style={{ fontSize: '2rem' }}></i>
+                ) : item.id === 'cs224n-nlp' ? (
+                  <i className="fa-solid fa-video" style={{ fontSize: '2rem' }}></i>
+                ) : (
+                  <i className="fa-solid fa-image" style={{ fontSize: '2rem' }}></i>
+                )}
+              </div>
+              
+              <div className="info">
+                <h3>{item.title}</h3>
+                <div className="meta">
+                  <span><i className="fa-regular fa-clock"></i> {item.duration}</span>
+                  <span><i className="fa-regular fa-calendar"></i> {item.date}</span>
+                </div>
+                {item.status === 'done' ? (
+                  <span className="status done"><i className="fa-solid fa-check"></i> Hoàn tất</span>
+                ) : (
+                  <span className="status processing">
+                    <i className="fa-solid fa-spinner fa-spin"></i> Đang trích xuất Audio...
+                  </span>
+                )}
+              </div>
+              
+              <div className="actions">
+                {item.status === 'done' ? (
+                  <Link to="/results" className="btn primary">
+                    <i className="fa-regular fa-eye"></i> Xem Kết Quả
+                  </Link>
+                ) : (
+                  <button className="btn" disabled style={{ opacity: 0.5 }}>
+                    <i className="fa-regular fa-eye"></i> Đang Xử Lý
+                  </button>
+                )}
+                <button className="btn danger" onClick={() => handleDelete(item.id)}>
+                  <i className="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};

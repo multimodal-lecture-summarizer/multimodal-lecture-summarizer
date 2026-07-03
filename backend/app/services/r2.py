@@ -1,0 +1,106 @@
+import os
+import logging
+import boto3
+from botocore.exceptions import ClientError
+from typing import Optional
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class R2Service:
+    def __init__(self):
+        self.bucket_name = settings.CF_R2_BUCKET_NAME
+        self.public_url = settings.CF_R2_PUBLIC_URL
+
+        # Check if R2 configuration is complete, otherwise fallback to local mock mode
+        self.enabled = all(
+            [
+                settings.CF_R2_ACCOUNT_ID,
+                settings.CF_R2_ACCESS_KEY_ID,
+                settings.CF_R2_SECRET_ACCESS_KEY,
+            ]
+        )
+
+        if self.enabled:
+            # R2 endpoint url format: https://<account_id>.r2.cloudflarestorage.com
+            endpoint_url = f"https://{settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+            try:
+                self.s3_client = boto3.client(
+                    service_name="s3",
+                    endpoint_url=endpoint_url,
+                    aws_access_key_id=settings.CF_R2_ACCESS_KEY_ID,
+                    aws_secret_access_key=settings.CF_R2_SECRET_ACCESS_KEY,
+                    region_name="auto",  # R2 requires region_name='auto'
+                )
+                logger.info("Cloudflare R2 service initialized successfully.")
+            except Exception as e:
+                logger.error(
+                    f"Failed to initialize boto3 R2 client: {e}. Falling back to Mock mode."
+                )
+                self.enabled = False
+        else:
+            logger.warning(
+                "Cloudflare R2 credentials missing. Backend will run in local storage Mock mode."
+            )
+            if not os.path.exists(self.mock_dir):
+                os.makedirs(self.mock_dir, exist_ok=True)
+
+    def upload_file(self, file_path: str, object_name: str) -> Optional[str]:
+        """
+        Uploads a file to Cloudflare R2 bucket.
+        Returns the public URL if successful, otherwise None.
+        """
+        if self.enabled:
+            try:
+                self.s3_client.upload_file(
+                    file_path, self.bucket_name, object_name
+                )
+                url = f"{self.public_url}/{object_name}"
+                logger.info(f"File uploaded successfully to R2: {url}")
+                return url
+            except ClientError as e:
+                logger.error(f"Failed to upload file to Cloudflare R2: {e}")
+                return None
+        else:
+            # Mock mode: copy file to local mock directory
+            import shutil
+
+            try:
+                dest_path = os.path.join(self.mock_dir, object_name)
+                dest_dir = os.path.dirname(dest_path)
+                if not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir, exist_ok=True)
+                shutil.copy2(file_path, dest_path)
+                # Return a local mock URL
+                url = f"/static/mock_r2/{object_name}"
+                logger.info(
+                    f"[Mock R2] File stored locally at: {dest_path}. Mock URL: {url}"
+                )
+                return url
+            except Exception as e:
+                logger.error(f"[Mock R2] Failed to copy file: {e}")
+                return None
+
+    def delete_file(self, object_name: str) -> bool:
+        """Deletes file from R2 or local mock storage."""
+        if self.enabled:
+            try:
+                self.s3_client.delete_object(
+                    Bucket=self.bucket_name, Key=object_name
+                )
+                logger.info(f"File {object_name} deleted from R2.")
+                return True
+            except ClientError as e:
+                logger.error(f"Failed to delete file from R2: {e}")
+                return False
+        else:
+            dest_path = os.path.join(self.mock_dir, object_name)
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+                logger.info(f"[Mock R2] File {object_name} deleted from disk.")
+                return True
+            return False
+
+
+r2_service = R2Service()

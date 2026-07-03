@@ -4,44 +4,574 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kết Quả Tóm Tắt - AI Summarizer</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root { --bg-main: #f8fafc; --bg-surface: #ffffff; --primary: #4f46e5; --text-main: #0f172a; --text-muted: #64748b; --border: #e2e8f0; }
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); margin: 0; padding: 20px; padding-top: 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 100vh; box-sizing: border-box; }
-        .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.02); }
-        h2 { font-family: 'Outfit', sans-serif; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 15px; color: var(--text-main); }
-        
-        /* Left Column */
-        .video-container { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; color: #fff; position: relative; overflow: hidden; }
-        .controls { position: absolute; bottom: 15px; left: 15px; z-index: 2; color: white; display: flex; gap: 15px; align-items: center; width: calc(100% - 30px); }
-        .progress { flex: 1; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
-        .progress-bar { width: 30%; height: 100%; background: var(--primary); }
+        :root {
+            --bg-main: #f8fafc;
+            --bg-surface: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --shadow-premium: 0 10px 30px -10px rgba(79, 70, 229, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02);
+            --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+        }
 
-        .transcript { flex: 1; padding-top: 10px; margin-top: 10px; }
-        .transcript-line { display: flex; gap: 15px; margin-bottom: 10px; padding: 12px; border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; background: #ffffff; }
-        .transcript-line:hover, .transcript-line.active { background: #eef2ff; border-color: #c7d2fe; }
-        .ts { color: var(--primary); font-family: monospace; font-size: 0.9rem; min-width: 45px; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            padding-top: 75px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 25px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-premium);
+            transition: box-shadow 0.3s;
+        }
+        .card:hover {
+            box-shadow: 0 20px 40px -15px rgba(79, 70, 229, 0.12), 0 1px 3px rgba(0, 0, 0, 0.02);
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            margin-top: 0;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px;
+            color: var(--text-main);
+        }
+
+        /* Left Column - Video Player & Transcript */
+        .video-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #090d16;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-card);
+            flex-shrink: 0;
+        }
         
-        /* Right Column */
-        .summary-box { background: #eef2ff; border-left: 4px solid var(--primary); padding: 20px; border-radius: 0 8px 8px 0; margin-bottom: 25px; line-height: 1.7; font-size: 0.95rem; }
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .play-overlay-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(79, 70, 229, 0.9);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            font-size: 1.8rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 5;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 20px rgba(79, 70, 229, 0.4);
+        }
+        .play-overlay-btn:hover {
+            background: var(--primary-hover);
+            transform: translate(-50%, -50%) scale(1.08);
+            box-shadow: 0 0 30px rgba(79, 70, 229, 0.6);
+        }
+        .play-overlay-btn.playing {
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+
+        .controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(9, 13, 22, 0.95) 0%, rgba(9, 13, 22, 0.7) 60%, rgba(9, 13, 22, 0) 100%);
+            padding: 25px 15px 15px 15px;
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .video-container.playing:not(:hover) .controls-overlay {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        .progress-container {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            height: 6px;
+        }
+
+        .seek-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 5px;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+            transition: height 0.1s;
+        }
+        .seek-slider:hover {
+            height: 7px;
+        }
+        .seek-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            transition: transform 0.1s;
+        }
+        .seek-slider:hover::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+        }
+
+        .controls-left, .controls-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .control-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .volume-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 60px;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.3);
+            outline: none;
+            cursor: pointer;
+        }
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ffffff;
+        }
+
+        .time-display {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .speed-container {
+            position: relative;
+        }
+        #speedBtn {
+            font-size: 0.8rem;
+            font-weight: 600;
+            width: auto;
+            padding: 0 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .speed-menu {
+            position: absolute;
+            bottom: 40px;
+            right: 0;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 5px 0;
+            display: none;
+            flex-direction: column;
+            min-width: 100px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            z-index: 20;
+        }
+        .speed-menu.show {
+            display: flex;
+        }
+        .speed-option {
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.8);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .speed-option:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        .speed-option.active {
+            color: #818cf8;
+            font-weight: bold;
+        }
+
+        .transcript {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .transcript-header {
+            font-size: 1rem;
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .search-wrapper input {
+            padding: 6px 12px 6px 32px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            outline: none;
+            width: 160px;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-main);
+        }
+        .search-wrapper input:focus {
+            border-color: var(--primary);
+            width: 230px;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            background: #fff;
+        }
+        .search-wrapper .search-icon {
+            position: absolute;
+            left: 12px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            pointer-events: none;
+        }
+
+        .transcript-body {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .transcript-line {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            padding: 12px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border);
+            background: #ffffff;
+        }
+        .transcript-line:hover {
+            background: #f8fafc;
+            border-color: var(--primary);
+            transform: translateX(4px);
+        }
+        .transcript-line.active {
+            background: #f5f3ff;
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.08);
+            transform: translateX(6px);
+        }
+        .transcript-line.active .ts {
+            font-weight: 700;
+        }
+        .transcript-line.hidden {
+            display: none;
+        }
         
-        .chapters { margin-bottom: 25px; }
-        .chapter-item { display: flex; justify-content: space-between; padding: 15px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; }
-        .chapter-item:hover { border-color: var(--primary); background: #eef2ff; }
-        .chapter-item span:first-child { font-weight: 500; }
+        .ts {
+            color: var(--primary);
+            font-family: monospace;
+            font-size: 0.9rem;
+            min-width: 45px;
+            font-weight: 500;
+        }
+
+        .highlight-mark {
+            background: #fef08a;
+            color: #0f172a;
+            border-radius: 2px;
+            padding: 0 2px;
+        }
+
+        /* Word-level styles */
+        .words-container {
+            display: inline-block;
+            line-height: 1.6;
+        }
+        .word {
+            position: relative;
+            display: inline-block;
+            padding: 2px 4px;
+            margin: 0 1px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .word:hover {
+            background: #e0e7ff;
+            color: var(--primary);
+        }
+        .word.word-active {
+            background: var(--primary);
+            color: #ffffff !important;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+        }
+        .word.search-match {
+            background: #fef08a;
+            color: #0f172a;
+            border-radius: 2px;
+        }
         
-        .keyframes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .keyframe { border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border); background: #f8fafc; transition: transform 0.2s; cursor: pointer; }
-        .keyframe:hover { transform: scale(1.05); border-color: var(--primary); z-index: 10; }
-        .kf-img { width: 100%; height: 90px; background: #e2e8f0; display: flex; justify-content: center; align-items: center; color: var(--text-muted); font-size: 0.8rem; }
-        .keyframe .tag { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); padding: 3px 6px; border-radius: 4px; font-size: 0.75rem; color: #fff; font-family: monospace; }
+        /* Tooltip displaying exact word timestamp */
+        .word::after {
+            content: attr(data-time);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translate(-50%, -4px) scale(0.8);
+            background: rgba(15, 23, 42, 0.9);
+            color: #ffffff;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.15s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .word:hover::after {
+            opacity: 1;
+            transform: translate(-50%, -4px) scale(1);
+        }
         
-        .nav-actions { display: flex; gap: 15px; position: fixed; top: 20px; right: 20px; z-index: 10; }
-        .btn { background: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; text-decoration: none; font-size: 0.9rem; transition: 0.2s; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .btn:hover { background: #f1f5f9; }
-        .btn.primary { background: var(--primary); border: none; color: white; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2); }
-        .btn.primary:hover { background: #4338ca; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(79, 70, 229, 0.3); }
+        /* Right Column - Summary & Insights */
+        .summary-box {
+            background: #f5f3ff;
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            border-radius: 0 12px 12px 0;
+            margin-bottom: 25px;
+            line-height: 1.7;
+            font-size: 0.95rem;
+            color: #374151;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.01);
+        }
+        
+        .chapters {
+            margin-bottom: 25px;
+        }
+        .chapter-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .chapter-item:hover {
+            border-color: var(--primary);
+            background: #f5f3ff;
+            transform: translateX(4px);
+        }
+        .chapter-item.active {
+            background: #f5f3ff;
+            border-color: var(--primary);
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.08);
+        }
+        .chapter-item span:first-child {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .keyframes {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .keyframe {
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid var(--border);
+            background: #f8fafc;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            box-shadow: var(--shadow-card);
+        }
+        .keyframe:hover {
+            transform: translateY(-4px) scale(1.03);
+            border-color: var(--primary);
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.12);
+            z-index: 2;
+        }
+        .kf-img {
+            width: 100%;
+            height: 90px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .keyframe .tag {
+            position: absolute;
+            bottom: 6px;
+            right: 6px;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #fff;
+            font-family: monospace;
+            z-index: 1;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Top Navigation Actions */
+        .nav-actions {
+            display: flex;
+            gap: 12px;
+            position: fixed;
+            top: 15px;
+            right: 20px;
+            z-index: 100;
+        }
+        .btn {
+            background: var(--bg-surface);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 10px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover {
+            background: #f1f5f9;
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+        .btn.primary {
+            background: var(--primary);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        }
+        .btn.primary:hover {
+            background: var(--primary-hover);
+            box-shadow: 0 6px 15px rgba(79, 70, 229, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -55,26 +585,173 @@
 
     <div class="card">
         <h2><i class="fa-brands fa-youtube" style="color: #ef4444;"></i> Bài Giảng Gốc & Transcript (WhisperX)</h2>
-        <div class="video-container">
-            <i class="fa-solid fa-play" style="font-size: 4rem; z-index: 2;"></i>
-            <div class="controls">
-                <i class="fa-solid fa-pause"></i>
-                <span style="font-family: monospace; font-size: 0.85rem;">05:12 / 45:10</span>
-                <div class="progress"><div class="progress-bar"></div></div>
-                <i class="fa-solid fa-volume-high"></i>
-                <i class="fa-solid fa-expand"></i>
+        
+        <!-- Video Player -->
+        <div class="video-container" id="videoContainer">
+            <video id="lectureVideo" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60" playsinline loop></video>
+            
+            <!-- Large Center Play/Pause Button -->
+            <button class="play-overlay-btn" id="playOverlayBtn">
+                <i class="fa-solid fa-play"></i>
+            </button>
+
+            <!-- Video Controls Overlay -->
+            <div class="controls-overlay" id="controlsOverlay">
+                <!-- Seek Progress Bar -->
+                <div class="progress-container">
+                    <input type="range" class="seek-slider" id="seekSlider" min="0" value="312" step="0.1">
+                </div>
+
+                <div class="controls-row">
+                    <div class="controls-left">
+                        <button class="control-btn" id="playBtn">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <div class="volume-container">
+                            <button class="control-btn" id="muteBtn">
+                                <i class="fa-solid fa-volume-high"></i>
+                            </button>
+                            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1">
+                        </div>
+                        <span class="time-display" id="timeDisplay">05:12 / 45:10</span>
+                    </div>
+
+                    <div class="controls-right">
+                        <!-- Playback Speed -->
+                        <div class="speed-container">
+                            <button class="control-btn" id="speedBtn">1.0x</button>
+                            <div class="speed-menu" id="speedMenu">
+                                <div class="speed-option" data-speed="0.5">0.5x</div>
+                                <div class="speed-option active" data-speed="1.0">1.0x (Standard)</div>
+                                <div class="speed-option" data-speed="1.25">1.25x</div>
+                                <div class="speed-option" data-speed="1.5">1.5x</div>
+                                <div class="speed-option" data-speed="2.0">2.0x</div>
+                            </div>
+                        </div>
+                        <button class="control-btn" id="fullscreenBtn">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- Transcript Section -->
         <div class="transcript">
-            <h3 style="font-size: 1rem; margin-bottom: 15px; color: var(--text-muted); display: flex; justify-content: space-between;">
+            <h3 class="transcript-header">
                 <span>Word-level Timestamps</span>
-                <i class="fa-solid fa-magnifying-glass" style="cursor: pointer;"></i>
+                <div class="search-wrapper">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="transcriptSearch" placeholder="Tìm kiếm nội dung bài giảng...">
+                </div>
             </h3>
-            <div class="transcript-line"><span class="ts">00:00</span><span>Chào mừng các bạn đến với bài giảng về Trí tuệ Nhân tạo.</span></div>
-            <div class="transcript-line"><span class="ts">00:15</span><span>Hôm nay chúng ta sẽ đi sâu vào cấu trúc của mạng nơ-ron nhân tạo.</span></div>
-            <div class="transcript-line active"><span class="ts">05:12</span><span>Khái niệm quan trọng nhất ở đây là Backpropagation (Lan truyền ngược). Nó giúp điều chỉnh trọng số...</span></div>
-            <div class="transcript-line"><span class="ts">05:40</span><span>Hãy nhìn vào đạo hàm của hàm mất mát. Chúng ta tính gradient để tìm điểm cực tiểu.</span></div>
-            <div class="transcript-line"><span class="ts">15:20</span><span>Tiếp theo, hãy chuyển sang các kiến trúc hiện đại hơn như mô hình Transformer.</span></div>
+            
+            <div class="transcript-body">
+                <div class="transcript-line">
+                    <span class="ts">00:00</span>
+                    <span class="words-container">
+                        <span class="word" data-start="0.0" data-end="0.3" data-time="00:00.0">Chào</span>
+                        <span class="word" data-start="0.3" data-end="0.6" data-time="00:00.3">mừng</span>
+                        <span class="word" data-start="0.6" data-end="0.8" data-time="00:00.6">các</span>
+                        <span class="word" data-start="0.8" data-end="1.0" data-time="00:00.8">bạn</span>
+                        <span class="word" data-start="1.0" data-end="1.2" data-time="00:01.0">đến</span>
+                        <span class="word" data-start="1.2" data-end="1.4" data-time="00:01.2">với</span>
+                        <span class="word" data-start="1.4" data-end="1.6" data-time="00:01.4">bài</span>
+                        <span class="word" data-start="1.6" data-end="1.9" data-time="00:01.6">giảng</span>
+                        <span class="word" data-start="1.9" data-end="2.1" data-time="00:01.9">về</span>
+                        <span class="word" data-start="2.1" data-end="2.4" data-time="00:02.1">Trí</span>
+                        <span class="word" data-start="2.4" data-end="2.6" data-time="00:02.4">tuệ</span>
+                        <span class="word" data-start="2.6" data-end="2.9" data-time="00:02.6">Nhân</span>
+                        <span class="word" data-start="2.9" data-end="3.5" data-time="00:02.9">tạo.</span>
+                    </span>
+                </div>
+                <div class="transcript-line">
+                    <span class="ts">00:15</span>
+                    <span class="words-container">
+                        <span class="word" data-start="15.0" data-end="15.3" data-time="00:15.0">Hôm</span>
+                        <span class="word" data-start="15.3" data-end="15.6" data-time="00:15.3">nay</span>
+                        <span class="word" data-start="15.6" data-end="15.8" data-time="00:15.6">chúng</span>
+                        <span class="word" data-start="15.8" data-end="16.0" data-time="00:15.8">ta</span>
+                        <span class="word" data-start="16.0" data-end="16.2" data-time="00:16.0">sẽ</span>
+                        <span class="word" data-start="16.2" data-end="16.5" data-time="00:16.2">đi</span>
+                        <span class="word" data-start="16.5" data-end="16.8" data-time="00:16.5">sâu</span>
+                        <span class="word" data-start="16.8" data-end="17.1" data-time="00:16.8">vào</span>
+                        <span class="word" data-start="17.1" data-end="17.4" data-time="00:17.1">cấu</span>
+                        <span class="word" data-start="17.4" data-end="17.7" data-time="00:17.4">trúc</span>
+                        <span class="word" data-start="17.7" data-end="17.9" data-time="00:17.9">của</span>
+                        <span class="word" data-start="17.9" data-end="18.2" data-time="00:17.9">mạng</span>
+                        <span class="word" data-start="18.2" data-end="18.7" data-time="00:18.2">nơ-ron</span>
+                        <span class="word" data-start="18.7" data-end="19.0" data-time="00:18.7">nhân</span>
+                        <span class="word" data-start="19.0" data-end="19.5" data-time="00:19.0">tạo.</span>
+                    </span>
+                </div>
+                <div class="transcript-line active">
+                    <span class="ts">05:12</span>
+                    <span class="words-container">
+                        <span class="word" data-start="312.0" data-end="312.4" data-time="05:12.0">Khái</span>
+                        <span class="word" data-start="312.4" data-end="312.7" data-time="05:12.4">niệm</span>
+                        <span class="word" data-start="312.7" data-end="313.0" data-time="05:12.7">quan</span>
+                        <span class="word" data-start="313.0" data-end="313.3" data-time="05:13.0">trọng</span>
+                        <span class="word" data-start="313.3" data-end="313.6" data-time="05:13.3">nhất</span>
+                        <span class="word" data-start="313.6" data-end="313.8" data-time="05:13.6">ở</span>
+                        <span class="word" data-start="313.8" data-end="314.1" data-time="05:13.8">đây</span>
+                        <span class="word" data-start="314.1" data-end="314.3" data-time="05:14.1">là</span>
+                        <span class="word" data-start="314.3" data-end="315.2" data-time="05:14.3">Backpropagation</span>
+                        <span class="word" data-start="315.2" data-end="315.5" data-time="05:15.2">(Lan</span>
+                        <span class="word" data-start="315.5" data-end="315.8" data-time="05:15.5">truyền</span>
+                        <span class="word" data-start="315.8" data-end="316.2" data-time="05:15.8">ngược).</span>
+                        <span class="word" data-start="316.2" data-end="316.4" data-time="05:16.2">Nó</span>
+                        <span class="word" data-start="316.4" data-end="316.7" data-time="05:16.4">giúp</span>
+                        <span class="word" data-start="316.7" data-end="317.0" data-time="05:16.7">điều</span>
+                        <span class="word" data-start="317.0" data-end="317.3" data-time="05:17.0">chỉnh</span>
+                        <span class="word" data-start="317.3" data-end="317.6" data-time="05:17.3">trọng</span>
+                        <span class="word" data-start="317.6" data-end="318.5" data-time="05:17.6">số...</span>
+                    </span>
+                </div>
+                <div class="transcript-line">
+                    <span class="ts">05:40</span>
+                    <span class="words-container">
+                        <span class="word" data-start="340.0" data-end="340.3" data-time="05:40.0">Hãy</span>
+                        <span class="word" data-start="340.3" data-end="340.6" data-time="05:40.3">nhìn</span>
+                        <span class="word" data-start="340.6" data-end="340.8" data-time="05:40.6">vào</span>
+                        <span class="word" data-start="340.8" data-end="341.1" data-time="05:40.8">đạo</span>
+                        <span class="word" data-start="341.1" data-end="341.4" data-time="05:41.1">hàm</span>
+                        <span class="word" data-start="341.4" data-end="341.6" data-time="05:41.4">của</span>
+                        <span class="word" data-start="341.6" data-end="341.9" data-time="05:41.6">hàm</span>
+                        <span class="word" data-start="341.9" data-end="342.2" data-time="05:41.9">mất</span>
+                        <span class="word" data-start="342.2" data-end="342.6" data-time="05:42.2">mát.</span>
+                        <span class="word" data-start="342.6" data-end="342.9" data-time="05:42.6">Chúng</span>
+                        <span class="word" data-start="342.9" data-end="343.1" data-time="05:42.9">ta</span>
+                        <span class="word" data-start="343.1" data-end="343.4" data-time="05:43.1">tính</span>
+                        <span class="word" data-start="343.4" data-end="344.0" data-time="05:43.4">gradient</span>
+                        <span class="word" data-start="344.0" data-end="344.2" data-time="05:44.0">để</span>
+                        <span class="word" data-start="344.2" data-end="344.5" data-time="05:44.2">tìm</span>
+                        <span class="word" data-start="344.5" data-end="344.8" data-time="05:44.5">điểm</span>
+                        <span class="word" data-start="344.8" data-end="345.1" data-time="05:44.8">cực</span>
+                        <span class="word" data-start="345.1" data-end="346.0" data-time="05:45.1">tiểu.</span>
+                    </span>
+                </div>
+                <div class="transcript-line">
+                    <span class="ts">15:20</span>
+                    <span class="words-container">
+                        <span class="word" data-start="920.0" data-end="920.3" data-time="15:20.0">Tiếp</span>
+                        <span class="word" data-start="920.3" data-end="920.6" data-time="15:20.3">theo,</span>
+                        <span class="word" data-start="920.6" data-end="920.8" data-time="15:20.6">hãy</span>
+                        <span class="word" data-start="920.8" data-end="921.1" data-time="15:20.8">chuyển</span>
+                        <span class="word" data-start="921.1" data-end="921.4" data-time="15:21.1">sang</span>
+                        <span class="word" data-start="921.4" data-end="921.6" data-time="15:21.4">các</span>
+                        <span class="word" data-start="921.6" data-end="921.9" data-time="15:21.6">kiến</span>
+                        <span class="word" data-start="921.9" data-end="922.2" data-time="15:21.9">trúc</span>
+                        <span class="word" data-start="922.2" data-end="922.5" data-time="15:22.2">hiện</span>
+                        <span class="word" data-start="922.5" data-end="922.8" data-time="15:22.5">đại</span>
+                        <span class="word" data-start="922.8" data-end="923.0" data-time="15:22.8">hơn</span>
+                        <span class="word" data-start="923.0" data-end="923.3" data-time="15:23.0">như</span>
+                        <span class="word" data-start="923.3" data-end="923.5" data-time="15:23.3">mô</span>
+                        <span class="word" data-start="923.5" data-end="923.8" data-time="15:23.5">hình</span>
+                        <span class="word" data-start="923.8" data-end="925.0" data-time="15:23.8">Transformer.</span>
+                    </span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -93,22 +770,336 @@
             <div class="chapter-item"><span>3. Hạn chế của mạng RNN</span><span class="ts">12:30</span></div>
             <div class="chapter-item"><span>4. Kiến trúc Transformer & Self-Attention</span><span class="ts">15:20</span></div>
         </div>
-
-        <h3 style="font-size: 1.05rem; margin-bottom: 15px; font-family: 'Outfit';"><i class="fa-solid fa-images"></i> Keyframes (PySceneDetect + CLIP)</h3>
-        <div class="keyframes">
-            <div class="keyframe">
-                <div class="kf-img">[Hình ảnh: Sơ đồ]</div>
-                <div class="tag">02:15</div>
-            </div>
-            <div class="keyframe">
-                <div class="kf-img">[Hình ảnh: Đồ thị Loss]</div>
-                <div class="tag">05:40</div>
-            </div>
-            <div class="keyframe">
-                <div class="kf-img">[Hình ảnh: Transformer]</div>
-                <div class="tag">15:20</div>
-            </div>
-        </div>
     </div>
+
+    <!-- JavaScript Interactive Functionality -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const MOCK_DURATION = 2710; // 45:10 in seconds
+            let virtualTime = 312; // Start at 05:12
+            let isPlaying = false;
+            let playbackRate = 1.0;
+            let lastTime = performance.now();
+
+            const video = document.getElementById('lectureVideo');
+            const playOverlayBtn = document.getElementById('playOverlayBtn');
+            const playBtn = document.getElementById('playBtn');
+            const muteBtn = document.getElementById('muteBtn');
+            const volumeSlider = document.getElementById('volumeSlider');
+            const seekSlider = document.getElementById('seekSlider');
+            const timeDisplay = document.getElementById('timeDisplay');
+            const speedBtn = document.getElementById('speedBtn');
+            const speedMenu = document.getElementById('speedMenu');
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            const videoContainer = document.getElementById('videoContainer');
+            const transcriptSearch = document.getElementById('transcriptSearch');
+            const transcriptLines = document.querySelectorAll('.transcript-line');
+            const chapterItems = document.querySelectorAll('.chapter-item');
+
+            // Initialize slider settings
+            seekSlider.max = MOCK_DURATION;
+
+            // Format seconds -> mm:ss
+            function formatTime(secs) {
+                const m = Math.floor(secs / 60).toString().padStart(2, '0');
+                const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            }
+
+            // Parse time string mm:ss -> seconds
+            function parseTime(timeStr) {
+                const parts = timeStr.trim().split(':').map(Number);
+                if (parts.length === 2) {
+                    return parts[0] * 60 + parts[1];
+                } else if (parts.length === 3) {
+                    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+                }
+                return 0;
+            }
+
+            // Update range slider color and other UI elements
+            function updatePlayerUI() {
+                seekSlider.value = virtualTime;
+                const progressPercent = (virtualTime / MOCK_DURATION) * 100;
+                seekSlider.style.background = `linear-gradient(to right, var(--primary) 0%, var(--primary) ${progressPercent}%, rgba(255,255,255,0.3) ${progressPercent}%, rgba(255,255,255,0.3) 100%)`;
+                
+                timeDisplay.textContent = `${formatTime(virtualTime)} / ${formatTime(MOCK_DURATION)}`;
+                
+                highlightTranscript(virtualTime);
+                highlightActiveChapter(virtualTime);
+            }
+
+            // Highlighting active transcript line and word-level timestamps
+            function highlightTranscript(time) {
+                let activeLine = null;
+                const lines = Array.from(transcriptLines)
+                    .filter(line => !line.classList.contains('hidden'))
+                    .map(line => {
+                        const tsText = line.querySelector('.ts').textContent;
+                        return { element: line, time: parseTime(tsText) };
+                    });
+
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    if (time >= lines[i].time) {
+                        activeLine = lines[i].element;
+                        break;
+                    }
+                }
+
+                if (!activeLine && lines.length > 0) {
+                    activeLine = lines[0].element;
+                }
+
+                transcriptLines.forEach(line => {
+                    if (line === activeLine) {
+                        if (!line.classList.contains('active')) {
+                            line.classList.add('active');
+                            if (document.activeElement !== transcriptSearch) {
+                                line.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        }
+                        
+                        // Word-level highlighting inside active line
+                        const words = line.querySelectorAll('.word');
+                        words.forEach(word => {
+                            const start = parseFloat(word.dataset.start);
+                            const end = parseFloat(word.dataset.end);
+                            if (time >= start && time <= end) {
+                                word.classList.add('word-active');
+                            } else {
+                                word.classList.remove('word-active');
+                            }
+                        });
+                    } else {
+                        line.classList.remove('active');
+                        // Clear active words on inactive lines
+                        line.querySelectorAll('.word').forEach(w => w.classList.remove('word-active'));
+                    }
+                });
+            }
+
+            // Highlighting active chapter item
+            function highlightActiveChapter(time) {
+                let activeChapter = null;
+                const chapters = Array.from(chapterItems).map(item => {
+                    const tsText = item.querySelector('.ts').textContent;
+                    return { element: item, time: parseTime(tsText) };
+                });
+
+                for (let i = chapters.length - 1; i >= 0; i--) {
+                    if (time >= chapters[i].time) {
+                        activeChapter = chapters[i].element;
+                        break;
+                    }
+                }
+
+                chapterItems.forEach(item => {
+                    if (item === activeChapter) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+            }
+
+            // Playing animation loop
+            function playLoop() {
+                if (!isPlaying) return;
+                
+                const now = performance.now();
+                const delta = (now - lastTime) / 1000;
+                lastTime = now;
+                
+                virtualTime += delta * playbackRate;
+                
+                if (virtualTime >= MOCK_DURATION) {
+                    virtualTime = MOCK_DURATION;
+                    pauseVideo();
+                }
+                
+                updatePlayerUI();
+                requestAnimationFrame(playLoop);
+            }
+
+            function playVideo() {
+                isPlaying = true;
+                lastTime = performance.now();
+                video.play().catch(() => {});
+                playOverlayBtn.classList.add('playing');
+                playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                videoContainer.classList.add('playing');
+                requestAnimationFrame(playLoop);
+            }
+
+            function pauseVideo() {
+                isPlaying = false;
+                video.pause();
+                playOverlayBtn.classList.remove('playing');
+                playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+                videoContainer.classList.remove('playing');
+            }
+
+            function togglePlay() {
+                if (isPlaying) {
+                    pauseVideo();
+                } else {
+                    playVideo();
+                }
+            }
+
+            // Events listeners for play controls
+            playOverlayBtn.addEventListener('click', togglePlay);
+            playBtn.addEventListener('click', togglePlay);
+            video.addEventListener('click', togglePlay);
+
+            // Seek slider drag event
+            seekSlider.addEventListener('input', (e) => {
+                virtualTime = parseFloat(e.target.value);
+                updatePlayerUI();
+                if (video.duration) {
+                    video.currentTime = virtualTime % video.duration;
+                }
+            });
+
+            // Volume drag event
+            volumeSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                video.volume = val;
+                video.muted = (val === 0);
+                updateVolumeIcon(val, video.muted);
+            });
+
+            muteBtn.addEventListener('click', () => {
+                video.muted = !video.muted;
+                updateVolumeIcon(video.volume, video.muted);
+            });
+
+            function updateVolumeIcon(vol, muted) {
+                if (muted || vol === 0) {
+                    muteBtn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+                    volumeSlider.value = 0;
+                } else if (vol < 0.5) {
+                    muteBtn.innerHTML = '<i class="fa-solid fa-volume-low"></i>';
+                    volumeSlider.value = vol;
+                } else {
+                    muteBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+                    volumeSlider.value = vol;
+                }
+            }
+
+            // Speed dropdown controls
+            speedBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                speedMenu.classList.toggle('show');
+            });
+
+            document.addEventListener('click', () => {
+                speedMenu.classList.remove('show');
+            });
+
+            speedMenu.querySelectorAll('.speed-option').forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    playbackRate = parseFloat(this.dataset.speed);
+                    video.playbackRate = playbackRate;
+                    speedBtn.textContent = `${this.dataset.speed}x`;
+                    
+                    speedMenu.querySelectorAll('.speed-option').forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                    speedMenu.classList.remove('show');
+                });
+            });
+
+            // Fullscreen controls
+            fullscreenBtn.addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    videoContainer.requestFullscreen().catch(err => {
+                        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+            // Re-sync video end loop
+            video.addEventListener('ended', () => {
+                if (isPlaying) {
+                    video.play().catch(() => {});
+                }
+            });
+
+            // --- Interactive Syncing Actions ---
+
+            // Click transcript line
+            transcriptLines.forEach(line => {
+                line.addEventListener('click', function() {
+                    const tsText = this.querySelector('.ts').textContent;
+                    const targetTime = parseTime(tsText);
+                    virtualTime = targetTime;
+                    updatePlayerUI();
+                    if (video.duration) {
+                        video.currentTime = virtualTime % video.duration;
+                    }
+                });
+            });
+
+            // Click individual word to seek to its start time
+            document.querySelectorAll('.word').forEach(word => {
+                word.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Stop line click listener
+                    const targetTime = parseFloat(this.dataset.start);
+                    virtualTime = targetTime;
+                    updatePlayerUI();
+                    if (video.duration) {
+                        video.currentTime = virtualTime % video.duration;
+                    }
+                });
+            });
+
+            // Click chapter item
+            chapterItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const tsText = this.querySelector('.ts').textContent;
+                    const targetTime = parseTime(tsText);
+                    virtualTime = targetTime;
+                    updatePlayerUI();
+                    if (video.duration) {
+                        video.currentTime = virtualTime % video.duration;
+                    }
+                });
+            });
+
+
+
+            // Transcript text search query filtering
+            transcriptSearch.addEventListener('input', function() {
+                const filter = this.value.toLowerCase().trim();
+                transcriptLines.forEach(line => {
+                    const wordsContainer = line.querySelector('.words-container');
+                    const text = wordsContainer.textContent.toLowerCase();
+                    
+                    if (text.includes(filter)) {
+                        line.classList.remove('hidden');
+                        
+                        // Toggle search highlight on words instead of wiping DOM content
+                        const words = line.querySelectorAll('.word');
+                        words.forEach(word => {
+                            const wordText = word.textContent.toLowerCase();
+                            word.classList.remove('search-match');
+                            if (filter !== '' && (wordText.includes(filter) || filter.includes(wordText))) {
+                                word.classList.add('search-match');
+                            }
+                        });
+                    } else {
+                        line.classList.add('hidden');
+                    }
+                });
+                highlightTranscript(virtualTime);
+            });
+
+            // Initial UI draw
+            updatePlayerUI();
+        });
+    </script>
 </body>
 </html>
