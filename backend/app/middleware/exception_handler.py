@@ -82,6 +82,27 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=response_content,
         )
 
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        """Handler for standard HTTP exceptions (like 404 Not Found, 401 Unauthorized)."""
+        response_content = {
+            "success": False,
+            "data": None,
+            "error": {
+                "errorCode": f"HTTP_{exc.status_code}",
+                "details": None,  # Set to None to avoid duplicating the message
+            },
+            "code": exc.status_code,
+            "message": str(exc.detail),
+            "metadata": None,
+        }
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=response_content,
+        )
+
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """Catch-all handler for unhandled server errors."""
@@ -95,9 +116,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         # If in debug mode, expose full stack trace to frontend
         if settings.DEBUG:
             error_details["exceptionType"] = exc.__class__.__name__
-            error_details["exceptionMessage"] = str(exc)
             error_details["stackTrace"] = traceback.format_exc().split("\n")
-            message = f"Debug: {str(exc)}"
+            message = f"Debug Exception: {exc.__class__.__name__} - {str(exc)}"
         else:
             message = "An unexpected error occurred. Please contact the administrator."
 

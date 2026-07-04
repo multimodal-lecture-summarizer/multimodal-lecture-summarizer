@@ -20,53 +20,58 @@ class AppException(Exception):
 class AuthException(AppException):
     def __init__(
         self,
-        message: str = "Unauthorized access",
+        message: Optional[str] = None,
         error_code: ErrorCodes = ErrorCodes.UNAUTHORIZED,
         status_code: int = 401,
         details: Optional[Any] = None,
     ):
-        super().__init__(message, error_code, status_code, details)
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)
 
 
 class ForbiddenException(AppException):
     def __init__(
         self,
-        message: str = "Access forbidden",
+        message: Optional[str] = None,
         error_code: ErrorCodes = ErrorCodes.FORBIDDEN,
         status_code: int = 403,
         details: Optional[Any] = None,
     ):
-        super().__init__(message, error_code, status_code, details)
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)
 
 
 class NotFoundException(AppException):
     def __init__(
         self,
-        message: str = "Resource not found",
+        message: Optional[str] = None,
         error_code: ErrorCodes = ErrorCodes.NOT_FOUND,
         status_code: int = 404,
         details: Optional[Any] = None,
     ):
-        super().__init__(message, error_code, status_code, details)
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)
 
 
 class AlreadyExistsException(AppException):
     def __init__(
         self,
-        message: str = "Resource already exists",
+        message: Optional[str] = None,
         error_code: ErrorCodes = ErrorCodes.ALREADY_EXISTS,
         status_code: int = 400,
         details: Optional[Any] = None,
     ):
-        super().__init__(message, error_code, status_code, details)
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)
 
 
 class ValidationException(AppException):
     def __init__(
         self,
-        message: str = "Validation failed",
+        message: Optional[str] = None,
         error_code: ErrorCodes = ErrorCodes.VALIDATION_ERROR,
         status_code: int = 400,
         details: Optional[Any] = None,
     ):
-        super().__init__(message, error_code, status_code, details)
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)

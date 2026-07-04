@@ -12,6 +12,7 @@ class R2Service:
     def __init__(self):
         self.bucket_name = settings.CF_R2_BUCKET_NAME
         self.public_url = settings.CF_R2_PUBLIC_URL
+        self.mock_dir = os.path.join(os.getcwd(), "storage", "mock_r2_bucket")
 
         # Check if R2 configuration is complete, otherwise fallback to local mock mode
         self.enabled = all(

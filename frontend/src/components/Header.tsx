@@ -31,23 +31,13 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
           <NavLink to="/history" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             Lịch sử video
           </NavLink>
-          <NavLink to="/admin" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            Quản trị
-          </NavLink>
-          <a href="#docs" className="nav-item">Tài liệu</a>
-        </nav>
-      )}
-
-      {isAdminPage && (
-        <nav className="nav-links">
-          <NavLink to="/admin" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <i className="fa-solid fa-chart-pie"></i> Báo cáo
-          </NavLink>
-          <NavLink to="/admin/metrics" className="nav-item">
-            <i className="fa-solid fa-chart-line"></i> Hiệu suất AI
-          </NavLink>
-          <NavLink to="/admin/queue" className="nav-item">
-            <i className="fa-solid fa-server"></i> Celery Queue
+          {isLoggedIn && (
+            <NavLink to="/profile" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              Tài khoản
+            </NavLink>
+          )}
+          <NavLink to="/docs" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            Tài liệu
           </NavLink>
         </nav>
       )}
@@ -60,9 +50,14 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
                 <i className="fa-solid fa-house"></i> Về Trang chủ
               </Link>
             ) : (
-              <Link to="/upload" className="btn primary">
-                <i className="fa-solid fa-plus"></i> Upload Video Mới
-              </Link>
+              <>
+                <Link to="/profile" className="btn secondary" title="Trang cá nhân" style={{ padding: '10px 12px', marginRight: '8px' }}>
+                  <i className="fa-regular fa-user"></i>
+                </Link>
+                <Link to="/upload" className="btn primary" style={{ marginRight: '8px' }}>
+                  <i className="fa-solid fa-plus"></i> Upload Video Mới
+                </Link>
+              </>
             )}
             <button 
               onClick={onLogout} 

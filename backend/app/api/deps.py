@@ -12,8 +12,7 @@ from app.core.exceptions import AuthException, ForbiddenException, NotFoundExcep
 from app.core.constants import UserRole
 from app.models.user import User
 
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 # OAuth2 scheme config (pointing to token login endpoint)
 oauth2_scheme = OAuth2PasswordBearer(
@@ -23,12 +22,19 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain password matches its bcrypt hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        password_bytes = plain_password.encode("utf-8")
+        hashed_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """Generates a bcrypt hash for a plaintext password."""
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
 def create_access_token(
@@ -69,7 +75,7 @@ def get_current_user(
 
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        raise NotFoundException(message="User not found")
+        raise AuthException(message="User not found or credentials invalid")
     if not user.is_active:
         raise AuthException(message="Inactive user account")
 

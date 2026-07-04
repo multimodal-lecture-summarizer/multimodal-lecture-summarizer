@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { HistoryItem } from '../types';
+import { VideoStatus } from '../types';
+import { api } from '../services/api';
 import './HistoryPage.css';
 
 export const HistoryPage: React.FC = () => {
@@ -10,23 +12,52 @@ export const HistoryPage: React.FC = () => {
       title: 'Bài giảng MIT 6.S191 - Introduction to Deep Learning',
       duration: '45:10',
       date: 'Hôm nay, 10:30',
-      status: 'done'
+      status: VideoStatus.DONE
     },
     {
       id: 'ted-ai',
       title: 'TED Talk - Tương lai của Trí tuệ Nhân tạo',
       duration: '12:45',
       date: 'Hôm qua, 15:20',
-      status: 'processing'
+      status: VideoStatus.PROCESSING
     },
     {
       id: 'cs224n-nlp',
       title: 'CS224N - NLP with Deep Learning',
       duration: '55:30',
       date: '25/06/2026',
-      status: 'done'
+      status: VideoStatus.DONE
     }
   ]);
+
+  useEffect(() => {
+    api.getVideos()
+      .then(res => {
+        if (res.success && res.data && res.data.length > 0) {
+          const items = res.data.map((video: any) => {
+            const durationSec = video.duration || 0;
+            const minutes = Math.floor(durationSec / 60);
+            const seconds = Math.floor(durationSec % 60);
+            const durationStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            
+            const uploadDate = new Date(video.uploadedAt);
+            const dateStr = uploadDate.toLocaleDateString('vi-VN') + ', ' + uploadDate.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'});
+
+            return {
+              id: video.videoId,
+              title: video.originalUrl ? `YouTube: ${video.originalUrl}` : `Local Video: ${video.filePath?.split('/').pop() || 'Video#' + video.videoId.substring(0,6)}`,
+              duration: durationStr,
+              date: dateStr,
+              status: video.status as VideoStatus,
+            };
+          });
+          setHistoryItems(items);
+        }
+      })
+      .catch(err => {
+        console.warn("Failed to fetch real history from backend, showing mock data.", err);
+      });
+  }, []);
 
   const handleDelete = (id: string) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa video này khỏi lịch sử?")) {
@@ -66,7 +97,7 @@ export const HistoryPage: React.FC = () => {
                   <span><i className="fa-regular fa-clock"></i> {item.duration}</span>
                   <span><i className="fa-regular fa-calendar"></i> {item.date}</span>
                 </div>
-                {item.status === 'done' ? (
+                {item.status === VideoStatus.DONE ? (
                   <span className="status done"><i className="fa-solid fa-check"></i> Hoàn tất</span>
                 ) : (
                   <span className="status processing">
@@ -76,7 +107,7 @@ export const HistoryPage: React.FC = () => {
               </div>
               
               <div className="actions">
-                {item.status === 'done' ? (
+                {item.status === VideoStatus.DONE ? (
                   <Link to="/results" className="btn primary">
                     <i className="fa-regular fa-eye"></i> Xem Kết Quả
                   </Link>

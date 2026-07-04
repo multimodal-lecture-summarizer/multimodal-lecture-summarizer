@@ -71,13 +71,165 @@ if not os.path.exists(mock_storage_path):
     os.makedirs(mock_storage_path, exist_ok=True)
 app.mount("/static/mock_r2", StaticFiles(directory=mock_storage_path), name="mock_r2")
 
-# Register main API router
-app.include_router(api_router, prefix=settings.API_V1_STR)
+# Register main API router with documented standard error responses matching BaseDTO
+from typing import Any
+from app.schemas.base import BaseDTO
+
+app.include_router(
+    api_router,
+    prefix=settings.API_V1_STR,
+    responses={
+        400: {
+            "model": BaseDTO[Any],
+            "description": "Validation or Client Error",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "validation_error": {
+                            "summary": "Validation Error",
+                            "value": {
+                                "success": False,
+                                "data": None,
+                                "error": {
+                                    "errorCode": "VALIDATION_ERROR",
+                                    "validationErrors": [
+                                        {
+                                            "field": "email",
+                                            "location": ["body", "email"],
+                                            "type": "value_error.any_str.min_length",
+                                            "message": "Field length must be at least 3 characters"
+                                        }
+                                    ]
+                                },
+                                "code": 400,
+                                "message": "Request validation failed",
+                                "metadata": None
+                            }
+                        },
+                        "already_exists": {
+                            "summary": "Resource Already Exists",
+                            "value": {
+                                "success": False,
+                                "data": None,
+                                "error": {
+                                    "errorCode": "ALREADY_EXISTS",
+                                    "details": None
+                                },
+                                "code": 400,
+                                "message": "The email address is already registered.",
+                                "metadata": None
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "model": BaseDTO[Any],
+            "description": "Unauthorized Access",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "data": None,
+                        "error": {
+                            "errorCode": "UNAUTHORIZED",
+                            "details": None
+                        },
+                        "code": 401,
+                        "message": "Incorrect email or password",
+                        "metadata": None
+                    }
+                }
+            }
+        },
+        403: {
+            "model": BaseDTO[Any],
+            "description": "Forbidden Access",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "data": None,
+                        "error": {
+                            "errorCode": "FORBIDDEN",
+                            "details": None
+                        },
+                        "code": 403,
+                        "message": "The user does not have enough privileges",
+                        "metadata": None
+                    }
+                }
+            }
+        },
+        404: {
+            "model": BaseDTO[Any],
+            "description": "Resource Not Found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "data": None,
+                        "error": {
+                            "errorCode": "NOT_FOUND",
+                            "details": None
+                        },
+                        "code": 404,
+                        "message": "Video with ID 123e4567-e89b-12d3-a456-426614174000 not found",
+                        "metadata": None
+                    }
+                }
+            }
+        },
+        500: {
+            "model": BaseDTO[Any],
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": False,
+                        "data": None,
+                        "error": {
+                            "errorCode": "INTERNAL_SERVER_ERROR",
+                            "exceptionType": "DatabaseError"
+                        },
+                        "code": 500,
+                        "message": "An unexpected error occurred. Please contact the administrator.",
+                        "metadata": None
+                    }
+                }
+            }
+        }
+    },
+)
+
+
+# Customize OpenAPI schema to remove default 422 validation errors (as we handle them as 400)
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    # Remove all 422 responses from OpenAPI schema since we return 400 for validation errors
+    for path in openapi_schema.get("paths", {}).values():
+        for method in path.values():
+            if "422" in method.get("responses", {}):
+                del method["responses"]["422"]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 
 @app.get("/", tags=["General"])
 def root_endpoint():
     """Health check root endpoint."""
+    # Trigger uvicorn reload on edit
     return {
         "appName": settings.APP_NAME,
         "environment": settings.APP_ENV,

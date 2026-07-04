@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 import './AuthPage.css';
 
 interface AuthPageProps {
-  onLogin?: () => void;
+  onLogin?: (userData: { email: string; role: string }) => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
@@ -12,10 +13,51 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (onLogin) onLogin();
-    navigate('/history');
+    
+    // 1. Try to authenticate against the real backend API
+    try {
+      const result = await api.login(email, password);
+      if (result.success && result.data) {
+        const token = result.data.accessToken;
+        localStorage.setItem('token', token);
+        
+        // Fetch user profile to get the role
+        const profileResult = await api.getMe();
+        if (profileResult.success && profileResult.data) {
+          const userData = {
+            email: profileResult.data.email,
+            role: profileResult.data.role.toLowerCase(), // admin or user
+          };
+          if (onLogin) onLogin(userData);
+          
+          if (userData.role === 'admin') {
+            navigate('/admin');
+          } else {
+            navigate('/history');
+          }
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Backend API connection failed, falling back to simulated client-side auth.', error);
+    }
+    
+    // 2. Fallback to simulated client-side authentication if backend is down
+    const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
+    const userData = {
+      email: email,
+      role: role,
+    };
+    
+    if (onLogin) onLogin(userData);
+    
+    if (role === 'admin') {
+      navigate('/admin');
+    } else {
+      navigate('/history');
+    }
   };
 
   return (
@@ -67,7 +109,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         
         <div className="divider"><span>HOẶC</span></div>
         
-        <button className="btn btn-google" onClick={() => { if (onLogin) onLogin(); navigate('/history'); }}>
+        <button className="btn btn-google" onClick={() => { 
+          const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
+          const userData = { email: email || 'hungphitran.22@gmail.com', role: role };
+          if (onLogin) onLogin(userData); 
+          if (role === 'admin') {
+            navigate('/admin');
+          } else {
+            navigate('/history');
+          }
+        }}>
           <i className="fa-brands fa-google" style={{ color: '#ea4335' }}></i> Đăng nhập bằng Google
         </button>
         

@@ -261,17 +261,23 @@
 
         <!-- TAB 1: PROCESSING FLOW -->
         <div id="processing" class="tab-content active">
-            <h2><i class="fa-solid fa-route"></i> Luồng Xử Lý Bất Đồng Bộ (Asynchronous Pipeline)</h2>
-            <p>Hệ thống sử dụng cơ chế xử lý bất đồng bộ thông qua <strong>FastAPI</strong> kết hợp hàng đợi tác vụ <strong>Celery & Redis</strong>. Luồng dữ liệu chi tiết đi qua các bước sau:</p>
+            <h2><i class="fa-solid fa-route"></i> Luồng Xử Lý Bất Đồng Bộ Chi Tiết (Asynchronous Pipeline Details)</h2>
+            <p>Hệ thống sử dụng cơ chế hàng đợi xử lý bất đồng bộ kết hợp <strong>FastAPI</strong>, hàng đợi tác vụ <strong>Celery</strong> và database lưu trạng thái trung gian để đảm bảo khả năng mở rộng (scalability). Chi tiết luồng đi qua 7 bước chuẩn hóa sau:</p>
 
             <div class="flowchart">
                 <div class="flow-step">
                     <div class="step-num">1</div>
                     <div class="step-body">
-                        <div class="step-title">Tiếp nhận & Xác thực Đầu vào</div>
-                        <div class="step-desc">Người dùng tải lên file video (MP4/AVI/MKV) từ Frontend hoặc dán URL YouTube. FastAPI tiếp nhận yêu cầu, lưu metadata ban đầu vào PostgreSQL với trạng thái <code>pending</code>.</div>
+                        <div class="step-title">Tiếp nhận & Xác thực Đầu vào (Ingestion)</div>
+                        <div class="step-desc">
+                            Hệ thống tiếp nhận yêu cầu qua hai endpoints chính:<br>
+                            - <code>POST /api/v1/videos/upload</code>: Người dùng upload trực tiếp tệp tin định dạng MP4/AVI/MKV.<br>
+                            - <code>POST /api/v1/videos/youtube</code>: Nhận link YouTube và tải về bất đồng bộ bằng thư viện <code>yt-dlp</code>.<br>
+                            Khi tiếp nhận thành công, FastAPI ghi một bản ghi vào bảng <code>videos</code> với trạng thái ban đầu là <code>pending</code>.
+                        </div>
                         <div class="step-tech">
                             <span class="tech-badge">FastAPI</span>
+                            <span class="tech-badge">yt-dlp</span>
                             <span class="tech-badge">PostgreSQL (videos)</span>
                         </div>
                     </div>
@@ -280,10 +286,16 @@
                 <div class="flow-step">
                     <div class="step-num">2</div>
                     <div class="step-body">
-                        <div class="step-title">Kiểm thử Tiêu chuẩn Hợp lệ (Validation)</div>
-                        <div class="step-desc">Hệ thống tự động đối chiếu thông số video với cấu hình tiêu chuẩn trong bảng <code>video_standards</code> (giới hạn thời lượng, kích thước file, chất lượng audio). Nếu vi phạm, công việc (job) sẽ lập tức chuyển sang trạng thái <code>failed</code> kèm log báo lỗi.</div>
+                        <div class="step-title">Kiểm thử Tiêu chuẩn Hợp lệ (Validation Gate)</div>
+                        <div class="step-desc">
+                            Trước khi đưa vào hàng đợi xử lý nặng, hệ thống chạy script kiểm tra nhanh thông số metadata của file (đọc qua <code>ffprobe</code>):<br>
+                            - <strong>Giới hạn thời lượng:</strong> Tối đa 120 phút (cấu hình trong bảng <code>video_standards</code>).<br>
+                            - <strong>Dung lượng tối đa:</strong> 500MB đối với video tải lên trực tiếp.<br>
+                            - <strong>Định dạng âm thanh:</strong> Kiểm tra xem tệp tin có chứa kênh âm thanh hợp lệ hay không.<br>
+                            Nếu không đạt, tạo job mới với trạng thái <code>failed</code> và lưu log lỗi chi tiết vào bảng <code>jobs</code>.
+                        </div>
                         <div class="step-tech">
-                            <span class="tech-badge">Python Core</span>
+                            <span class="tech-badge">ffprobe</span>
                             <span class="tech-badge">PostgreSQL (video_standards)</span>
                         </div>
                     </div>
@@ -292,12 +304,16 @@
                 <div class="flow-step">
                     <div class="step-num">3</div>
                     <div class="step-body">
-                        <div class="step-title">Tách Tín Hiệu & Tiền xử lý (Preprocessing)</div>
-                        <div class="step-desc">Tác vụ được đẩy vào hàng đợi Celery. Worker sử dụng FFmpeg để tách phần âm thanh (audio) ra khỏi video (định dạng WAV 16kHz mono) phục vụ phân tích tiếng nói, đồng thời giải nén các khung hình phục vụ Visual Module.</div>
+                        <div class="step-title">Tách Tín Hiệu & Tiền xử lý (Demuxing & Preprocessing)</div>
+                        <div class="step-desc">
+                            Celery Worker nhận tác vụ từ hàng đợi Redis và thực thi dòng lệnh FFmpeg để chuẩn hóa dữ liệu đầu vào:<br>
+                            <code>ffmpeg -i input_video.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 output_audio.wav</code><br>
+                            Lệnh này trích xuất âm thanh không nén (PCM 16-bit) tần số lấy mẫu 16kHz dạng mono đơn kênh (đây là cấu hình tối ưu để đạt độ chính xác cao nhất cho mô hình ASR WhisperX). Đồng thời, video được phân tích độ phân giải để tối ưu cho việc trích xuất khung hình sau đó.
+                        </div>
                         <div class="step-tech">
                             <span class="tech-badge">Celery</span>
                             <span class="tech-badge">Redis</span>
-                            <span class="tech-badge">FFmpeg</span>
+                            <span class="tech-badge">FFmpeg (pcm_s16le, 16kHz)</span>
                         </div>
                     </div>
                 </div>
@@ -305,10 +321,15 @@
                 <div class="flow-step">
                     <div class="step-num">4</div>
                     <div class="step-body">
-                        <div class="step-title">Nhận dạng Giọng nói & Gắn nhãn Thời gian</div>
-                        <div class="step-desc">Audio Module chạy mô hình WhisperX để chuyển đổi giọng nói thành văn bản. WhisperX giúp liên kết chính xác nhãn thời gian ở mức từng từ (word-level timestamps) và lọc tiếng ồn (Noise Reduction).</div>
+                        <div class="step-title">Nhận dạng Giọng nói & Gắn nhãn Thời gian (ASR & Alignment)</div>
+                        <div class="step-desc">
+                            Module Audio tiến hành xử lý âm thanh theo 2 bước chuyên sâu:<br>
+                            1. **ASR (Speech-to-Text):** Sử dụng WhisperX (mô hình <code>large-v3</code> ở local hoặc API AssemblyAI) để nhận dạng văn bản.<br>
+                            2. **Phoneme-level Alignment:** Đối chiếu transcript với mô hình wav2vec2 (như <code>VOiV/wav2vec2-large-xlsr-53-vietnamese</code> cho tiếng Việt) nhằm căn chỉnh nhãn thời gian chính xác đến cấp độ từng từ (word-level timestamps), khắc phục điểm yếu lệch thời gian của Whisper thuần túy.
+                        </div>
                         <div class="step-tech">
-                            <span class="tech-badge">WhisperX (ASR)</span>
+                            <span class="tech-badge">WhisperX (large-v3)</span>
+                            <span class="tech-badge">wav2vec2 Alignment</span>
                             <span class="tech-badge">PyTorch</span>
                         </div>
                     </div>
@@ -317,12 +338,18 @@
                 <div class="flow-step">
                     <div class="step-num">5</div>
                     <div class="step-body">
-                        <div class="step-title">Phát hiện Chuyển cảnh & Mô tả Keyframe</div>
-                        <div class="step-desc">Visual Module chạy PySceneDetect phát hiện điểm chuyển cảnh đột ngột. CLIP nhúng (embed) các frames và nhóm lại bằng K-means để chọn ra keyframe đại diện nhất trong từng scene. Cuối cùng, BLIP-2 tự động sinh mô tả văn bản (captioning) cho từng keyframe đó.</div>
+                        <div class="step-title">Phát hiện Chuyển cảnh & Phân tích Slide (Visual Stage)</div>
+                        <div class="step-desc">
+                            Module Visual thực hiện phân tích các thay đổi hình ảnh theo thời gian:<br>
+                            1. **Scene Detection:** Chạy PySceneDetect (thuật toán <code>ContentDetector</code> với threshold mặc định là 30.0) để tìm các mốc thời gian chuyển slide/chuyển cảnh.<br>
+                            2. **Keyframe Selection:** Nhúng các frames trong scene bằng mô hình CLIP (ViT-B/32) rồi tính toán cosine similarity để loại bỏ các frame trùng lặp hoặc chọn frame có độ nét cao nhất (sharpest) đại diện cho slide.<br>
+                            3. **Image Captioning & OCR:** Dùng BLIP-2 hoặc GPT-4o Vision để mô tả ngắn gọn nội dung slide, đồng thời chạy PaddleOCR để trích xuất toàn bộ text có trên slide.
+                        </div>
                         <div class="step-tech">
                             <span class="tech-badge">PySceneDetect</span>
-                            <span class="tech-badge">CLIP (Vision-Language)</span>
-                            <span class="tech-badge">BLIP-2 (Captioning)</span>
+                            <span class="tech-badge">CLIP (ViT-B/32)</span>
+                            <span class="tech-badge">PaddleOCR</span>
+                            <span class="tech-badge">BLIP-2 / GPT-4o Vision</span>
                         </div>
                     </div>
                 </div>
@@ -330,11 +357,17 @@
                 <div class="flow-step">
                     <div class="step-num">6</div>
                     <div class="step-body">
-                        <div class="step-title">Hợp nhất Đa phương thức & Tổng hợp (Fusion LLM)</div>
-                        <div class="step-desc">Fusion Module kết hợp thông tin văn bản có mốc thời gian (từ Audio) và mô tả ngữ cảnh hình ảnh (từ Visual) thành một Prompt có cấu trúc. Sau đó gọi LLM để sinh bản tóm tắt tóm lược ý chính, chia chương (chapters) và chuẩn bị dữ liệu RAG.</div>
+                        <div class="step-title">Hợp nhất Đa phương thức & Tóm tắt (Fusion & Summarization)</div>
+                        <div class="step-desc">
+                            Fusion Module (viết bằng LangChain) tích hợp thông tin chéo giữa hai kênh Audio và Visual dựa trên dòng thời gian (Time-aligned Fusion):<br>
+                            - Ghép các đoạn hội thoại có nhãn thời gian tương ứng với slide đang hiển thị trên màn hình.<br>
+                            - Xây dựng prompt chứa cả nội dung nói (transcript) và nội dung chữ hiển thị trên slide (OCR) kèm mô tả ảnh.<br>
+                            - Gọi mô hình LLM (như GPT-4o, Gemini, Qwen2.5) sinh ra cấu trúc tóm tắt phân chương (Chapters), tóm tắt chi tiết từng phần và chèn citation dạng link mốc thời gian <code>[mm:ss]</code> và slide tương ứng <code>[Slide N]</code> để tăng tính kiểm chứng (grounding).
+                        </div>
                         <div class="step-tech">
                             <span class="tech-badge">LangChain</span>
-                            <span class="tech-badge">GPT-4o / Gemini / Qwen2.5</span>
+                            <span class="tech-badge">GPT-4o / Gemini 1.5 Pro</span>
+                            <span class="tech-badge">Prompt Grounding</span>
                         </div>
                     </div>
                 </div>
@@ -342,12 +375,16 @@
                 <div class="flow-step">
                     <div class="step-num">7</div>
                     <div class="step-body">
-                        <div class="step-title">Lưu trữ Dữ liệu & Phục vụ Q&A</div>
-                        <div class="step-desc">Kết quả tóm tắt cuối cùng được lưu vào PostgreSQL. Phần văn bản transcript được bẻ nhỏ, chuyển đổi sang vector và index vào ChromaDB để sẵn sàng phục vụ tính năng Hỏi đáp (RAG). Frontend nhận tín hiệu hoàn tất thông qua WebSocket.</div>
+                        <div class="step-title">Đóng gói Lưu trữ & Đăng ký RAG Index</div>
+                        <div class="step-desc">
+                            - Ghi dữ liệu tóm tắt hoàn tất vào bảng <code>summaries</code> trong PostgreSQL.<br>
+                            - Cắt nhỏ toàn bộ transcript theo phương pháp sliding window (500 ký tự mỗi chunk, overlap 50 ký tự), chuyển đổi thành vector nhúng và đẩy vào cơ sở dữ liệu vector ChromaDB cùng với metadata để hỗ trợ tính năng Hỏi Đáp ngữ cảnh.<br>
+                            - Gửi tín hiệu hoàn tất (event type: <code>STATUS_DONE</code>) đến Frontend thông qua kết nối WebSocket để cập nhật giao diện người dùng lập tức mà không cần F5.
+                        </div>
                         <div class="step-tech">
                             <span class="tech-badge">PostgreSQL (summaries)</span>
                             <span class="tech-badge">ChromaDB</span>
-                            <span class="tech-badge">WebSocket</span>
+                            <span class="tech-badge">WebSockets (FastAPI)</span>
                         </div>
                     </div>
                 </div>
@@ -356,61 +393,89 @@
 
         <!-- TAB 2: STORAGE ARCHITECTURE -->
         <div id="storage" class="tab-content">
-            <h2><i class="fa-solid fa-server"></i> Kiến Trúc Lưu Trữ Dữ Liệu (Data Layer)</h2>
-            <p>Hệ thống sử dụng cơ chế lưu trữ kết hợp (Hybrid Storage) để lưu trữ tối ưu từng loại dữ liệu khác nhau:</p>
+            <h2><i class="fa-solid fa-server"></i> Kiến Trúc Lưu Trữ Hỗn Hợp (Hybrid Storage Layer)</h2>
+            <p>Hệ thống kết hợp ba tầng lưu trữ chuyên biệt để tối ưu hóa hiệu năng truy vấn, tính toàn vẹn của dữ liệu quan hệ, và khả năng tìm kiếm ngữ nghĩa thông minh:</p>
 
             <div class="storage-grid">
                 <!-- PostgreSQL Tables -->
                 <div class="storage-card" style="grid-column: 1 / -1;">
                     <h3 style="color: #0369a1;"><i class="fa-solid fa-database"></i> PostgreSQL - Cơ Sở Dữ Liệu Quan Hệ (Relational DB)</h3>
-                    <p style="font-size: 0.95rem; margin-bottom: 15px;">Đóng vai trò là <strong>Primary Database</strong> (SSOT - Single Source of Truth). Quản lý cấu trúc người dùng, tiến trình xử lý của Celery, và toàn bộ metadata kết quả AI. Đảm bảo tính toàn vẹn dữ liệu (ACID).</p>
+                    <p style="font-size: 0.95rem; margin-bottom: 15px;">Đóng vai trò là <strong>Single Source of Truth (SSOT)</strong> của hệ thống. Đảm bảo tính nhất quán (ACID), quản lý người dùng, phân quyền, cấu hình hệ thống, trạng thái tiến trình xử lý và lưu trữ kết quả đầu ra dạng cấu trúc JSON.</p>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px;">
                         
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-users"></i> Bảng: users</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu trữ thông tin người dùng và phân quyền hệ thống.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">user_id</span><span class="col-type">UUID (Primary Key)</span></li>
+                                <li><span class="col-name">email</span><span class="col-type">VARCHAR(255) (Unique)</span></li>
+                                <li><span class="col-name">hashed_password</span><span class="col-type">VARCHAR(255)</span></li>
+                                <li><span class="col-name">role</span><span class="col-type">VARCHAR(50) (admin/user)</span></li>
+                                <li><span class="col-name">created_at</span><span class="col-type">TIMESTAMP WITH TIME ZONE</span></li>
+                            </ul>
+                        </div>
+
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
                             <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-film"></i> Bảng: videos</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Quản lý trạng thái xử lý tổng thể, làm đầu vào cho Celery Worker.</p>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Quản lý các video đã tải lên và trạng thái xử lý tổng thể.</p>
                             <ul class="storage-list">
                                 <li><span class="col-name">video_id</span><span class="col-type">UUID (Primary Key)</span></li>
                                 <li><span class="col-name">user_id</span><span class="col-type">UUID (Foreign Key)</span></li>
-                                <li><span class="col-name">file_path</span><span class="col-type">VARCHAR (Local/S3 Path)</span></li>
+                                <li><span class="col-name">title</span><span class="col-type">VARCHAR(255)</span></li>
+                                <li><span class="col-name">file_path</span><span class="col-type">VARCHAR(512)</span></li>
+                                <li><span class="col-name">duration_sec</span><span class="col-type">INTEGER</span></li>
                                 <li><span class="col-name">status</span><span class="col-type">ENUM (pending/processing/done/failed)</span></li>
+                                <li><span class="col-name">created_at</span><span class="col-type">TIMESTAMP WITH TIME ZONE</span></li>
                             </ul>
                         </div>
 
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
                             <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-list-check"></i> Bảng: jobs</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Theo dõi chi tiết tiến trình từng bước của AI Pipeline (dùng để update UI qua WebSocket).</p>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Theo dõi chi tiết tiến trình của các tác vụ chạy ngầm Celery.</p>
                             <ul class="storage-list">
-                                <li><span class="col-name">job_id</span><span class="col-type">UUID (PK)</span></li>
-                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
-                                <li><span class="col-name">task_name</span><span class="col-type">VARCHAR (vd: whisper_transcribe)</span></li>
-                                <li><span class="col-name">progress</span><span class="col-type">INTEGER (0-100%)</span></li>
-                                <li><span class="col-name">error_log</span><span class="col-type">TEXT (Lưu traceback nếu lỗi)</span></li>
+                                <li><span class="col-name">job_id</span><span class="col-type">UUID (Primary Key)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (Foreign Key)</span></li>
+                                <li><span class="col-name">task_name</span><span class="col-type">VARCHAR(100) (ví dụ: ocr_extraction)</span></li>
+                                <li><span class="col-name">status</span><span class="col-type">VARCHAR(50) (running/completed/failed)</span></li>
+                                <li><span class="col-name">progress</span><span class="col-type">INTEGER (0-100)</span></li>
+                                <li><span class="col-name">error_log</span><span class="col-type">TEXT (Traceback nếu lỗi xảy ra)</span></li>
+                                <li><span class="col-name">updated_at</span><span class="col-type">TIMESTAMP WITH TIME ZONE</span></li>
                             </ul>
                         </div>
 
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
                             <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-file-invoice"></i> Bảng: summaries</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu trữ kết quả cuối cùng từ LLM Fusion phục vụ hiển thị trên UI Kết Quả.</p>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu trữ kết quả phân tích đa phương thức cuối cùng phục vụ UI.</p>
                             <ul class="storage-list">
-                                <li><span class="col-name">summary_id</span><span class="col-type">UUID (PK)</span></li>
-                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
-                                <li><span class="col-name">summary_text</span><span class="col-type">TEXT (Văn bản tóm tắt chính)</span></li>
-                                <li><span class="col-name">chapters_json</span><span class="col-type">JSONB (Mảng [start_time, end_time, title])</span></li>
-                                <li><span class="col-name">keyframes_json</span><span class="col-type">JSONB (Mảng [timestamp, image_url, blip_caption])</span></li>
+                                <li><span class="col-name">summary_id</span><span class="col-type">UUID (Primary Key)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (Foreign Key)</span></li>
+                                <li><span class="col-name">summary_text</span><span class="col-type">TEXT (Bản tóm tắt Markdown tổng quan)</span></li>
+                                <li><span class="col-name">chapters_json</span><span class="col-type">JSONB (Mảng [start_time, end_time, title, text])</span></li>
+                                <li><span class="col-name">keyframes_json</span><span class="col-type">JSONB (Mảng [timestamp, image_url, caption, ocr_text])</span></li>
                             </ul>
                         </div>
                         
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
                             <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-comments"></i> Bảng: qa_logs</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu lịch sử chat của tính năng RAG, dùng để review và fine-tune mô hình sau này.</p>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Lưu lịch sử hội thoại Hỏi Đáp để đánh giá hiệu năng RAG.</p>
                             <ul class="storage-list">
-                                <li><span class="col-name">qa_id</span><span class="col-type">UUID (PK)</span></li>
-                                <li><span class="col-name">video_id</span><span class="col-type">UUID (FK)</span></li>
-                                <li><span class="col-name">question</span><span class="col-type">TEXT (Câu hỏi người dùng)</span></li>
-                                <li><span class="col-name">answer</span><span class="col-type">TEXT (Câu trả lời từ LLM)</span></li>
-                                <li><span class="col-name">retrieved_chunks</span><span class="col-type">JSONB (Các chunk lấy ra từ ChromaDB)</span></li>
+                                <li><span class="col-name">qa_id</span><span class="col-type">UUID (Primary Key)</span></li>
+                                <li><span class="col-name">video_id</span><span class="col-type">UUID (Foreign Key)</span></li>
+                                <li><span class="col-name">question</span><span class="col-type">TEXT (Câu hỏi từ phía người dùng)</span></li>
+                                <li><span class="col-name">answer</span><span class="col-type">TEXT (Câu trả lời có citation của LLM)</span></li>
+                                <li><span class="col-name">retrieved_chunks</span><span class="col-type">JSONB (Lưu các chunk dữ liệu trích xuất từ ChromaDB)</span></li>
+                            </ul>
+                        </div>
+
+                        <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-gear"></i> Bảng: video_standards</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Cấu hình các tiêu chí validation kỹ thuật đối với đầu vào.</p>
+                            <ul class="storage-list">
+                                <li><span class="col-name">id</span><span class="col-type">INTEGER (Primary Key)</span></li>
+                                <li><span class="col-name">max_duration_sec</span><span class="col-type">INTEGER (Mặc định: 7200)</span></li>
+                                <li><span class="col-name">max_file_size_mb</span><span class="col-type">INTEGER (Mặc định: 500)</span></li>
+                                <li><span class="col-name">allowed_extensions</span><span class="col-type">VARCHAR(100) (mp4,mkv,avi)</span></li>
                             </ul>
                         </div>
 
@@ -419,29 +484,29 @@
 
                 <!-- Non-relational stores -->
                 <div class="storage-card" style="grid-column: 1 / -1; margin-top: 10px;">
-                    <h3 style="color: #047857;"><i class="fa-solid fa-cubes"></i> ChromaDB - Cơ Sở Dữ Liệu Vector (Vector Store)</h3>
-                    <p style="font-size: 0.95rem; margin-bottom: 15px;">Công cụ lõi (Core engine) vận hành tính năng Hỏi Đáp (RAG). Giúp chuyển đổi văn bản (text) thành các điểm trong không gian đa chiều (Vector Space) để tìm kiếm nội dung (Similarity Search) có cùng ngữ nghĩa với câu hỏi người dùng.</p>
+                    <h3 style="color: #047857;"><i class="fa-solid fa-cubes"></i> ChromaDB - Vector Store (Cơ sở dữ liệu Vector)</h3>
+                    <p style="font-size: 0.95rem; margin-bottom: 15px;">ChromaDB hoạt động như một công cụ cơ sở dữ liệu phi quan hệ lưu trữ các biểu diễn nhúng vector (embedding vectors) để thực thi truy vấn tìm kiếm tương đồng ngữ nghĩa (Semantic Search) cho chatbot RAG.</p>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px;">
                         
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
-                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-layer-group"></i> Cấu trúc Collection</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Mỗi Video được tạo thành 1 Collection riêng (hoặc dùng chung 1 Collection lớn nhưng filter bằng metadata <code>video_id</code>) để tăng độ chính xác truy vấn.</p>
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-layer-group"></i> Cấu trúc Collection & Model nhúng</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Quản lý tách biệt hoặc đánh thẻ (tagging) theo video để tối ưu tốc độ và độ chính xác truy vấn.</p>
                             <ul class="storage-list">
-                                <li><span class="col-name">Collection Name</span><span class="col-type">`video_${video_id}`</span></li>
-                                <li><span class="col-name">Embedding Model</span><span class="col-type">text-embedding-3-small (hoặc all-MiniLM)</span></li>
-                                <li><span class="col-name">Distance Metric</span><span class="col-type">Cosine Similarity</span></li>
+                                <li><span class="col-name">Tên Collection</span><span class="col-type">`video_${video_id}` hoặc dùng chung với filter metadata</span></li>
+                                <li><span class="col-name">Embedding Model</span><span class="col-type">text-embedding-3-small (1536 dims) hoặc all-MiniLM-L6-v2 (384 dims)</span></li>
+                                <li><span class="col-name">Thuật toán đo</span><span class="col-type">Cosine Similarity (Độ tương đồng Cosine)</span></li>
                             </ul>
                         </div>
 
                         <div style="border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: #f8fafc;">
-                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-puzzle-piece"></i> Cấu trúc 1 Document (Chunk)</h4>
-                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Transcript sinh ra từ WhisperX được cắt nhỏ (Chunking) theo sliding window (ví dụ 500 ký tự / chunk, overlap 50 ký tự).</p>
+                            <h4 style="font-family: 'Outfit'; margin-bottom: 10px; color: var(--text-main);"><i class="fa-solid fa-puzzle-piece"></i> Cấu trúc 1 Chunk Document</h4>
+                            <p style="font-size: 0.85rem; margin-bottom: 10px; color: var(--text-muted);">Dữ liệu ghi nhận bao gồm nội dung văn bản, tọa độ vector và metadata để liên kết nguồn gốc.</p>
                             <ul class="storage-list">
-                                <li><span class="col-name">id</span><span class="col-type">`chunk_001`</span></li>
-                                <li><span class="col-name">document</span><span class="col-type">Nội dung text (vd: "Trí tuệ nhân tạo là...")</span></li>
-                                <li><span class="col-name">embedding</span><span class="col-type">Float Array [0.12, -0.45, ..., 0.89]</span></li>
-                                <li><span class="col-name">metadata</span><span class="col-type">{"start_time": 12.5, "end_time": 45.0, "speaker": "A"}</span></li>
+                                <li><span class="col-name">id</span><span class="col-type">`chunk_${video_id}_${index}`</span></li>
+                                <li><span class="col-name">document (Text)</span><span class="col-type">"Nội dung lời thoại hoặc OCR chữ trong khoảng thời gian..."</span></li>
+                                <li><span class="col-name">embedding</span><span class="col-type">Float Array (Vector tọa độ biểu diễn ngữ nghĩa)</span></li>
+                                <li><span class="col-name">metadata (JSON)</span><span class="col-type">{"start_time": 12.5, "end_time": 45.0, "speaker_id": "SPEAKER_01"}</span></li>
                             </ul>
                         </div>
 
@@ -449,13 +514,14 @@
                 </div>
 
                 <div class="storage-card" style="grid-column: 1 / -1; margin-top: 10px;">
-                    <h3><i class="fa-solid fa-folder-open"></i> File Storage (Local/S3)</h3>
-                    <p style="font-size: 0.85rem; margin-bottom: 10px;">Lưu trữ vật lý các tệp nhị phân kích thước lớn.</p>
+                    <h3><i class="fa-solid fa-folder-open"></i> Kho Lưu Trữ Tệp Tin Vật Lý (Local/S3 Directory Structure)</h3>
+                    <p style="font-size: 0.85rem; margin-bottom: 10px;">Các tệp tin đa phương tiện kích thước lớn được phân cấp lưu trữ trong thư mục hệ thống (hoặc bucket S3 tương đương):</p>
                     <ul class="storage-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 5px 30px;">
-                        <li><span class="col-name">/uploads/videos/</span><span class="col-type">Video gốc tải lên</span></li>
-                        <li><span class="col-name">/uploads/audios/</span><span class="col-type">WAV Audio sau tiền xử lý</span></li>
-                        <li><span class="col-name">/outputs/keyframes/</span><span class="col-type">Ảnh JPG/PNG trích xuất</span></li>
-                        <li><span class="col-name">/outputs/documents/</span><span class="col-type">Bản xuất PDF/TXT/SRT</span></li>
+                        <li><span class="col-name">/storage/uploads/videos/</span><span class="col-type">Tệp tin video gốc tải lên hệ thống</span></li>
+                        <li><span class="col-name">/storage/uploads/audios/</span><span class="col-type">File âm thanh WAV (16kHz mono) sau tiền xử lý</span></li>
+                        <li><span class="col-name">/storage/outputs/keyframes/</span><span class="col-type">Các tệp ảnh keyframe (JPG) trích xuất phục vụ OCR & Visual</span></li>
+                        <li><span class="col-name">/storage/outputs/documents/</span><span class="col-type">Các tài liệu tóm tắt được kết xuất (PDF, TXT, SRT)</span></li>
+                        <li><span class="col-name">/storage/cache/models/</span><span class="col-type">Bộ nhớ cache các mô hình AI local (WhisperX, CLIP, wav2vec2)</span></li>
                     </ul>
                 </div>
             </div>

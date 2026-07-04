@@ -14,10 +14,15 @@ class ChromaDBService:
         self.enabled = False
         self.client = None
         self.collection = None
+        self._initialized = False
 
         # Dict mock vector store to fallback on connection errors
         self.mock_store: Dict[str, List[Dict[str, Any]]] = {}
 
+    def _ensure_connection(self):
+        if self._initialized:
+            return
+        self._initialized = True
         try:
             # We can connect using HttpClient
             self.client = chromadb.HttpClient(host=self.host, port=self.port)
@@ -43,6 +48,7 @@ class ChromaDBService:
         Adds text chunks to the vector database.
         If ChromaDB is disabled, stores them in the in-memory mock store.
         """
+        self._ensure_connection()
         video_id_str = str(video_id)
         if self.enabled and self.collection:
             try:
@@ -76,6 +82,7 @@ class ChromaDBService:
         """
         Queries the vector database for text chunks relevant to the user query.
         """
+        self._ensure_connection()
         video_id_str = str(video_id)
         if self.enabled and self.collection:
             try:

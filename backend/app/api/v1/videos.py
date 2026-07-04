@@ -409,3 +409,56 @@ def get_video(
         data=VideoDTO.model_validate(video),
         message="Video details retrieved successfully",
     )
+
+
+@router.get(
+    "/admin/all",
+    response_model=BaseDTO[List[VideoDTO]],
+    summary="List all videos across all users (Admin only)",
+    description="Retrieves a list of all uploaded videos in the system. Requires Admin permissions.",
+)
+def list_all_videos(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_admin),
+):
+    """Lists all videos for administration. Requires Admin role."""
+    videos = db.query(Video).order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
+    return BaseDTO(
+        success=True,
+        data=[VideoDTO.model_validate(v) for v in videos],
+        message="All system videos retrieved successfully",
+        metadata={"limit": limit, "offset": offset, "count": len(videos)},
+    )
+
+
+@router.delete(
+    "/admin/{video_id}",
+    response_model=BaseDTO[bool],
+    summary="Delete any video (Admin only)",
+    description="Deletes a video record and all associated jobs/summaries from the database. Requires Admin permissions.",
+)
+def delete_video_admin(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_admin),
+):
+    """Deletes a video and its children. Requires Admin role."""
+    video = db.query(Video).filter(Video.video_id == video_id).first()
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    # Delete associated jobs
+    db.query(Job).filter(Job.video_id == video_id).delete()
+    # Delete associated summaries
+    db.query(Summary).filter(Summary.video_id == video_id).delete()
+    # Delete video
+    db.delete(video)
+    db.commit()
+
+    return BaseDTO(
+        success=True,
+        data=True,
+        message="Video and associated records deleted successfully",
+    )

@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.exceptions import NotFoundException
 from app.middleware.case_converter import CamelCaseAPIRoute
 from app.schemas import BaseDTO, JobDTO
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
 from app.models.job import Job
 from app.models.video import Video
@@ -74,4 +74,25 @@ def get_job(
         success=True,
         data=JobDTO.model_validate(job),
         message="Job details retrieved successfully",
+    )
+
+
+@router.get(
+    "/admin/all",
+    response_model=BaseDTO[List[JobDTO]],
+    summary="List all background jobs (Admin only)",
+    description="Retrieves all background tasks in the system. Requires Admin permissions.",
+)
+def list_all_jobs(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_admin),
+):
+    """Lists all processing jobs. Requires Admin role."""
+    jobs = db.query(Job).order_by(Job.job_id).offset(offset).limit(limit).all()
+    return BaseDTO(
+        success=True,
+        data=[JobDTO.model_validate(j) for j in jobs],
+        message="All background jobs retrieved successfully",
     )
