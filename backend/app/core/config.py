@@ -1,5 +1,5 @@
 import os
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import AnyHttpUrl, BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Annotated
@@ -60,7 +60,11 @@ class Settings(BaseSettings):
 
     # ChromaDB
     CHROMADB_HOST: str = "localhost"
-    CHROMADB_PORT: int = 8000
+    CHROMADB_PORT: Optional[int] = 8000
+    CHROMADB_SSL: bool = False
+    CHROMADB_API_KEY: str = ""
+    CHROMADB_TENANT: str = "default_tenant"
+    CHROMADB_DATABASE: str = "default_database"
     CHROMADB_COLLECTION_NAME: str = "lecture_transcript_embeddings"
 
     # Backup Default Video Standards (Actual standards loaded from DB)

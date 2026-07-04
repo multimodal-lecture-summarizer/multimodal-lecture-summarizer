@@ -47,6 +47,28 @@ class R2Service:
             if not os.path.exists(self.mock_dir):
                 os.makedirs(self.mock_dir, exist_ok=True)
 
+    def verify_connection(self) -> bool:
+        """
+        Verifies connection to Cloudflare R2 by performing a light check.
+        If successful, returns True. Otherwise log warning/error and return False.
+        """
+        uvicorn_logger = logging.getLogger("uvicorn.error")
+        if not self.enabled:
+            uvicorn_logger.warning("Cloudflare R2 is disabled (Mock storage mode).")
+            return False
+        try:
+            # Check bucket existence to verify credentials
+            self.s3_client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
+            uvicorn_logger.info("Connected to Cloudflare R2 successfully.")
+            return True
+        except Exception as e:
+            uvicorn_logger.error(
+                f"Cloudflare R2 connection verification failed: {e}. "
+                "Falling back to local storage Mock mode."
+            )
+            self.enabled = False
+            return False
+
     def upload_file(self, file_path: str, object_name: str) -> Optional[str]:
         """
         Uploads a file to Cloudflare R2 bucket.

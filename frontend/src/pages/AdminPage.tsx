@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { api } from '../services/api';
+import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
 import './AdminPage.css';
 
@@ -13,7 +14,7 @@ interface UserItem {
 }
 
 export const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'stats' | 'metrics' | 'users' | 'videos' | 'celery'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'metrics' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
 
   // Chart refs
   const barChartRef = useRef<HTMLCanvasElement>(null);

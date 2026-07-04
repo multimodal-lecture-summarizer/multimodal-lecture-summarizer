@@ -6,11 +6,11 @@ export const LandingPage: React.FC = () => {
   return (
     <div className="landing-page">
       <section className="hero">
-        <h1 className="animate-fade-in">Tiết Kiệm Hàng Giờ Xem Video Với Trí Tuệ Nhân Tạo</h1>
-        <p className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        <h1>Tiết Kiệm Hàng Giờ Xem Video Với Trí Tuệ Nhân Tạo</h1>
+        <p>
           Hệ thống trích xuất nội dung, tóm tắt văn bản, phân đoạn chapter và hỗ trợ hỏi đáp trực tiếp (RAG) với bất kỳ video học thuật nào bằng các mô hình AI tiên tiến nhất.
         </p>
-        <div className="hero-btns animate-fade-in" style={{ animationDelay: '0.4s' }}>
+        <div className="hero-btns">
           <Link to="/upload" className="btn primary">
             <i className="fa-solid fa-upload"></i> Xử lý Video Ngay
           </Link>

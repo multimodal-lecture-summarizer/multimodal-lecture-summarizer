@@ -108,7 +108,7 @@ export const HistoryPage: React.FC = () => {
               
               <div className="actions">
                 {item.status === VideoStatus.DONE ? (
-                  <Link to="/results" className="btn primary">
+                  <Link to={`/results?videoId=${item.id}`} className="btn primary">
                     <i className="fa-regular fa-eye"></i> Xem Kết Quả
                   </Link>
                 ) : (

@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { api } from '../services/api';
+import { CONFIG } from '../config';
 import './QaPage.css';
 
 interface Message {
@@ -11,6 +13,12 @@ interface Message {
 }
 
 export const QaPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const videoId = searchParams.get('videoId') || searchParams.get('id') || '';
+
+  const [videoData, setVideoData] = useState<any>(null);
+  const [, setLoading] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -40,47 +48,70 @@ export const QaPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!videoId) return;
+    setLoading(true);
+    api.getVideo(videoId)
+      .then(res => {
+        if (res.success && res.data) {
+          setVideoData(res.data);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to load video details for QA:", err);
+        setLoading(false);
+      });
+  }, [videoId]);
+
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
 
+    const queryText = inputText;
     const newMsg: Message = {
       sender: 'user',
       avatarIcon: 'fa-solid fa-user',
-      text: inputText
+      text: queryText
     };
 
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
     setIsTyping(true);
 
-    // Mock bot response after 1.5 seconds
-    setTimeout(() => {
-      let botResponse = 'Tôi đã tìm kiếm câu hỏi này trong video. ';
-      let refTime = 0;
-      
-      const q = inputText.toLowerCase();
-      if (q.includes('backpropagation') || q.includes('lan truyền ngược') || q.includes('truyền ngược')) {
-        botResponse = 'Theo video giảng dạy, <strong>Backpropagation</strong> là xương sống của việc tối ưu hóa mạng nơ-ron. Thuật toán hoạt động bằng cách tính toán đạo hàm (gradient) của hàm mất mát cho tất cả các trọng số trong mạng nơ-ron theo chu kỳ ngược từ layer đầu ra về layer đầu vào. Sau đó, các trọng số được cập nhật thông qua Gradient Descent để tìm điểm cực tiểu.';
-        refTime = 312; // 05:12
-      } else if (q.includes('rnn') || q.includes('hạn chế')) {
-        botResponse = 'Giảng viên đề cập rằng mạng RNN truyền thống gặp khó khăn rất lớn khi huấn luyện trên các chuỗi văn bản dài. Vấn đề cốt lõi là hiện tượng <strong>tiêu biến gradient (vanishing gradient)</strong>, khiến các layer thời điểm đầu không học được thông tin từ các layer cuối. Do đó, RNN không giữ được ngữ cảnh dài.';
-        refTime = 750; // 12:30
-      } else if (q.includes('giới thiệu') || q.includes('bài giảng')) {
-        botResponse = 'Ở đầu bài giảng, giảng viên chào mừng các học sinh và giới thiệu tổng quan về cấu trúc khóa học Trí tuệ Nhân tạo và vị trí của Học sâu (Deep Learning) trong dòng chảy phát triển của khoa học máy tính.';
-        refTime = 0; // 00:00
-      } else {
-        botResponse = `Cơ sở dữ liệu Vector (ChromaDB) đã tìm thấy thông tin trùng khớp với truy vấn của bạn. Đoạn hội thoại này xuất hiện ở khoảng mốc thời gian ${formatTimeText(312)}. Giảng viên đang giải thích khái niệm chính của bài học. Bạn có thể nhấn badge bên dưới để theo dõi trực tiếp.`;
-        refTime = 312;
-      }
+    api.askQuestion(videoId, queryText)
+      .then(res => {
+        if (res.success && res.data) {
+          let refTime: number | undefined = undefined;
+          
+          // Parse timestamp from answer like "05:12" or "12:30"
+          const match = res.data.answer.match(/(\d{1,2}):(\d{2})/);
+          if (match) {
+            refTime = parseInt(match[1]) * 60 + parseInt(match[2]);
+          }
 
-      setMessages(prev => [...prev, {
-        sender: 'bot',
-        avatarIcon: 'fa-solid fa-brain',
-        text: botResponse,
-        referenceTime: refTime
-      }]);
-      setIsTyping(false);
-    }, 1500);
+          setMessages(prev => [...prev, {
+            sender: 'bot',
+            avatarIcon: 'fa-solid fa-brain',
+            text: res.data.answer,
+            referenceTime: refTime
+          }]);
+        } else {
+          setMessages(prev => [...prev, {
+            sender: 'bot',
+            avatarIcon: 'fa-solid fa-brain',
+            text: 'Không nhận được câu trả lời từ hệ thống RAG.'
+          }]);
+        }
+        setIsTyping(false);
+      })
+      .catch(err => {
+        setMessages(prev => [...prev, {
+          sender: 'bot',
+          avatarIcon: 'fa-solid fa-brain',
+          text: `Có lỗi xảy ra khi truy vấn ChromaDB: ${err.message || 'Lỗi kết nối'}`
+        }]);
+        setIsTyping(false);
+      });
   };
 
   const formatTimeText = (secs: number) => {
@@ -103,24 +134,24 @@ export const QaPage: React.FC = () => {
     <div className="qa-page">
       <div className="sidebar">
         <div className="sidebar-header">
-          <Link to="/results" className="back-link"><i className="fa-solid fa-arrow-left"></i></Link>
+          <Link to={`/results?videoId=${videoId}`} className="back-link"><i className="fa-solid fa-arrow-left"></i></Link>
           <h2>Ngữ Cảnh Video (RAG)</h2>
         </div>
         <div className="sidebar-content">
           <div className="video-mini-container">
             <video 
               ref={videoRef}
-              src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" 
+              src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
               poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
               controls
               className="video-mini"
             />
           </div>
           <div className="info-card">
-            <p>Tên file: <span>MIT_DeepLearning_Lec1.mp4</span></p>
-            <p>Thời lượng: <span>45:10</span></p>
+            <p>Tên file: <span>{videoData?.filePath ? videoData.filePath.split('/').pop() : videoData?.originalUrl ? 'YouTube Source' : 'MIT_DeepLearning_Lec1.mp4'}</span></p>
+            <p>Thời lượng: <span>{videoData?.duration ? formatTimeText(videoData.duration) : '45:10'}</span></p>
             <p>Vector Store: <span>ChromaDB</span></p>
-            <p>LLM Backend: <span>Qwen2.5-7B (Local)</span></p>
+            <p>LLM Backend: <span>Groq Cloud</span></p>
           </div>
           
           <div className="history-list">

@@ -1,26 +1,30 @@
-export enum UserRole {
-  ADMIN = "admin",
-  USER = "user"
-}
+export const UserRole = {
+  ADMIN: "admin",
+  USER: "user"
+} as const;
+export type UserRole = typeof UserRole[keyof typeof UserRole];
 
-export enum VideoStatus {
-  PENDING = "pending",
-  PROCESSING = "processing",
-  DONE = "done",
-  FAILED = "failed"
-}
+export const VideoStatus = {
+  PENDING: "pending",
+  PROCESSING: "processing",
+  DONE: "done",
+  FAILED: "failed"
+} as const;
+export type VideoStatus = typeof VideoStatus[keyof typeof VideoStatus];
 
-export enum JobType {
-  SUMMARIZE = "summarize",
-  QA = "qa"
-}
+export const JobType = {
+  SUMMARIZE: "summarize",
+  QA: "qa"
+} as const;
+export type JobType = typeof JobType[keyof typeof JobType];
 
-export enum JobStatus {
-  PENDING = "pending",
-  RUNNING = "running",
-  COMPLETED = "completed",
-  FAILED = "failed"
-}
+export const JobStatus = {
+  PENDING: "pending",
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed"
+} as const;
+export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
 
 export interface WordToken {
   word: string;

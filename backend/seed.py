@@ -12,7 +12,7 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 # Add current directory to path so we can import app modules properly
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.core.database import SessionLocal, Base, engine
+from app.core.database import SessionLocal, Base, engine, verify_db_connection
 from app.models.user import User
 from app.models.video import Video
 from app.models.summary import Summary
@@ -23,6 +23,9 @@ from app.services.chromadb import chromadb_service
 
 
 def seed_database():
+    print("--- Verifying Database Connection ---")
+    verify_db_connection(retries=3, delay=1.0)
+
     print("--- Initializing database tables if needed ---")
     Base.metadata.create_all(bind=engine)
 

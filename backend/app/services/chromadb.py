@@ -6,10 +6,37 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, api_key: str = "", timeout: float = 2.0) -> bool:
+    import urllib.request
+    import urllib.error
+    if not host:
+        return False
+    try:
+        p = int(port) if port else (443 if ssl else 8000)
+        proto = "https" if ssl or p == 443 else "http"
+        url = f"{proto}://{host}:{p}/api/v1/heartbeat"
+        req = urllib.request.Request(url)
+        if api_key:
+            req.add_header("Authorization", f"Bearer {api_key}")
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            if response.getcode() == 200:
+                return True
+    except urllib.error.HTTPError:
+        # If the server returned any HTTP error (like 401, 403, 410), it is responsive.
+        return True
+    except Exception:
+        pass
+    return False
+
+
 class ChromaDBService:
     def __init__(self):
         self.host = settings.CHROMADB_HOST
         self.port = settings.CHROMADB_PORT
+        self.ssl = settings.CHROMADB_SSL
+        self.api_key = settings.CHROMADB_API_KEY
+        self.tenant = settings.CHROMADB_TENANT
+        self.database = settings.CHROMADB_DATABASE
         self.collection_name = settings.CHROMADB_COLLECTION_NAME
         self.enabled = False
         self.client = None
@@ -23,19 +50,47 @@ class ChromaDBService:
         if self._initialized:
             return
         self._initialized = True
+        uvicorn_logger = logging.getLogger("uvicorn.error")
+        
+        # Verify database endpoint responsiveness to avoid library hang
+        if not is_chromadb_responsive(self.host, self.port, self.ssl, self.api_key, timeout=2.0):
+            uvicorn_logger.warning(
+                f"ChromaDB endpoint at {self.host}:{self.port} is not responsive. "
+                "Falling back to local in-memory Mock store."
+            )
+            self.enabled = False
+            return
+
         try:
-            # We can connect using HttpClient
-            self.client = chromadb.HttpClient(host=self.host, port=self.port)
+            if self.api_key:
+                # Use CloudClient for Chroma Cloud connection
+                self.client = chromadb.CloudClient(
+                    tenant=self.tenant,
+                    database=self.database,
+                    api_key=self.api_key,
+                    cloud_host=self.host or "api.trychroma.com",
+                    cloud_port=self.port if self.port else 443,
+                    enable_ssl=self.ssl
+                )
+            else:
+                # Use HttpClient for standard connection
+                self.client = chromadb.HttpClient(
+                    host=self.host,
+                    port=self.port if self.port else 8000,
+                    ssl=self.ssl,
+                    tenant=self.tenant,
+                    database=self.database
+                )
             # Try to get or create collection to verify connection
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name
             )
             self.enabled = True
-            logger.info(
+            uvicorn_logger.info(
                 f"Connected to ChromaDB at {self.host}:{self.port} successfully."
             )
         except Exception as e:
-            logger.warning(
+            uvicorn_logger.warning(
                 f"Failed to connect to ChromaDB at {self.host}:{self.port}: {e}. "
                 "Falling back to local in-memory Mock store."
             )
@@ -126,6 +181,70 @@ class ChromaDBService:
         # Sort by score descending
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
         return [doc for score, doc in scored_chunks[:limit]]
+
+    def verify_connection(self, retries: int = 5, delay: float = 2.0):
+        """
+        Verifies connection to ChromaDB on startup, with retries.
+        If it fails:
+        - If APP_ENV == "development", falls back to in-memory Mock store (setting enabled=False).
+        - If APP_ENV != "development", raises RuntimeError to prevent startup.
+        """
+        import time
+        last_error = None
+        uvicorn_logger = logging.getLogger("uvicorn.error")
+        for attempt in range(1, retries + 1):
+            try:
+                
+                # Verify database endpoint responsiveness to avoid library hang
+                if not is_chromadb_responsive(self.host, self.port, self.ssl, self.api_key, timeout=2.0):
+                    raise RuntimeError(f"ChromaDB endpoint at {self.host}:{self.port} is not responsive.")
+
+                # Try to connect
+                if self.api_key:
+                    # Use CloudClient for Chroma Cloud connection
+                    self.client = chromadb.CloudClient(
+                        tenant=self.tenant,
+                        database=self.database,
+                        api_key=self.api_key,
+                        cloud_host=self.host or "api.trychroma.com",
+                        cloud_port=self.port if self.port else 443,
+                        enable_ssl=self.ssl
+                    )
+                else:
+                    # Use HttpClient for standard connection
+                    self.client = chromadb.HttpClient(
+                        host=self.host,
+                        port=self.port if self.port else 8000,
+                        ssl=self.ssl,
+                        tenant=self.tenant,
+                        database=self.database
+                    )
+                self.collection = self.client.get_or_create_collection(
+                    name=self.collection_name
+                )
+                self.enabled = True
+                self._initialized = True
+                uvicorn_logger.info(f"Connected to ChromaDB at {self.host}:{self.port} successfully.")
+                return
+            except Exception as e:
+                last_error = e
+                uvicorn_logger.warning(f"ChromaDB connection attempt {attempt} failed: {e}")
+                if attempt < retries:
+                    time.sleep(delay)
+
+        # Failed after all retries
+        self._initialized = True # Mark as initialized so _ensure_connection won't try again
+        self.enabled = False
+        if settings.APP_ENV == "development":
+            uvicorn_logger.warning(
+                f"All connection attempts to ChromaDB failed. Falling back to local in-memory Mock store "
+                f"since APP_ENV is '{settings.APP_ENV}'."
+            )
+        else:
+            uvicorn_logger.error("ChromaDB connection failed and fallback is disabled in non-development environment.")
+            raise RuntimeError(
+                f"Failed to connect to ChromaDB at {self.host}:{self.port} after {retries} attempts: {last_error}"
+            )
 
 
 chromadb_service = ChromaDBService()

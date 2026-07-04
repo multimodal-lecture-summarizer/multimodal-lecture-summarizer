@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +12,33 @@ from app.middleware.exception_handler import register_exception_handlers
 # Ensure models are imported so SQLAlchemy metadata registers tables
 import app.models
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Handles application startup and shutdown events.
-    Automatically initializes PostgreSQL tables on startup.
+    Verifies database connections (SQL and Vector) with retry and fallback logic.
+    Automatically initializes database tables on startup.
     """
+    from app.core.database import verify_db_connection
+    from app.services.chromadb import chromadb_service
+    from app.services.r2 import r2_service
+
+    # Suppress verbose loggers from dependencies
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    
+    # Verify main relational database connection (PostgreSQL/SQLite)
+    verify_db_connection(retries=5, delay=2.0)
+
+    # Verify vector database connection (ChromaDB)
+    chromadb_service.verify_connection(retries=5, delay=2.0)
+
+    # Verify Cloudflare R2 storage connection
+    r2_service.verify_connection()
+
     # Create tables automatically for local testing
     Base.metadata.create_all(bind=engine)
 
