@@ -18,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
           <img 
             alt="Multimodal Lecture Summarizer Logo" 
             className="w-8 h-8 object-contain" 
-            src="https://lh3.googleusercontent.com/aida/AP1WRLtxduNxaNOmKabESZ0gKYWnEo9KvTKhU0LUYJGKGTYUY23EXRtO-soFY7IIoUor2nEuaKvZ40vnz86z_Ks7NI2pra0JvnlX5bSe2gcR5SCmCPQ390eJNg5ROT7jq4kzkBUQoYGdsBjBsyVko-OacbCQ2vOIuF-eUvVV0yV2jzFXWQVnAY2HvQ8wbLk8pu3Zqbb-UbtA7Ep2tDEtS4avM7r7XW0klIOWYv1eAa27KEW7gzQ0bY7WnhCcWV8"
+            src="/logo.png" 
           />
           <span className="font-headline-lg text-xl md:text-headline-lg font-bold text-deep-navy tracking-tight">
             {isAdminPage ? "Admin Panel" : "Multimodal Lecture Summarizer"}

@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     CHROMADB_DATABASE: str = "default_database"
     CHROMADB_COLLECTION_NAME: str = "lecture_transcript_embeddings"
 
+    # Celery & Redis
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+
     # Backup Default Video Standards (Actual standards loaded from DB)
     DEFAULT_MAX_DURATION_SECONDS: int = 3600
     DEFAULT_ALLOWED_FORMATS: str = "mp4,avi,mkv"

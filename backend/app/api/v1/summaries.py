@@ -67,13 +67,62 @@ def get_video_summary(
         for k in summary.keyframes_json
     ]
 
+    # Parse transcript_text to check if it's stored as a JSON list of segments
+    import json
+    import re
+    parsed_segments = []
+    clean_transcript_text = summary.transcript_text
+    
+    try:
+        parsed = json.loads(summary.transcript_text)
+        if isinstance(parsed, list):
+            parsed_segments = parsed
+            # Reconstruct clean text transcript for display/QA
+            text_parts = []
+            for seg in parsed:
+                if seg.get("text") and seg.get("text") != "[Nhạc nền / Im lặng]":
+                    text_parts.append(seg["text"])
+            clean_transcript_text = " ".join(text_parts)
+    except Exception:
+        pass
+
+    # If it is plain text, generate interpolated segments with word tokens for UI playback compatibility
+    if not parsed_segments and clean_transcript_text:
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', clean_transcript_text) if s.strip()]
+        total_dur = video.duration or 10.0
+        sec_per_sentence = total_dur / len(sentences) if sentences else 10.0
+        
+        for idx, sentence in enumerate(sentences):
+            s_start = idx * sec_per_sentence
+            s_end = (idx + 1) * sec_per_sentence
+            
+            words_list = sentence.split()
+            word_tokens = []
+            if words_list:
+                sec_per_word = sec_per_sentence / len(words_list)
+                for w_idx, w in enumerate(words_list):
+                    word_tokens.append({
+                        "word": w,
+                        "start": s_start + w_idx * sec_per_word,
+                        "end": s_start + (w_idx + 1) * sec_per_word
+                    })
+                    
+            parsed_segments.append({
+                "speaker": "SPEAKER_01",
+                "start": s_start,
+                "end": s_end,
+                "text": sentence,
+                "words": word_tokens
+            })
+
     dto = SummaryDTO(
         summary_id=summary.summary_id,
         video_id=summary.video_id,
         summary_text=summary.summary_text,
         chapters=chapters,
         keyframes=keyframes,
-        transcript_text=summary.transcript_text,
+        transcript_text=clean_transcript_text,
+        transcript_segments=parsed_segments,
         model_used=summary.model_used,
         processing_time=summary.processing_time,
     )

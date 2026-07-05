@@ -32,17 +32,26 @@ class WorkerSettings(BaseSettings):
     # API Keys (injected from .env)
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     HF_TOKEN: str = ""
     ASSEMBLYAI_API_KEY: str = ""
     DEEPGRAM_API_KEY: str = ""
+
+    # Cloudflare R2 (injected from .env)
+    CF_R2_ACCOUNT_ID: str = ""
+    CF_R2_ACCESS_KEY_ID: str = ""
+    CF_R2_SECRET_ACCESS_KEY: str = ""
+    CF_R2_BUCKET_NAME: str = "lecture-summarizer-assets"
+    CF_R2_PUBLIC_URL: str = "https://pub-your-bucket-id.r2.dev"
 
     # Paths
     OUTPUT_DIR: str = "./outputs"
     CACHE_DIR: str = "./cache"
 
     class Config:
-        env_file = ".env"
+        env_file = ["backend/.env", ".env"]
         case_sensitive = True
+        extra = "ignore"
 
 
 worker_settings = WorkerSettings()

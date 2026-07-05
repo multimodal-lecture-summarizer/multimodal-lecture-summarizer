@@ -21,160 +21,7 @@ from app.services.chromadb import chromadb_service
 router = APIRouter(route_class=CamelCaseAPIRoute)
 
 
-def process_video_simulation(video_id: uuid.UUID):
-    """
-    Background Task simulating the full Multimodal AI Pipeline:
-    ASR (WhisperX) -> Keyframes (CLIP/BLIP-2) -> Fusion & LLM (Groq) -> Vector Store (ChromaDB)
-    """
-    db: Session = SessionLocal()
-    try:
-        # Fetch Video
-        video = db.query(Video).filter(Video.video_id == video_id).first()
-        if not video:
-            return
 
-        # Fetch pending job
-        job = (
-            db.query(Job)
-            .filter(Job.video_id == video_id, Job.job_type == JobType.SUMMARIZE)
-            .first()
-        )
-        if not job:
-            job = Job(video_id=video_id, job_type=JobType.SUMMARIZE)
-            db.add(job)
-
-        # Step 1: Update status to processing
-        video.status = VideoStatus.PROCESSING
-        job.status = JobStatus.RUNNING
-        job.started_at = datetime.utcnow() if "datetime" in globals() else None
-        # Fallback timestamp setting
-        import datetime as dt
-
-        job.started_at = dt.datetime.utcnow()
-        db.commit()
-
-        # Simulate delay of ASR and Visual pipelines
-        time.sleep(4)
-
-        # Generate standard mock transcript text and chapters
-        transcript_text = (
-            "Welcome to this lecture on Web Application Architectures. Today, we will discuss "
-            "Microservices versus Monolithic systems. In the first part, we examine why "
-            "companies shift to Microservices to solve scaling problems. "
-            "In the second part, we explore Cloudflare R2 object storage capabilities. "
-            "Finally, we implement ChromaDB vector queries to enable RAG features."
-        )
-
-        mock_chapters = [
-            {
-                "title": "Introduction to Architectures",
-                "startTime": 0.0,
-                "endTime": 60.0,
-                "summary": "Introduction to the fundamental concepts of monolithic and microservices designs.",
-            },
-            {
-                "title": "Monolith vs Microservices Trade-offs",
-                "startTime": 60.0,
-                "endTime": 180.0,
-                "summary": "Detailed trade-offs analysis of switching to service-oriented designs.",
-            },
-            {
-                "title": "Object Storage Integration (Cloudflare R2)",
-                "startTime": 180.0,
-                "endTime": 300.0,
-                "summary": "Overview of R2 setup and how it manages multimedia and keyframes assets efficiently.",
-            },
-            {
-                "title": "RAG implementation with ChromaDB",
-                "startTime": 300.0,
-                "endTime": 450.0,
-                "summary": "Coding step-by-step query searches using embeddings for conversational UI systems.",
-            },
-        ]
-
-        mock_keyframes = [
-            {
-                "timestamp": 15.5,
-                "imageUrl": "/static/mock_r2/keyframes/slide1.png",
-                "description": "Slide title: Monolith architecture diagrams and unified codebase blocks.",
-                "importanceScore": 0.82,
-            },
-            {
-                "timestamp": 120.0,
-                "imageUrl": "/static/mock_r2/keyframes/slide2.png",
-                "description": "Slide showing pros & cons list table highlighting developer velocities.",
-                "importanceScore": 0.95,
-            },
-            {
-                "timestamp": 240.5,
-                "imageUrl": "/static/mock_r2/keyframes/code1.png",
-                "description": "IDE view detailing Python code writing boto3 calls to cloud targets.",
-                "importanceScore": 0.76,
-            },
-        ]
-
-        # Add text chunks to ChromaDB/Mock vector store
-        chunks = [
-            "Introduction to Monolithic vs Microservices architectures. Scaling codebases.",
-            "Analyzing performance bottlenecks, network hops and service boundaries.",
-            "Setting up Cloudflare R2 API endpoints with access credentials in env files.",
-            "Implementing ChromaDB collection query search with semantic text weights.",
-        ]
-        metadatas = [
-            {"video_id": str(video_id), "chunk_index": 0, "timestamp_start": 0.0},
-            {"video_id": str(video_id), "chunk_index": 1, "timestamp_start": 60.0},
-            {"video_id": str(video_id), "chunk_index": 2, "timestamp_start": 180.0},
-            {"video_id": str(video_id), "chunk_index": 3, "timestamp_start": 300.0},
-        ]
-        chromadb_service.add_transcript_chunks(video_id, chunks, metadatas)
-
-        # Create summary record
-        summary = Summary(
-            video_id=video_id,
-            summary_text=(
-                "## AI Summary Overview\n"
-                "The lecture provides a comprehensive deep dive comparing monolith and microservices "
-                "architectures. It addresses performance, scaling limits, and implementation details for "
-                "supporting services. It outlines R2 storage configuration and concludes with an "
-                "interactive walkthrough implementing RAG query capabilities using vector database search index."
-            ),
-            chapters_json=mock_chapters,
-            keyframes_json=mock_keyframes,
-            transcript_text=transcript_text,
-            model_used=settings.GROQ_MODEL,
-            processing_time=12.5,
-        )
-        db.add(summary)
-
-        # Complete Job and Video status
-        video.status = VideoStatus.DONE
-        job.status = JobStatus.COMPLETED
-        job.completed_at = dt.datetime.utcnow()
-        db.commit()
-
-    except Exception as e:
-        db.rollback()
-        # Mark video and job as failed
-        try:
-            video = db.query(Video).filter(Video.video_id == video_id).first()
-            job = (
-                db.query(Job)
-                .filter(
-                    Job.video_id == video_id, Job.job_type == JobType.SUMMARIZE
-                )
-                .first()
-            )
-            if video:
-                video.status = VideoStatus.FAILED
-            if job:
-                job.status = JobStatus.FAILED
-                job.completed_at = dt.datetime.utcnow()
-                job.error_log = str(e)
-            db.commit()
-        except Exception as inner_ex:
-            pass
-    finally:
-        db.close()
 
 
 @router.post(
@@ -247,24 +94,47 @@ def upload_video(
         object_name = f"videos/{uuid.uuid4()}.{file_ext}"
         file_path = r2_service.upload_file(temp_file_path, object_name)
 
+        # Get actual video duration using OpenCV or ffprobe
+        duration = 0.0
+        try:
+            import cv2
+            cap = cv2.VideoCapture(temp_file_path)
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                if fps > 0:
+                    duration = frame_count / fps
+                cap.release()
+        except Exception:
+            pass
+            
+        if duration <= 0.0:
+            try:
+                import subprocess
+                cmd = [
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", temp_file_path
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                duration = float(res.stdout.strip())
+            except Exception:
+                duration = 0.0
+
         # Clean up temp file
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-
-        # Simulate extracting duration (mock)
-        duration = 185.0
     else:
         # YouTube URL scenario
         if "youtube.com" not in original_url and "youtu.be" not in original_url:
             raise ValidationException(
                 message="Only YouTube URLs are supported for remote video inputs."
             )
-        duration = 320.0  # Mock remote video duration
+        duration = 0.0  # Will be updated by Celery worker
 
-        if duration > standard.max_duration:
-            raise ValidationException(
-                message=f"Video duration exceeds maximum allowed duration ({standard.max_duration} seconds)"
-            )
+    if duration > 0.0 and duration > standard.max_duration:
+        raise ValidationException(
+            message=f"Video duration ({duration:.1f} seconds) exceeds maximum allowed duration ({standard.max_duration} seconds)"
+        )
 
     # 3. Create Video metadata record
     db_video = Video(
@@ -289,7 +159,44 @@ def upload_video(
     db.commit()
 
     # 5. Push task to background queue
-    background_tasks.add_task(process_video_simulation, db_video.video_id)
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    physical_video_path = ""
+    if file_path:
+        if file_path.startswith("/static/mock_r2/"):
+            relative_path = file_path.replace("/static/mock_r2/", "")
+            physical_video_path = os.path.abspath(os.path.join(os.getcwd(), "storage", "mock_r2_bucket", relative_path))
+        else:
+            physical_video_path = file_path
+    elif original_url:
+        physical_video_path = original_url
+
+    try:
+        from app.core.celery_app import celery_app
+        celery_app.send_task(
+            "ai_workers.process_video",
+            args=[str(db_job.job_id), physical_video_path],
+            kwargs={"config_stack": "hybrid"},
+            task_id=str(db_job.job_id)
+        )
+        # Update statuses for active run
+        import datetime as dt
+        db_job.status = JobStatus.RUNNING
+        db_job.started_at = dt.datetime.utcnow()
+        db_video.status = VideoStatus.PROCESSING
+        db.commit()
+        logger.info(f"Successfully enqueued Celery task for video {db_video.video_id} with task ID {db_job.job_id}")
+    except Exception as e:
+        logger.error(f"Failed to send task to Celery: {e}")
+        # Mark job and video as failed directly
+        db_job.status = JobStatus.FAILED
+        db_job.error_log = f"Failed to enqueue task to Celery: {str(e)}"
+        db_video.status = VideoStatus.FAILED
+        db.commit()
+        raise ValidationException(
+            message=f"Không thể kết nối tới hàng đợi Celery. Hãy đảm bảo Redis và Celery Worker đang chạy. Lỗi: {str(e)}"
+        )
 
     return BaseDTO(
         success=True,
@@ -478,8 +385,13 @@ def stream_video(
 
         def iter_chunks():
             body = response["Body"]
-            for chunk in body.iter_chunks(chunk_size=1024*1024):  # 1MB chunks
-                yield chunk
+            try:
+                for chunk in body.iter_chunks(chunk_size=1024*1024):  # 1MB chunks
+                    yield chunk
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).info(f"Video stream disconnected/seeked: {exc}")
+                return
 
         status_code = 206 if range else 200
         return StreamingResponse(

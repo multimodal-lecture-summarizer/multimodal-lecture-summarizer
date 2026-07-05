@@ -7,43 +7,7 @@ import { api } from '../services/api';
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([
-    {
-      id: 'mit-quantum-04',
-      title: 'Quantum Mechanics Lecture 04: Wave-Particle Duality',
-      duration: '42:15',
-      date: '24/10/2024, 09:30',
-      status: VideoStatus.DONE
-    },
-    {
-      id: 'neuroscience-learning',
-      title: 'Neural Plasticity & Cognitive Load Theory',
-      duration: '58:40',
-      date: '22/10/2024, 14:15',
-      status: VideoStatus.DONE
-    },
-    {
-      id: 'renewable-energy',
-      title: 'Renewable Energy Systems & Global Economics',
-      duration: '1:12:00',
-      date: '19/10/2024, 11:20',
-      status: VideoStatus.DONE
-    },
-    {
-      id: 'biochem-crispr',
-      title: 'CRISPR-Cas9: Ethics & Application',
-      duration: '35:20',
-      date: '15/10/2024, 08:45',
-      status: VideoStatus.DONE
-    },
-    {
-      id: 'urban-mobility',
-      title: 'Urban Mobility: 15-Minute City Simulation',
-      duration: '1:45:10',
-      date: '10/10/2024, 16:30',
-      status: VideoStatus.DONE
-    }
-  ]);
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('All');

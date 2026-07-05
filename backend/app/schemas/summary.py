@@ -33,6 +33,20 @@ class KeyframeDTO(CamelModel):
     )
 
 
+class WordTokenDTO(CamelModel):
+    word: str = Field(..., description="The word text")
+    start: float = Field(..., description="Start timestamp of the word in seconds")
+    end: float = Field(..., description="End timestamp of the word in seconds")
+
+
+class TranscriptLineDTO(CamelModel):
+    speaker: str = Field(default="SPEAKER_01", description="Identifier of the speaker")
+    start: float = Field(..., description="Start timestamp of the line segment in seconds")
+    end: float = Field(..., description="End timestamp of the line segment in seconds")
+    text: str = Field(..., description="The raw transcript text of this segment")
+    words: List[WordTokenDTO] = Field(default=[], description="Word level tokens with timestamps")
+
+
 class SummaryBase(CamelModel):
     summary_text: str = Field(
         ..., description="The overall abstractive summary of the video"
@@ -60,4 +74,7 @@ class SummaryDTO(SummaryBase):
     )
     keyframes: List[KeyframeDTO] = Field(
         default=[], description="List of visually important keyframes"
+    )
+    transcript_segments: List[TranscriptLineDTO] = Field(
+        default=[], description="The list of segmented speech transcript segments with word-level timestamps"
     )

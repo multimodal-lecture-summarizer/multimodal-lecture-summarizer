@@ -90,6 +90,7 @@ celery -A ai_workers.core.celery_app worker --loglevel=info
 
 | Tài liệu | Nội dung |
 |----------|----------|
+| [docs/setup-guide.md](docs/setup-guide.md) | Hướng dẫn cài đặt, chạy local và reset DB |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc chi tiết, data flow |
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | Khung benchmark trên video thực tế |

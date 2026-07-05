@@ -6,7 +6,10 @@ NGƯỜI 2: PySceneDetect, CLIP, BLIP-2
 
 from __future__ import annotations
 
+import os
+import cv2
 from typing import Any
+from scenedetect import ContentDetector
 
 
 class SceneDetector:
@@ -21,10 +24,36 @@ class SceneDetector:
         """Detect scene boundaries in video using PySceneDetect.
 
         Returns:
-            List of scenes: [{scene_id, start_sec, end_sec}]
+            List of scenes: [{scene_index, start_seconds, end_seconds, start_timecode, end_timecode, start_frame, end_frame}]
         """
-        # TODO: PySceneDetect ContentDetector
-        return []
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found at: {video_path}")
+            
+        print(f"Detecting scenes using PySceneDetect for: {video_path}...")
+        from scenedetect import open_video, SceneManager
+        from scenedetect.detectors import ContentDetector
+        
+        video = open_video(video_path)
+        scene_manager = SceneManager()
+        scene_manager.add_detector(ContentDetector(threshold=self.threshold))
+        
+        # Detect scenes with 4-frame skipping for 5x speedup
+        scene_manager.detect_scenes(video, frame_skip=4)
+        scene_list = scene_manager.get_scene_list()
+        
+        scenes = []
+        for idx, (start_time, end_time) in enumerate(scene_list):
+            scenes.append({
+                "scene_index": idx,
+                "start_seconds": start_time.get_seconds(),
+                "end_seconds": end_time.get_seconds(),
+                "start_timecode": start_time.get_timecode(),
+                "end_timecode": end_time.get_timecode(),
+                "start_frame": start_time.get_frames(),
+                "end_frame": end_time.get_frames(),
+            })
+        print(f"[OK] Detected {len(scenes)} scenes.")
+        return scenes
 
     def extract_keyframes(
         self,
@@ -41,8 +70,51 @@ class SceneDetector:
         Returns:
             List of keyframe image paths.
         """
-        # TODO: OpenCV frame extraction
-        return []
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"❌ Failed to open video: {video_path}")
+            return []
+            
+        keyframes = []
+        
+        # Override output_dir to point to the shared static mock keyframes folder
+        # This ensures the keyframe image can be retrieved by the FE via /static/mock_r2/keyframes/
+        # In Docker, we can write to /app/storage/mock_r2_bucket/keyframes
+        job_id = os.path.basename(output_dir)
+        static_dir = os.path.abspath(os.path.join(os.getcwd(), "storage", "mock_r2_bucket", "keyframes", job_id))
+        os.makedirs(static_dir, exist_ok=True)
+        
+        for scene in scenes:
+            start_f = scene["start_frame"]
+            end_f = scene["end_frame"]
+            
+            # Determine target frame to extract
+            if strategy == "first":
+                target_frame = start_f
+            elif strategy == "middle":
+                target_frame = (start_f + end_f) // 2
+            else:
+                target_frame = (start_f + end_f) // 2
+                
+            cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+            ret, frame = cap.read()
+            if ret:
+                filename = f"keyframe_scene_{scene['scene_index']}.png"
+                filepath = os.path.join(static_dir, filename)
+                cv2.imwrite(filepath, frame)
+                keyframes.append(filepath)
+                
+                # Store the keyframe path and public relative URL
+                scene["keyframe_path"] = filepath
+                scene["keyframe_url"] = f"/static/mock_r2/keyframes/{job_id}/{filename}"
+                scene["caption"] = f"Keyframe for Scene {scene['scene_index']}"
+            else:
+                scene["keyframe_path"] = ""
+                scene["keyframe_url"] = ""
+                scene["caption"] = ""
+                
+        cap.release()
+        return keyframes
 
     def process(self, video_path: str, output_dir: str) -> dict[str, Any]:
         """Full visual pipeline: detect scenes → extract keyframes."""

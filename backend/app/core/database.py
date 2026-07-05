@@ -117,3 +117,65 @@ def verify_db_connection(retries: int = 5, delay: float = 2.0):
         raise RuntimeError(
             f"Failed to connect to PostgreSQL at {settings.POSTGRES_SERVER} after {retries} attempts: {last_error}"
         )
+
+
+def initialize_database_data():
+    """
+    Initializes default database records (default admin and normal users, default video standards)
+    if they do not already exist.
+    """
+    from app.models.user import User, UserRole
+    from app.models.video import VideoStandard
+    from app.api.deps import get_password_hash
+    import uuid
+    
+    db = SessionLocal()
+    try:
+        # 1. Initialize Default Standard if empty
+        std_count = db.query(VideoStandard).count()
+        if std_count == 0:
+            default_std = VideoStandard(
+                max_duration=settings.DEFAULT_MAX_DURATION_SECONDS,
+                allowed_formats=settings.DEFAULT_ALLOWED_FORMATS,
+                max_file_size=settings.DEFAULT_MAX_FILE_SIZE_MB,
+            )
+            db.add(default_std)
+            db.commit()
+            logger.info("Initialized default VideoStandard record.")
+            
+        # 2. Initialize Default Admin User
+        admin_email = "hungphitran.22@gmail.com"
+        admin_exists = db.query(User).filter(User.email == admin_email).first()
+        if not admin_exists:
+            admin_pwd = "AdminPass123@"
+            admin_user = User(
+                user_id=uuid.uuid4(),
+                email=admin_email,
+                password_hash=get_password_hash(admin_pwd),
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+            db.add(admin_user)
+            db.commit()
+            logger.info(f"Initialized default Admin account: {admin_email} / {admin_pwd}")
+            
+        # 3. Initialize Default Normal User
+        user_email = "nguyen.van.a@gmail.com"
+        user_exists = db.query(User).filter(User.email == user_email).first()
+        if not user_exists:
+            user_pwd = "UserPass123@"
+            normal_user = User(
+                user_id=uuid.uuid4(),
+                email=user_email,
+                password_hash=get_password_hash(user_pwd),
+                role=UserRole.USER,
+                is_active=True,
+            )
+            db.add(normal_user)
+            db.commit()
+            logger.info(f"Initialized default User account: {user_email} / {user_pwd}")
+    except Exception as e:
+        logger.error(f"Failed to initialize database defaults: {e}")
+        db.rollback()
+    finally:
+        db.close()

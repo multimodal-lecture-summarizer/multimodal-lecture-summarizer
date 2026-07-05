@@ -1,6 +1,10 @@
 """Celery application configuration — kết nối Redis broker."""
 
-from __future__ import annotations
+import sys
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 from celery import Celery
 
@@ -21,6 +25,8 @@ app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,  # 1 task at a time per worker for GPU tasks
+    broker_pool_limit=2,
+    redis_max_connections=5,
 )
 
 # Auto-discover tasks in ai_workers package

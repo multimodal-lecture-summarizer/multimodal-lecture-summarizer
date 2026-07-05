@@ -1,38 +1,109 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { api } from '../services/api';
 
 export const UploadPage: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
-
-  const handleStartProcessing = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setIsProcessing(true);
-    setCurrentStep(1);
-  };
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollIntervalRef = useRef<any>(null);
 
   useEffect(() => {
-    if (!isProcessing) return;
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
-    const timer = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev >= 5) {
-          clearInterval(timer);
-          // Redirect to results page when done
-          setTimeout(() => {
-            navigate('/results');
-          }, 1500);
-          return 5;
+  const [recentVideos, setRecentVideos] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.getVideos(undefined, 5, 0)
+      .then((res) => {
+        if (res.success && res.data) {
+          setRecentVideos(res.data);
         }
-        return prev + 1;
-      });
-    }, 1500);
+      })
+      .catch((err) => console.error("Failed to load recent videos:", err));
+  }, []);
 
-    return () => clearInterval(timer);
-  }, [isProcessing, navigate]);
+  const startPolling = (videoId: string) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+    
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await api.getJobStatus(videoId);
+        if (res.success && res.data && res.data.length > 0) {
+          const job = res.data.find((j: any) => j.jobType === 'SUMMARIZE' || j.job_type === 'SUMMARIZE');
+          if (job) {
+            if (job.status === 'COMPLETED' || job.status === 'SUCCESS') {
+              clearInterval(pollIntervalRef.current);
+              setCurrentStep(5);
+              setTimeout(() => {
+                navigate(`/results?videoId=${videoId}`);
+              }, 1000);
+            } else if (job.status === 'FAILED') {
+              clearInterval(pollIntervalRef.current);
+              setIsProcessing(false);
+              setErrorMsg(job.errorLog || 'Đã xảy ra lỗi trong quá trình xử lý video.');
+            } else {
+              // Update step representation based on current state
+              setCurrentStep((prev) => (prev < 4 ? prev + 1 : prev));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error polling job status:", err);
+      }
+    }, 2000);
+  };
+
+  const handleStartProcessing = async (file: File | null, url: string | null) => {
+    setIsProcessing(true);
+    setCurrentStep(1);
+    setErrorMsg('');
+    
+    try {
+      const res = await api.uploadVideo(file, url);
+      if (res.success && res.data) {
+        const videoId = res.data.videoId || res.data.video_id;
+        startPolling(videoId);
+      } else {
+        throw new Error(res.message || "Tải lên video thất bại.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "Không thể gửi video lên máy chủ.");
+      setIsProcessing(false);
+    }
+  };
+
+  const handleYoutubeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!youtubeUrl.trim()) return;
+    handleStartProcessing(null, youtubeUrl);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleStartProcessing(e.target.files[0], null);
+    }
+  };
+
+  const handleBrowseClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
   // Drag and drop handlers
   const handleDrag = (e: React.DragEvent) => {
@@ -50,7 +121,7 @@ export const UploadPage: React.FC = () => {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleStartProcessing();
+      handleStartProcessing(e.dataTransfer.files[0], null);
     }
   };
 
@@ -67,6 +138,13 @@ export const UploadPage: React.FC = () => {
             </p>
           </header>
 
+          {errorMsg && (
+            <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2">
+              <span className="material-symbols-outlined text-red-600">error</span>
+              <span className="font-semibold text-sm">{errorMsg}</span>
+            </div>
+          )}
+
           {/* Upload Section Bento Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
             {/* File Drag & Drop (Span 2) */}
@@ -78,15 +156,26 @@ export const UploadPage: React.FC = () => {
               onDragOver={handleDrag}
               onDragLeave={handleDrag}
               onDrop={handleDrop}
-              onClick={handleStartProcessing}
+              onClick={handleBrowseClick}
             >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept="video/*" 
+                style={{ display: 'none' }} 
+                onClick={(e) => e.stopPropagation()}
+              />
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-outline-variant/50 rounded-lg group-hover:border-vibrant-cyan/50 transition-colors">
                 <div className="w-16 h-16 bg-primary-fixed text-deep-navy rounded-full flex items-center justify-center mb-4 group-hover:bg-vibrant-cyan group-hover:text-white transition-all">
                   <span className="material-symbols-outlined text-[32px]">upload_file</span>
                 </div>
                 <h3 className="font-headline-md text-xl font-bold text-deep-navy mb-1">Kéo thả file video bài giảng vào đây</h3>
                 <p className="text-secondary font-body-sm mb-6 text-sm">Hỗ trợ MP4, AVI, MKV (Tối đa 2GB)</p>
-                <button className="px-6 py-2 bg-deep-navy text-white font-label-md text-label-md rounded hover:bg-primary transition-colors font-semibold">
+                <button 
+                  onClick={handleBrowseClick}
+                  className="px-6 py-2 bg-deep-navy text-white font-label-md text-label-md rounded hover:bg-primary transition-colors font-semibold"
+                >
                   Browse Files
                 </button>
               </div>
@@ -110,7 +199,7 @@ export const UploadPage: React.FC = () => {
                       ></div>
                     </div>
                     <p className="mt-4 text-center text-secondary font-body-sm text-xs italic animate-pulse">
-                      Đang đồng bộ GPU cluster và mô hình tóm tắt...
+                      Đang xử lý phân tách cảnh và dịch giọng nói bằng AI...
                     </p>
                   </div>
                 </div>
@@ -129,7 +218,7 @@ export const UploadPage: React.FC = () => {
                 <p className="text-secondary font-body-sm text-sm mb-6">
                   Phân tích nội dung trực tiếp từ YouTube bằng cách cung cấp đường dẫn URL công khai.
                 </p>
-                <form onSubmit={handleStartProcessing} className="space-y-4">
+                <form onSubmit={handleYoutubeSubmit} className="space-y-4">
                   <div className="relative">
                     <label className="block font-label-sm text-xs font-semibold text-secondary mb-2 uppercase tracking-wider">
                       YouTube URL
@@ -280,83 +369,64 @@ export const UploadPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/30">
-                    <tr className="hover:bg-surface-container-lowest transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-16 h-10 rounded bg-slate-200 overflow-hidden border border-outline-variant shrink-0">
-                            <img 
-                              className="w-full h-full object-cover" 
-                              alt="Quantum computing presentation thumbnail" 
-                              src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAIfu8EH721w31uePq10dcbyhBhnI1dnU-2YT7hNlDAu0k8p8MbEzbQnvRk5YMRxlOYKJqkQnCGo0pTZ0DasM7PWDEl5DXzbQU1qry3pWCySQ_uk5Xw6rh1s7Al99ELUmlHUCVOCD6xoC-UKFxaElOgYO_ABRFE4RsqNUs96ShEnGAO-dgmVW9exq6Nh2xqZDibtVkq7F-OLTxu9HROWVQHgJ8RCnZzGcjcx7mWmya6ESx7AyORkzE"
-                            />
-                          </div>
-                          <div>
-                            <p className="font-label-md text-sm font-semibold text-deep-navy">quantum_computing_lecture.mp4</p>
-                            <p className="text-xs text-secondary">Duration: 42:15 • 482 MB</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-mono-data text-xs text-secondary">2026-07-05 08:32</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono-data text-status-success font-bold text-sm">98.4%</span>
-                          <div className="w-16 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-status-success h-full" style={{ width: '98%' }}></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 bg-green-50 text-status-success text-[10px] font-extrabold rounded-full border border-status-success/20 tracking-wider">READY</span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link 
-                          to="/results" 
-                          className="text-deep-navy hover:text-vibrant-cyan font-bold text-xs inline-flex items-center gap-1"
-                        >
-                          Xem kết quả
-                          <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                        </Link>
-                      </td>
-                    </tr>
-                    
-                    <tr className="hover:bg-surface-container-lowest transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-16 h-10 rounded bg-slate-200 overflow-hidden border border-outline-variant shrink-0">
-                            <img 
-                              className="w-full h-full object-cover" 
-                              alt="Machine learning presentation thumbnail" 
-                              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjlP2oIEsOV4pXgBsi6yU5Ybtu-XkeF4hjp5e40WZUWvmNjf_yOjnrQCTc9NDDV2Alb7dFewV8aeyda-3jIca56RdBR77xFMuhjKjcIqZnrtcq9ZEoDfkj0_0LyYkYEBRLwFtmN6CRY-r3gPJ8Z9ahLj-MwhsNNIg5XsddCn9P5Wyp3HAmUXqN0Re_An4ckLhhTHosQgurlnFAphJu7huY1JQWG5oDHeqtYq1VKt9kHRhV-Znp45ol"
-                            />
-                          </div>
-                          <div>
-                            <p className="font-label-md text-sm font-semibold text-deep-navy">machine_learning_basics.mp4</p>
-                            <p className="text-xs text-secondary">Duration: 28:40 • 310 MB</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-mono-data text-xs text-secondary">2026-07-04 15:10</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono-data text-status-success font-bold text-sm">96.8%</span>
-                          <div className="w-16 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-status-success h-full" style={{ width: '96.8%' }}></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 bg-green-50 text-status-success text-[10px] font-extrabold rounded-full border border-status-success/20 tracking-wider">READY</span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link 
-                          to="/results" 
-                          className="text-deep-navy hover:text-vibrant-cyan font-bold text-xs inline-flex items-center gap-1"
-                        >
-                          Xem kết quả
-                          <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                        </Link>
-                      </td>
-                    </tr>
+                    {recentVideos.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-secondary font-body-sm text-sm">
+                          Chưa có video nào được phân tích.
+                        </td>
+                      </tr>
+                    ) : (
+                      recentVideos.map((video) => (
+                        <tr key={video.videoId} className="hover:bg-surface-container-lowest transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-16 h-10 rounded bg-slate-100 overflow-hidden border border-outline-variant shrink-0 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-secondary">video_file</span>
+                              </div>
+                              <div>
+                                <p className="font-label-md text-sm font-semibold text-deep-navy truncate max-w-xs">
+                                  {video.originalUrl ? video.originalUrl : (video.filePath ? video.filePath.split('/').pop() : 'video.mp4')}
+                                </p>
+                                <p className="text-xs text-secondary">Duration: {video.duration ? `${Math.round(video.duration)}s` : 'N/A'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 font-mono-data text-xs text-secondary">
+                            {new Date(video.uploadedAt).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono-data text-status-success font-bold text-sm">95%+</span>
+                              <div className="w-16 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-status-success h-full" style={{ width: '95%' }}></div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-[10px] font-extrabold rounded-full border tracking-wider uppercase ${
+                              video.status === 'DONE' ? 'bg-green-50 text-status-success border-status-success/20' :
+                              video.status === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' :
+                              'bg-blue-50 text-vibrant-cyan border-vibrant-cyan/20 animate-pulse'
+                            }`}>
+                              {video.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {video.status === 'DONE' ? (
+                              <Link 
+                                to={`/results?videoId=${video.videoId}`} 
+                                className="text-deep-navy hover:text-vibrant-cyan font-bold text-xs inline-flex items-center gap-1"
+                              >
+                                Xem kết quả
+                                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                              </Link>
+                            ) : (
+                              <span className="text-secondary text-xs">Đang xử lý</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

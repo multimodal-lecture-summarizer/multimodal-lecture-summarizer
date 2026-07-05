@@ -39,8 +39,21 @@ async def lifespan(app: FastAPI):
     # Verify Cloudflare R2 storage connection
     r2_service.verify_connection()
 
+    # Verify Celery Broker connection (Redis)
+    try:
+        from redis import Redis
+        redis_client = Redis.from_url(settings.CELERY_BROKER_URL)
+        redis_client.ping()
+        logger.info("Connected to Redis (Celery Broker) successfully.")
+    except Exception as e:
+        logger.warning(f"Failed to connect to Redis: {e}. Check CELERY_BROKER_URL config.")
+
     # Create tables automatically for local testing
     Base.metadata.create_all(bind=engine)
+
+    # Initialize default database values (Admin/User accounts and standards)
+    from app.core.database import initialize_database_data
+    initialize_database_data()
 
     # Create mock storage directory for video and keyframe static files serving
     mock_dir = os.path.join(os.getcwd(), "storage", "mock_r2_bucket", "keyframes")
@@ -57,7 +70,42 @@ async def lifespan(app: FastAPI):
                     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x0c\x00\x01\x04p\xad\x04\x00\x00\x00\x00IEND\xaeB`\x82"
                 )
 
-    yield
+    # Start background polling loop for Celery jobs
+    import asyncio
+    
+    async def poll_celery_jobs():
+        logger.info("Started background Celery job status synchronization loop.")
+        from app.core.database import SessionLocal
+        from app.models.job import Job
+        from app.core.constants import JobStatus
+        from app.api.v1.jobs import sync_job_status
+        
+        while True:
+            try:
+                await asyncio.sleep(10)  # check every 10 seconds
+                db = SessionLocal()
+                try:
+                    active_jobs = db.query(Job).filter(Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])).all()
+                    for job in active_jobs:
+                        sync_job_status(job, db)
+                finally:
+                    db.close()
+            except asyncio.CancelledError:
+                logger.info("Background Celery job status synchronization loop cancelled.")
+                break
+            except Exception as exc:
+                logger.error(f"Error in background Celery job polling loop: {exc}")
+
+    polling_task = asyncio.create_task(poll_celery_jobs())
+
+    try:
+        yield
+    finally:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(

@@ -13,6 +13,7 @@ frontend/dist/
 outputs/
 cache/
 uploads/
+storage/
 *.wav
 
 # Models
