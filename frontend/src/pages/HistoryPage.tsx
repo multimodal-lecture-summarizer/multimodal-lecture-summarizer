@@ -68,7 +68,7 @@ export const HistoryPage: React.FC = () => {
 
             return {
               id: video.videoId,
-              title: video.originalUrl ? `YouTube: ${video.originalUrl}` : `Local Video: ${video.filePath?.split('/').pop() || 'Video#' + video.videoId.substring(0,6)}`,
+              title: video.filePath ? (video.filePath.split('?')[0].split('/').pop() || 'Video') : (video.originalUrl ? 'YouTube Video' : `Video #${video.videoId.substring(0,6)}`),
               duration: durationStr,
               date: dateStr,
               status: video.status as VideoStatus,

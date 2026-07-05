@@ -120,11 +120,12 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
               to="/profile" 
               className="w-10 h-10 rounded-full overflow-hidden border border-outline-variant bg-surface-container-high transition-transform hover:scale-105"
             >
-              <img 
-                className="w-full h-full object-cover" 
-                alt="Profile Avatar" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCv51dKL0AznsnRknP48ChToixvy8nIBmicv8oKCXJpiOkdOI6ziho0kAdHrGNj8DkXfwZz7VDLkLB_1YtJ8ILnH8WkQQpeS64p46p9XY0iAUEX1hMcDQMgJqS9PZFFSJ-MrOg1XK0CyCHzlw4lsokBZpacc6cPoCpEC4_SgadGsMunGYgeQ3EW6Z-7RSuk_pqMhvc8u0YHV5IwJcWQQVwK9HyFV97KzG_j-RxCouKJejMm_MLI51Wu"
-              />
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                <circle cx="50" cy="50" r="48" fill="none" stroke="#e0e3e5" stroke-width="2"/>
+                <path d="M50 55 C35 55 25 65 25 75 L25 80 L75 80 L75 75 C75 65 65 55 50 55 Z" fill="#0f172a"/>
+                <circle cx="50" cy="35" r="15" fill="#0f172a"/>
+                <circle cx="80" cy="80" r="8" fill="#10B981" stroke="#ffffff" stroke-width="2"/>
+              </svg>
             </Link>
 
             {/* Logout Button */}

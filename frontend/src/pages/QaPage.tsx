@@ -19,26 +19,32 @@ export const QaPage: React.FC = () => {
   const [, setLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: 'bot',
       avatarIcon: 'auto_awesome',
-      text: 'Chào bạn! Hệ thống RAG đã được nạp toàn bộ Transcript và thông tin Keyframes (BLIP-2) của video. Bạn có muốn hỏi gì về bài giảng này không?'
+      text: 'Chào bạn! Hệ thống RAG đã được nạp toàn bộ Transcript và thông tin Keyframes (BLIP-2) của video. Bạn có muốn hỏi gì về bài giảng này không?',
+      timestamp: '14:20 PM'
     },
     {
       sender: 'user',
       avatarIcon: 'person',
-      text: 'Giảng viên định nghĩa thế nào về kiến trúc Transformer? Tại sao nó tốt hơn RNN?'
+      text: 'Giảng viên định nghĩa thế nào về kiến trúc Transformer? Tại sao nó tốt hơn RNN?',
+      timestamp: '14:22 PM'
     },
     {
       sender: 'bot',
       avatarIcon: 'auto_awesome',
       text: 'Theo bài giảng, kiến trúc Transformer là một mô hình học sâu chủ yếu dựa trên cơ chế <strong>Self-Attention</strong>. Giảng viên giải thích rằng khác với RNN (Recurrent Neural Networks) phải xử lý dữ liệu tuần tự từng từ một, Transformer có khả năng xem xét toàn bộ câu cùng một lúc.<br/><br/>Điều này mang lại hai lợi ích chính:<ul class="mt-2.5 pl-5 list-disc"><li>Khắc phục triệt để vấn đề mất mát thông tin đối với chuỗi văn bản dài.</li><li>Cho phép tính toán song song trên GPU, giúp tốc độ huấn luyện nhanh hơn rất nhiều.</li></ul>',
-      referenceTime: 252 // 04:12 in seconds
+      referenceTime: 252, // 04:12 in seconds
+      timestamp: '14:23 PM'
     }
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [scenesList, setScenesList] = useState<any[]>([]);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   const seekMiniPlayer = (secs: number) => {
     if (videoRef.current) {
@@ -48,20 +54,60 @@ export const QaPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!videoId) return;
     setLoading(true);
-    api.getVideo(videoId)
-      .then(res => {
-        if (res.success && res.data) {
-          setVideoData(res.data);
+    
+    const loadVideoAndScenes = (id: string) => {
+      Promise.all([
+        api.getVideo(id),
+        api.getVideoScenes(id).catch(() => ({ success: false, data: [] }))
+      ])
+      .then(([videoRes, scenesRes]) => {
+        if (videoRes.success && videoRes.data) {
+          setVideoData(videoRes.data);
+          setActiveVideoId(videoRes.data.videoId);
+        }
+        if (scenesRes.success && scenesRes.data && scenesRes.data.length > 0) {
+          setScenesList(scenesRes.data);
+        } else {
+          setScenesList([]);
         }
         setLoading(false);
       })
       .catch(err => {
-        console.error("Failed to load video details for QA:", err);
+        console.error("Failed to load details for video:", id, err);
         setLoading(false);
+        setActiveVideoId(null);
       });
+    };
+
+    const isValidUuid = (id: string) => {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    };
+
+    if (videoId && isValidUuid(videoId)) {
+      loadVideoAndScenes(videoId);
+    } else {
+      api.getVideos()
+        .then(res => {
+          if (res.success && res.data && res.data.length > 0) {
+            const firstVideo = res.data[0];
+            loadVideoAndScenes(firstVideo.videoId);
+          } else {
+            setLoading(false);
+            setActiveVideoId(null);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch videos list for QA default:", err);
+          setLoading(false);
+          setActiveVideoId(null);
+        });
+    }
   }, [videoId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isTyping]);
 
   const handleSendMessage = (textToSend = inputText) => {
     if (!textToSend.trim()) return;
@@ -70,14 +116,30 @@ export const QaPage: React.FC = () => {
     const newMsg: Message = {
       sender: 'user',
       avatarIcon: 'person',
-      text: queryText
+      text: queryText,
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
     setIsTyping(true);
 
-    api.askQuestion(videoId, queryText)
+    if (!activeVideoId) {
+      // Mock mode fallback response
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          sender: 'bot',
+          avatarIcon: 'auto_awesome',
+          text: `Đây là câu trả lời mô phỏng từ Trình Phân Tích (Chế độ Demo): Bạn hỏi về "${queryText}". Tầng phân tích ASR & Keyframe phát hiện nội dung bài giảng liên quan ở phút thứ 04:12 giải thích cơ chế Multi-Head Attention tối ưu hóa bộ nhớ đệm.`,
+          referenceTime: 252,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        }]);
+        setIsTyping(false);
+      }, 1000);
+      return;
+    }
+
+    api.askQuestion(activeVideoId, queryText)
       .then(res => {
         if (res.success && res.data) {
           let refTime: number | undefined = undefined;
@@ -92,13 +154,15 @@ export const QaPage: React.FC = () => {
             sender: 'bot',
             avatarIcon: 'auto_awesome',
             text: res.data.answer,
-            referenceTime: refTime
+            referenceTime: refTime,
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
           }]);
         } else {
           setMessages(prev => [...prev, {
             sender: 'bot',
             avatarIcon: 'auto_awesome',
-            text: 'Không nhận được câu trả lời từ hệ thống RAG.'
+            text: 'Không nhận được câu trả lời từ hệ thống RAG.',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
           }]);
         }
         setIsTyping(false);
@@ -107,7 +171,8 @@ export const QaPage: React.FC = () => {
         setMessages(prev => [...prev, {
           sender: 'bot',
           avatarIcon: 'auto_awesome',
-          text: `Có lỗi xảy ra khi truy vấn ChromaDB: ${err.message || 'Lỗi kết nối'}`
+          text: `Có lỗi xảy ra khi truy vấn ChromaDB: ${err.message || 'Lỗi kết nối'}`,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }]);
         setIsTyping(false);
       });
@@ -124,21 +189,22 @@ export const QaPage: React.FC = () => {
       {
         sender: 'bot',
         avatarIcon: 'auto_awesome',
-        text: 'Lịch sử trò chuyện đã được xóa. Tôi sẵn sàng trả lời các câu hỏi mới!'
+        text: 'Lịch sử trò chuyện đã được xóa. Tôi sẵn sàng trả lời các câu hỏi mới!',
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
   };
 
   return (
-    <div className="flex flex-1 overflow-hidden h-[calc(100vh-64px)] bg-background text-on-surface">
+    <div className="fixed top-16 bottom-0 left-0 right-0 flex flex-col md:flex-row overflow-hidden bg-background text-on-surface">
       {/* Left Sidebar: Video & Key Segments */}
-      <section className="w-full md:w-80 lg:w-96 bg-surface border-r border-outline-variant flex flex-col h-full shrink-0">
+      <section className="w-full md:w-80 lg:w-96 bg-surface border-r border-outline-variant flex flex-col h-[40vh] md:h-full shrink-0 overflow-hidden">
         {/* Video Player Container */}
         <div className="p-4 border-b border-outline-variant/30">
           <div className="relative aspect-video bg-video-background rounded-xl overflow-hidden border border-outline-variant shadow-sm">
             <video 
               ref={videoRef}
-              src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
+              src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}/static/mock_r2/videos/youtube_clip.mp4`} 
               poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
               controls
               className="w-full h-full object-cover"
@@ -146,10 +212,10 @@ export const QaPage: React.FC = () => {
           </div>
           <div className="mt-4">
             <h2 className="font-headline-md text-base font-bold text-deep-navy">
-              {videoData?.originalUrl ? 'YouTube Lecture' : (videoData?.filePath?.split('/').pop() || 'Lecture Materials')}
+              {videoData?.filePath ? (videoData.filePath.split('?')[0].split('/').pop() || 'Lecture Video') : 'youtube_clip.mp4 (Mock)'}
             </h2>
             <p className="font-body-sm text-xs text-secondary mt-1">
-              Thời lượng: {videoData?.duration ? formatTimeText(videoData.duration) : '45:10'} • AI RAG Engine v2.4.0
+              Thời lượng: {videoData?.duration ? formatTimeText(videoData.duration) : '05:00'} • AI RAG Engine v2.4.0
             </p>
           </div>
         </div>
@@ -161,50 +227,75 @@ export const QaPage: React.FC = () => {
             <span className="material-symbols-outlined text-outline text-lg">filter_list</span>
           </div>
           <div className="space-y-3">
-            {/* Segment Card 1 */}
-            <div 
-              onClick={() => seekMiniPlayer(15)}
-              className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">00:15 - 02:45</span>
-                <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-              </div>
-              <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Giới thiệu về Cross-modal Attention</h4>
-              <p className="text-[11px] text-secondary line-clamp-2">Định nghĩa các điểm nghẽn kiến trúc trong việc xử lý đồng bộ video và audio.</p>
-            </div>
+            {scenesList.length > 0 ? (
+              scenesList.map((scene, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => seekMiniPlayer(scene.startSeconds)}
+                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">
+                      {formatTimeText(scene.startSeconds)} - {formatTimeText(scene.endSeconds)}
+                    </span>
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
+                  </div>
+                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">
+                    Phân đoạn #{scene.sceneIndex !== undefined ? scene.sceneIndex + 1 : idx + 1}
+                  </h4>
+                  <p className="text-[11px] text-secondary line-clamp-2">
+                    {scene.caption || scene.script || 'Đang xử lý phân đoạn...'}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <>
+                {/* Segment Card 1 */}
+                <div 
+                  onClick={() => seekMiniPlayer(15)}
+                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">00:15 - 02:45</span>
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
+                  </div>
+                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Giới thiệu về Cross-modal Attention</h4>
+                  <p className="text-[11px] text-secondary line-clamp-2">Định nghĩa các điểm nghẽn kiến trúc trong việc xử lý đồng bộ video và audio.</p>
+                </div>
 
-            {/* Segment Card 2 */}
-            <div 
-              onClick={() => seekMiniPlayer(165)}
-              className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">02:45 - 05:12</span>
-                <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-              </div>
-              <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Cơ chế Temporal Consistency</h4>
-              <p className="text-[11px] text-secondary line-clamp-2">Đảm bảo tính nhất quán không gian giữa các timeframe sử dụng kỹ thuật latent interpolation.</p>
-            </div>
+                {/* Segment Card 2 */}
+                <div 
+                  onClick={() => seekMiniPlayer(165)}
+                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">02:45 - 05:12</span>
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
+                  </div>
+                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Cơ chế Temporal Consistency</h4>
+                  <p className="text-[11px] text-secondary line-clamp-2">Đảm bảo tính nhất quán không gian giữa các timeframe sử dụng kỹ thuật latent interpolation.</p>
+                </div>
 
-            {/* Segment Card 3 */}
-            <div 
-              onClick={() => seekMiniPlayer(312)}
-              className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">05:12 - 08:30</span>
-                <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-              </div>
-              <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Empirical Results &amp; Benchmarks</h4>
-              <p className="text-[11px] text-secondary line-clamp-2">So sánh hiệu năng của tầng fusion với các mô hình ResNet-50 và ViT.</p>
-            </div>
+                {/* Segment Card 3 */}
+                <div 
+                  onClick={() => seekMiniPlayer(312)}
+                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">05:12 - 08:30</span>
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
+                  </div>
+                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Empirical Results &amp; Benchmarks</h4>
+                  <p className="text-[11px] text-secondary line-clamp-2">So sánh hiệu năng của tầng fusion với các mô hình ResNet-50 và ViT.</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>
 
       {/* Chat Interface */}
-      <section className="flex-1 flex flex-col relative h-full">
+      <section className="flex-1 flex flex-col relative h-[60vh] md:h-full overflow-hidden">
         {/* Background Pattern */}
         <div className="absolute inset-0 z-0 opacity-[0.02] pointer-events-none overflow-hidden">
           <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
@@ -249,9 +340,9 @@ export const QaPage: React.FC = () => {
             >
               <div className="flex items-center gap-2 mb-1 px-2">
                 <span className={`font-label-sm text-xs font-semibold ${msg.sender === 'user' ? 'text-secondary' : 'text-deep-navy font-bold'}`}>
-                  {msg.sender === 'user' ? 'Bạn' : 'Trợ lý AI'}
+                  {msg.sender === 'user' ? 'Researcher' : 'Analysis Engine'}
                 </span>
-                {msg.sender === 'bot' && idx > 0 && (
+                {msg.sender === 'bot' && (
                   <span className="bg-vibrant-cyan/10 text-vibrant-cyan text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Verified</span>
                 )}
               </div>
@@ -273,22 +364,28 @@ export const QaPage: React.FC = () => {
                   <span className="opacity-60 group-hover:opacity-100">Xem đoạn liên quan</span>
                 </button>
               )}
+              {msg.timestamp && (
+                <span className={`text-[9px] text-outline mt-1 ${msg.sender === 'user' ? 'mr-2' : 'ml-2'}`}>
+                  {msg.timestamp}
+                </span>
+              )}
             </div>
           ))}
 
           {isTyping && (
             <div className="flex flex-col items-start">
               <div className="flex items-center gap-2 mb-1 px-2">
-                <span className="font-label-sm text-xs text-deep-navy font-bold">Trợ lý AI</span>
+                <span className="font-label-sm text-xs text-deep-navy font-bold">Analysis Engine</span>
               </div>
               <div className="glass-chat-ai p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce"></div>
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <span className="text-xs text-secondary italic ml-2">Đang suy nghĩ...</span>
+                <span className="text-xs text-secondary italic ml-2">Đang phân tích...</span>
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Chat Input Area */}

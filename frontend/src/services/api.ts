@@ -106,6 +106,19 @@ export const api = {
     return result; // returns BaseDTO[VideoDTO]
   },
 
+  async getVideoScenes(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/videos/${videoId}/scenes`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể lấy danh sách phân đoạn video");
+    return result; // returns BaseDTO[List[VideoSceneDTO]]
+  },
+
   // Jobs endpoints
   async getJobStatus(videoId: string) {
     const response = await customFetch(

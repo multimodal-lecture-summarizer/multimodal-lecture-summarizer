@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, model_validator
 from app.schemas.base import CamelModel
 from app.core.constants import VideoStatus
 
@@ -39,6 +39,25 @@ class VideoSceneDTO(VideoSceneBase):
     scene_id: uuid.UUID = Field(..., description="The unique UUID of this scene")
     video_id: uuid.UUID = Field(..., description="The unique UUID of the video this scene belongs to")
 
+    @model_validator(mode="after")
+    def generate_presigned_keyframe_url(self) -> "VideoSceneDTO":
+        if self.keyframe_url:
+            if "X-Amz-Signature" in self.keyframe_url or "X-Amz-Algorithm" in self.keyframe_url:
+                return self
+            if self.keyframe_url.startswith("http") and ("r2.cloudflarestorage.com" in self.keyframe_url or ".r2.dev" in self.keyframe_url):
+                from app.services.r2 import r2_service
+                bucket_name = r2_service.bucket_name
+                bucket_prefix = f"/{bucket_name}/"
+                if bucket_prefix in self.keyframe_url:
+                    object_key = self.keyframe_url.split(bucket_prefix, 1)[1]
+                else:
+                    object_key = self.keyframe_url.split("/", 3)[-1]
+                
+                presigned = r2_service.get_presigned_url(object_key)
+                if presigned:
+                    self.keyframe_url = presigned
+        return self
+
 
 class VideoBase(CamelModel):
     original_url: Optional[str] = Field(
@@ -75,6 +94,9 @@ class VideoDTO(VideoBase):
     file_path: Optional[str] = Field(
         None, description="The storage file path of the processed video"
     )
+    r2_url: Optional[str] = Field(
+        None, description="The raw or presigned Cloudflare R2 URL of the video file"
+    )
     uploaded_at: datetime = Field(
         ..., description="The timestamp when the video was uploaded"
     )
@@ -84,6 +106,27 @@ class VideoDTO(VideoBase):
     scenes: Optional[List[VideoSceneDTO]] = Field(
         None, description="The detected scenes list with keyframes and scripts"
     )
+
+    @model_validator(mode="after")
+    def generate_presigned_url(self) -> "VideoDTO":
+        if self.file_path:
+            self.r2_url = self.file_path
+            
+            if self.file_path.startswith("http") and ("r2.cloudflarestorage.com" in self.file_path or ".r2.dev" in self.file_path):
+                from app.services.r2 import r2_service
+                bucket_name = r2_service.bucket_name
+                bucket_prefix = f"/{bucket_name}/"
+                if bucket_prefix in self.file_path:
+                    object_key = self.file_path.split(bucket_prefix, 1)[1]
+                else:
+                    object_key = self.file_path.split("/", 3)[-1]
+                
+                presigned = r2_service.get_presigned_url(object_key)
+                if presigned:
+                    self.r2_url = presigned
+                
+                self.file_path = f"/api/v1/videos/{self.video_id}/stream"
+        return self
 
 
 class VideoStandardBase(CamelModel):

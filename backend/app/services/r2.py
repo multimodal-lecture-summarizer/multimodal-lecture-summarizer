@@ -105,6 +105,25 @@ class R2Service:
                 logger.error(f"[Mock R2] Failed to copy file: {e}")
                 return None
 
+    def get_presigned_url(self, object_name: str, expires_in: int = 3600) -> Optional[str]:
+        """
+        Generates a presigned GET URL for a private R2 object.
+        """
+        if self.enabled:
+            try:
+                url = self.s3_client.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": self.bucket_name, "Key": object_name},
+                    ExpiresIn=expires_in,
+                )
+                return url
+            except Exception as e:
+                logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
+                return None
+        else:
+            # In mock mode, return the local static path
+            return f"/static/mock_r2/{object_name}"
+
     def delete_file(self, object_name: str) -> bool:
         """Deletes file from R2 or local mock storage."""
         if self.enabled:

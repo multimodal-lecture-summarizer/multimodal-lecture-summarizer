@@ -2,7 +2,7 @@ import uuid
 import os
 import time
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header
 from sqlalchemy.orm import Session
 from app.core.database import get_db, SessionLocal
 from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException
@@ -409,6 +409,89 @@ def get_video(
         data=VideoDTO.model_validate(video),
         message="Video details retrieved successfully",
     )
+
+
+@router.get(
+    "/{video_id}/stream",
+    summary="Stream video file",
+    description="Streams the video file chunk-by-chunk directly from storage or R2, supporting range requests.",
+)
+def stream_video(
+    video_id: uuid.UUID,
+    range: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Streams video file."""
+    video = (
+        db.query(Video)
+        .filter(Video.video_id == video_id)
+        .first()
+    )
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    if not video.file_path:
+        raise NotFoundException(message="Video file path not found")
+
+    # If it is a local static path, redirect to it
+    if video.file_path.startswith("/static/"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=video.file_path)
+
+    from app.services.r2 import r2_service
+    from fastapi.responses import StreamingResponse
+
+    # If R2 is not enabled, error
+    if not r2_service.enabled:
+        raise ValidationException(message="Storage service not enabled")
+
+    # Extract object key
+    bucket_name = r2_service.bucket_name
+    bucket_prefix = f"/{bucket_name}/"
+    if bucket_prefix in video.file_path:
+        object_key = video.file_path.split(bucket_prefix, 1)[1]
+    else:
+        object_key = video.file_path.split("/", 3)[-1]
+
+    # Remove existing query params if any
+    object_key = object_key.split("?")[0]
+
+    params = {
+        "Bucket": bucket_name,
+        "Key": object_key
+    }
+    if range:
+        params["Range"] = range
+
+    try:
+        response = r2_service.s3_client.get_object(**params)
+        
+        headers = {}
+        if "ContentRange" in response:
+            headers["Content-Range"] = response["ContentRange"]
+        if "AcceptRanges" in response:
+            headers["Accept-Ranges"] = response["AcceptRanges"]
+        if "ContentType" in response:
+            headers["Content-Type"] = response["ContentType"]
+        if "ContentLength" in response:
+            headers["Content-Length"] = str(response["ContentLength"])
+
+        def iter_chunks():
+            body = response["Body"]
+            for chunk in body.iter_chunks(chunk_size=1024*1024):  # 1MB chunks
+                yield chunk
+
+        status_code = 206 if range else 200
+        return StreamingResponse(
+            iter_chunks(),
+            status_code=status_code,
+            headers=headers
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to stream video from R2 for {video_id}: {e}")
+        raise ValidationException(message="Failed to stream video from storage")
 
 
 @router.get(

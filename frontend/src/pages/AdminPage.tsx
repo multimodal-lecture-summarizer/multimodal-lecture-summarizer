@@ -90,8 +90,40 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const openJobDetail = (job: any) => {
-    setSelectedJob(job);
+  const openJobDetail = async (jobOrVideo: any) => {
+    if (jobOrVideo && jobOrVideo.videoId && !jobOrVideo.jobId) {
+      // If it's a video object from celery queue tab, try to fetch its active job
+      try {
+        const res = await api.getJobStatus(jobOrVideo.videoId);
+        if (res.success && res.data) {
+          setSelectedJob(res.data);
+        } else {
+          // Fallback to a mock job constructed from video properties
+          setSelectedJob({
+            jobId: 'N/A',
+            videoId: jobOrVideo.videoId,
+            jobType: 'summarize',
+            status: jobOrVideo.status === 'done' ? 'completed' : jobOrVideo.status === 'failed' ? 'failed' : 'running',
+            startedAt: jobOrVideo.uploadedAt,
+            completedAt: jobOrVideo.status === 'done' ? jobOrVideo.uploadedAt : null,
+            errorLog: null
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to fetch job status, using fallback", err);
+        setSelectedJob({
+          jobId: 'N/A',
+          videoId: jobOrVideo.videoId,
+          jobType: 'summarize',
+          status: jobOrVideo.status === 'done' ? 'completed' : jobOrVideo.status === 'failed' ? 'failed' : 'running',
+          startedAt: jobOrVideo.uploadedAt,
+          completedAt: jobOrVideo.status === 'done' ? jobOrVideo.uploadedAt : null,
+          errorLog: null
+        });
+      }
+    } else {
+      setSelectedJob(jobOrVideo);
+    }
     setJobModalOpen(true);
   };
 
@@ -190,7 +222,7 @@ export const AdminPage: React.FC = () => {
             const mappedVideos = videosRes.data.map((v: any) => ({
               ...v,
               email: emailMap[v.userId] || "Unknown User",
-              title: v.originalUrl ? "YouTube Link" : (v.filePath?.split('/').pop() || "Uploaded Video"),
+              title: v.filePath ? (v.filePath.split('?')[0].split('/').pop() || "Video File") : (v.originalUrl ? "YouTube Video" : "Uploaded Video"),
             }));
             setStatsVideos(mappedVideos);
           }
@@ -557,13 +589,7 @@ export const AdminPage: React.FC = () => {
                             <td className="p-3 font-mono-data text-[10px]">#{v.videoId.substring(0, 8)}...</td>
                             <td className="p-3">{v.email}</td>
                             <td className="p-3 truncate max-w-[200px]" title={v.originalUrl || v.title}>
-                              {v.originalUrl ? (
-                                <a href={v.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
-                                  Youtube Link
-                                </a>
-                              ) : (
-                                v.title
-                              )}
+                              {v.title}
                             </td>
                             <td className="p-3">{Math.round(v.duration)}s</td>
                             <td className="p-3">
@@ -859,13 +885,7 @@ export const AdminPage: React.FC = () => {
                           <tr key={job.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
                             <td className="p-3 font-mono-data text-[10px]">#{job.videoId.substring(0, 8)}...</td>
                             <td className="p-3 truncate max-w-[200px]" title={job.originalUrl || job.filePath}>
-                              {job.originalUrl ? (
-                                <a href={job.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
-                                  Youtube Link
-                                </a>
-                              ) : (
-                                `File: ${job.filePath?.split('/').pop() || 'uploaded_video.mp4'}`
-                              )}
+                              {job.filePath ? (job.filePath.split('?')[0].split('/').pop() || 'video.mp4') : (job.originalUrl ? 'YouTube Video' : 'Video File')}
                             </td>
                             <td className="p-3 font-semibold">{job.language.toUpperCase()}</td>
                             <td className="p-3">
@@ -930,13 +950,28 @@ export const AdminPage: React.FC = () => {
                           <tr key={v.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
                             <td className="p-3 font-mono-data text-[10px]" title={v.videoId}>#{v.videoId.substring(0, 8)}...</td>
                             <td className="p-3 font-mono-data text-[10px]" title={v.userId}>#{v.userId.substring(0, 8)}...</td>
-                            <td className="p-3 truncate max-w-[150px]">
+                            <td className="p-3 truncate max-w-[200px]" title={v.originalUrl || v.r2Url || v.filePath}>
                               {v.originalUrl ? (
-                                <a href={v.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
-                                  {v.originalUrl}
+                                <a 
+                                  href={v.originalUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-vibrant-cyan hover:underline flex items-center gap-1 w-fit"
+                                >
+                                  <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                  YouTube Video
                                 </a>
                               ) : (
-                                v.filePath?.split('/').pop() || 'Video File'
+                                <a 
+                                  href={v.r2Url || v.filePath} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="text-vibrant-cyan hover:underline flex items-center gap-1 truncate w-fit"
+                                  title="Bấm để tải về hoặc xem trực tiếp từ R2"
+                                >
+                                  <span className="material-symbols-outlined text-sm">download</span>
+                                  {((v.r2Url || v.filePath).split('?')[0].split('/').pop()) || 'Video File'}
+                                </a>
                               )}
                             </td>
                             <td className="p-3">{Math.round(v.duration)}s</td>
@@ -1065,17 +1100,25 @@ export const AdminPage: React.FC = () => {
                   <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedVideo.userId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 sm:col-span-2">
-                  <span className="text-secondary font-bold">Nguồn Video / URL:</span>
+                  <span className="text-secondary font-bold">Tên File / Nguồn:</span>
                   <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded break-all">
-                    {selectedVideo.originalUrl ? (
-                      <a href={selectedVideo.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
-                        {selectedVideo.originalUrl}
-                      </a>
-                    ) : (
-                      selectedVideo.filePath || 'Tệp tải lên cục bộ'
-                    )}
+                    {selectedVideo.originalUrl ? 'YouTube Video' : (((selectedVideo.r2Url || selectedVideo.filePath).split('?')[0].split('/').pop()) || 'video.mp4')}
                   </span>
                 </div>
+                {(selectedVideo.originalUrl || selectedVideo.r2Url || selectedVideo.filePath) && (
+                  <div className="flex flex-col gap-0.5 sm:col-span-2">
+                    <span className="text-secondary font-bold">Liên kết xem video:</span>
+                    <a 
+                      href={selectedVideo.originalUrl || selectedVideo.r2Url || selectedVideo.filePath} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-vibrant-cyan hover:underline font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded break-all flex items-center gap-1 w-fit"
+                    >
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      {selectedVideo.originalUrl || selectedVideo.r2Url || selectedVideo.filePath}
+                    </a>
+                  </div>
+                )}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Thời lượng:</span>
                   <span className="font-semibold">{Math.round(selectedVideo.duration)}s (~{Math.round(selectedVideo.duration / 60)} phút)</span>
@@ -1188,17 +1231,17 @@ export const AdminPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Job ID (Tác vụ):</span>
-                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.jobId}</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.jobId || 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Video ID liên quan:</span>
-                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.videoId}</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.videoId || 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Loại tác vụ:</span>
                   <div>
                     <span className="inline-block px-2.5 py-0.5 bg-purple-100 text-purple-800 font-bold rounded text-[9px] uppercase tracking-wider">
-                      {selectedJob.jobType.toUpperCase()}
+                      {(selectedJob.jobType || 'summarize').toUpperCase()}
                     </span>
                   </div>
                 </div>
@@ -1235,7 +1278,7 @@ export const AdminPage: React.FC = () => {
                 <div className="pt-4 border-t border-outline-variant space-y-2">
                   <h3 className="text-status-success font-bold text-xs">Nhật ký tiến trình (System Log)</h3>
                   <pre className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-xl text-[10px] font-mono-data overflow-x-auto whitespace-pre-wrap leading-relaxed text-secondary">
-                    [INFO] {new Date(selectedJob.startedAt).toISOString()} - Khởi chạy pipeline phân tích đa phương tiện cho Video {selectedJob.videoId}.
+                    [INFO] {selectedJob.startedAt ? new Date(selectedJob.startedAt).toISOString() : new Date().toISOString()} - Khởi chạy pipeline phân tích đa phương tiện cho Video {selectedJob.videoId || 'N/A'}.
                     {"\n"}[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...
                     {selectedJob.completedAt && (
                       <>

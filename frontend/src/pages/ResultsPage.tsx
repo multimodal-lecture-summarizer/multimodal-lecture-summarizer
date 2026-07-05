@@ -299,17 +299,94 @@ export const ResultsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    if (!videoId) {
+      setVideoData(mockVideoData);
+      setDuration(mockVideoData.duration || 2710);
+      setSummaryData(mockSummaryData);
+      setChaptersList(mockChaptersList);
+      setTranscriptList(mockTranscriptList);
+      return;
+    }
+
     setLoading(true);
-    const timer = setTimeout(() => {
+    
+    Promise.all([
+      api.getVideo(videoId),
+      api.getSummary(videoId)
+    ])
+    .then(([videoRes, summaryRes]) => {
+      if (videoRes.success && videoRes.data) {
+        setVideoData(videoRes.data);
+        setDuration(videoRes.data.duration || 2710);
+      } else {
+        setVideoData(mockVideoData);
+        setDuration(mockVideoData.duration || 2710);
+      }
+
+      if (summaryRes.success && summaryRes.data) {
+        setSummaryData(summaryRes.data);
+        
+        if (summaryRes.data.chapters && summaryRes.data.chapters.length > 0) {
+          const mappedChapters = summaryRes.data.chapters.map((c: any) => ({
+            start: formatTime(c.startTime),
+            end: formatTime(c.endTime),
+            title: c.title,
+            summary: c.summary
+          }));
+          setChaptersList(mappedChapters);
+        } else {
+          setChaptersList(mockChaptersList);
+        }
+
+        if (summaryRes.data.transcriptText) {
+          const sentences = summaryRes.data.transcriptText
+            .split(/(?<=[.!?])\s+/)
+            .filter((s: string) => s.trim().length > 0);
+          
+          const totalDuration = videoRes.data?.duration || 2710;
+          const sentenceDuration = sentences.length > 0 ? totalDuration / sentences.length : 10;
+          
+          const mappedTranscript = sentences.map((sentence: string, idx: number) => {
+            const start = idx * sentenceDuration;
+            const end = (idx + 1) * sentenceDuration;
+            const words = sentence.split(/\s+/).map((w, wIdx, arr) => {
+              const wordDuration = sentenceDuration / arr.length;
+              const wStart = start + wIdx * wordDuration;
+              return {
+                word: w,
+                start: wStart,
+                end: wStart + wordDuration,
+                time: formatTime(wStart)
+              };
+            });
+            return {
+              speaker: "SPEAKER_01",
+              start,
+              end,
+              text: sentence,
+              words
+            };
+          });
+          setTranscriptList(mappedTranscript);
+        } else {
+          setTranscriptList(mockTranscriptList);
+        }
+      } else {
+        setSummaryData(mockSummaryData);
+        setChaptersList(mockChaptersList);
+        setTranscriptList(mockTranscriptList);
+      }
+      setLoading(false);
+    })
+    .catch(err => {
+      console.warn("Failed to load real video/summary, falling back to mock data.", err);
       setVideoData(mockVideoData);
       setDuration(mockVideoData.duration || 2710);
       setSummaryData(mockSummaryData);
       setChaptersList(mockChaptersList);
       setTranscriptList(mockTranscriptList);
       setLoading(false);
-    }, 400);
-
-    return () => clearTimeout(timer);
+    });
   }, [videoId]);
 
   // Handle Play/Pause
@@ -531,100 +608,88 @@ export const ResultsPage: React.FC = () => {
             
             {/* Player Container */}
             <div className="w-full mb-6">
-              {isYouTube ? (
-                <div className="relative aspect-video w-full rounded-lg overflow-hidden shadow-sm">
-                  <iframe
-                    src={getYouTubeEmbedUrl(videoData!.originalUrl!)}
-                    className="absolute inset-0 w-full h-full"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              ) : (
-                <div className="relative group aspect-video bg-video-background rounded-lg overflow-hidden border border-outline-variant shadow-sm" id="videoContainer">
-                  <video 
-                    ref={videoRef}
-                    src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
-                    poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
-                    className="w-full h-full object-cover"
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onClick={togglePlay}
-                    playsInline
-                    loop
-                  />
-                  
-                  {/* Center Play button */}
-                  {!isPlaying && (
-                    <button onClick={togglePlay} className="absolute inset-0 m-auto w-14 h-14 bg-vibrant-cyan text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-20">
-                      <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
-                    </button>
-                  )}
+              <div className="relative group aspect-video bg-video-background rounded-lg overflow-hidden border border-outline-variant shadow-sm" id="videoContainer">
+                <video 
+                  ref={videoRef}
+                  src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
+                  poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
+                  className="w-full h-full object-cover"
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onClick={togglePlay}
+                  playsInline
+                  loop
+                />
+                
+                {/* Center Play button */}
+                {!isPlaying && (
+                  <button onClick={togglePlay} className="absolute inset-0 m-auto w-14 h-14 bg-vibrant-cyan text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-20">
+                    <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+                  </button>
+                )}
 
-                  {/* HTML Video Custom Controls Overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/85 to-transparent flex flex-col gap-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="w-full flex items-center">
-                      <input 
-                        type="range" 
-                        className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan" 
-                        min={0} 
-                        max={duration || 2710} 
-                        step={0.1}
-                        value={currentTime} 
-                        onChange={handleSeekChange}
-                        style={seekSliderStyle}
-                      />
+                {/* HTML Video Custom Controls Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/85 to-transparent flex flex-col gap-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="w-full flex items-center">
+                    <input 
+                      type="range" 
+                      className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan" 
+                      min={0} 
+                      max={duration || 2710} 
+                      step={0.1}
+                      value={currentTime} 
+                      onChange={handleSeekChange}
+                      style={seekSliderStyle}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-white text-xs">
+                    <div className="flex items-center gap-3">
+                      <button onClick={togglePlay} className="hover:text-vibrant-cyan transition-colors">
+                        <span className="material-symbols-outlined text-sm">{isPlaying ? "pause" : "play_arrow"}</span>
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={toggleMute} className="hover:text-vibrant-cyan transition-colors">
+                          <span className="material-symbols-outlined text-sm">{isMuted || volume === 0 ? "volume_off" : "volume_up"}</span>
+                        </button>
+                        <input 
+                          type="range" 
+                          className="w-12 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan volume-slider" 
+                          min={0} 
+                          max={1} 
+                          step={0.05} 
+                          value={isMuted ? 0 : volume} 
+                          onChange={handleVolumeChange}
+                        />
+                      </div>
+                      <span className="font-mono-data text-[10px]">{formatTime(currentTime)} / {formatTime(duration)}</span>
                     </div>
-                    <div className="flex justify-between items-center text-white text-xs">
-                      <div className="flex items-center gap-3">
-                        <button onClick={togglePlay} className="hover:text-vibrant-cyan transition-colors">
-                          <span className="material-symbols-outlined text-sm">{isPlaying ? "pause" : "play_arrow"}</span>
+                    
+                    <div className="flex items-center gap-3 relative">
+                      <div className="relative">
+                        <button onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)} className="hover:text-vibrant-cyan transition-colors px-1 bg-slate-800 rounded font-mono-data text-[10px]">
+                          {playbackRate}x
                         </button>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={toggleMute} className="hover:text-vibrant-cyan transition-colors">
-                            <span className="material-symbols-outlined text-sm">{isMuted || volume === 0 ? "volume_off" : "volume_up"}</span>
-                          </button>
-                          <input 
-                            type="range" 
-                            className="w-12 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan volume-slider" 
-                            min={0} 
-                            max={1} 
-                            step={0.05} 
-                            value={isMuted ? 0 : volume} 
-                            onChange={handleVolumeChange}
-                          />
-                        </div>
-                        <span className="font-mono-data text-[10px]">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                        {isSpeedMenuOpen && (
+                          <div className="absolute bottom-6 right-0 bg-slate-900 border border-slate-700 rounded shadow-md flex flex-col overflow-hidden text-[10px] z-50">
+                            {[0.5, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                              <button 
+                                key={rate} 
+                                onClick={() => selectSpeed(rate)}
+                                className={`px-3 py-1 text-left hover:bg-vibrant-cyan hover:text-deep-navy font-semibold ${playbackRate === rate ? 'text-vibrant-cyan' : 'text-white'}`}
+                              >
+                                {rate}x
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      
-                      <div className="flex items-center gap-3 relative">
-                        <div className="relative">
-                          <button onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)} className="hover:text-vibrant-cyan transition-colors px-1 bg-slate-800 rounded font-mono-data text-[10px]">
-                            {playbackRate}x
-                          </button>
-                          {isSpeedMenuOpen && (
-                            <div className="absolute bottom-6 right-0 bg-slate-900 border border-slate-700 rounded shadow-md flex flex-col overflow-hidden text-[10px] z-50">
-                              {[0.5, 1.0, 1.25, 1.5, 2.0].map((rate) => (
-                                <button 
-                                  key={rate} 
-                                  onClick={() => selectSpeed(rate)}
-                                  className={`px-3 py-1 text-left hover:bg-vibrant-cyan hover:text-deep-navy font-semibold ${playbackRate === rate ? 'text-vibrant-cyan' : 'text-white'}`}
-                                >
-                                  {rate}x
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button onClick={toggleFullscreen} className="hover:text-vibrant-cyan transition-colors">
-                          <span className="material-symbols-outlined text-sm">fullscreen</span>
-                        </button>
-                      </div>
+                      <button onClick={toggleFullscreen} className="hover:text-vibrant-cyan transition-colors">
+                        <span className="material-symbols-outlined text-sm">fullscreen</span>
+                      </button>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Transcript Sync Area */}
@@ -708,7 +773,7 @@ export const ResultsPage: React.FC = () => {
             
             <div>
               <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1">
-                <span className="material-symbols-outlined text-vibrant-cyan text-base">align_left</span>
+                <span className="material-symbols-outlined text-vibrant-cyan text-base">subject</span>
                 Tóm tắt nội dung bài giảng
               </h3>
               <div className="p-4 bg-background border border-outline-variant/60 rounded-xl text-sm text-secondary leading-relaxed max-h-[220px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">
