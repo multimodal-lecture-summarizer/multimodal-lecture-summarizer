@@ -5,6 +5,8 @@ from app.schemas.video import (
     VideoDTO,
     VideoStandardBase,
     VideoStandardDTO,
+    VideoMetadataDTO,
+    VideoSceneDTO,
 )
 from app.schemas.job import JobDTO
 from app.schemas.summary import SummaryDTO, ChapterDTO, KeyframeDTO
@@ -23,6 +25,8 @@ __all__ = [
     "VideoDTO",
     "VideoStandardBase",
     "VideoStandardDTO",
+    "VideoMetadataDTO",
+    "VideoSceneDTO",
     "JobDTO",
     "SummaryDTO",
     "ChapterDTO",

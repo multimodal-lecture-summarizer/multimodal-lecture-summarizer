@@ -1,6 +1,6 @@
 from app.core.database import Base
 from app.models.user import User
-from app.models.video import Video, VideoStandard
+from app.models.video import Video, VideoStandard, VideoMetadata, VideoScene
 from app.models.job import Job
 from app.models.summary import Summary
 from app.models.qa import QALog
@@ -12,6 +12,8 @@ __all__ = [
     "User",
     "Video",
     "VideoStandard",
+    "VideoMetadata",
+    "VideoScene",
     "Job",
     "Summary",
     "QALog",

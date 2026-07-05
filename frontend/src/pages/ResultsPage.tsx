@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import type { TranscriptLine, Chapter } from '../types';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
-import './ResultsPage.css';
 
 interface ChapterDTO {
   title: string;
@@ -56,204 +55,229 @@ const parseTimeText = (timeStr: string) => {
   return 0;
 };
 
-// Mock data
-export const _mockTranscript: TranscriptLine[] = [
+
+
+const mockVideoData: VideoDTO = {
+  videoId: "mock-deep-learning-1",
+  originalUrl: "https://www.youtube.com/watch?v=5HnS3__1v-o",
+  duration: 2710,
+  status: "done"
+};
+
+const mockSummaryData: SummaryDTO = {
+  summaryId: "mock-sum-1",
+  videoId: "mock-deep-learning-1",
+  summaryText: `Bài giảng giới thiệu tổng quan về học sâu (Deep Learning), bắt đầu từ các khái niệm cơ bản về Perceptron, mạng nơ-ron đa tầng (MLP), cơ chế lan truyền ngược (Backpropagation) và thuật toán tối ưu Gradient Descent.
+
+Tiếp theo, giảng viên phân tích các điểm nghẽn của mạng Recurrent Neural Network (RNN) khi xử lý chuỗi dữ liệu dài (biến mất/bùng nổ gradient).
+
+Cuối cùng, bài giảng đi sâu vào giải pháp cách mạng: kiến trúc Transformer và cơ chế Self-Attention, giải thích tại sao nó cho phép tính toán song song hiệu quả và nắm bắt ngữ cảnh tốt hơn.`,
+  transcriptText: "",
+  modelUsed: "Gemini 1.5 Flash",
+  processingTime: 4.2,
+  chapters: [
+    {
+      startTime: 0,
+      endTime: 312,
+      title: "1. Giới thiệu học sâu & Cấu trúc Perceptron",
+      summary: "Giảng viên giới thiệu cấu trúc cơ bản của một nơ-ron nhân tạo (Perceptron), cách kết hợp các ngõ vào và hàm kích hoạt."
+    },
+    {
+      startTime: 312,
+      endTime: 750,
+      title: "2. Thuật toán Lan truyền ngược (Backpropagation)",
+      summary: "Tìm hiểu cách mạng nơ-ron cập nhật trọng số thông qua đạo hàm chuỗi (chain rule) và tối ưu hóa hàm mất mát."
+    },
+    {
+      startTime: 750,
+      endTime: 920,
+      title: "3. Hạn chế của RNN & Sự cần thiết của Transformer",
+      summary: "Phân tích lỗi mất mát thông tin đối với chuỗi dài trong mạng RNN và giới thiệu giải pháp tự chú ý (self-attention)."
+    },
+    {
+      startTime: 920,
+      endTime: 2710,
+      title: "4. Kiến trúc Transformer & Cơ chế Self-Attention",
+      summary: "Giải thích chi tiết ma trận Query, Key, Value trong cơ chế Self-Attention giúp mô hình tính toán song song."
+    }
+  ],
+  keyframes: [
+    {
+      timestamp: 15,
+      imageUrl: "https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=500",
+      description: "Slide mô tả cấu trúc toán học của mạng nơ-ron kết nối đầy đủ (Dense Layer) với hàm kích hoạt ReLU.",
+      importanceScore: 0.98
+    },
+    {
+      timestamp: 312,
+      imageUrl: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=500",
+      description: "Sơ đồ đồ thị tính toán của thuật toán Backpropagation và quy tắc đạo hàm hàm hợp.",
+      importanceScore: 0.94
+    },
+    {
+      timestamp: 750,
+      imageUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500",
+      description: "Đồ thị so sánh độ dốc thông tin biến mất (Vanishing Gradient) giữa hàm Sigmoid và hàm ReLU.",
+      importanceScore: 0.88
+    },
+    {
+      timestamp: 920,
+      imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500",
+      description: "Kiến trúc chi tiết của khối Encoder trong mô hình Transformer ban đầu (Attention Is All You Need).",
+      importanceScore: 0.96
+    }
+  ]
+};
+
+const mockChaptersList: Chapter[] = [
+  { start: "00:00", end: "05:12", title: "1. Giới thiệu học sâu & Cấu trúc Perceptron", summary: "Giảng viên giới thiệu cấu trúc cơ bản của một nơ-ron nhân tạo." },
+  { start: "05:12", end: "12:30", title: "2. Thuật toán Lan truyền ngược (Backpropagation)", summary: "Cập nhật trọng số mạng nơ-ron." },
+  { start: "12:30", end: "15:20", title: "3. Hạn chế của RNN & Sự cần thiết của Transformer", summary: "Phân tích lỗi biến mất gradient." },
+  { start: "15:20", end: "45:10", title: "4. Kiến trúc Transformer & Cơ chế Self-Attention", summary: "Giải thích cơ chế Self-Attention." }
+];
+
+const mockTranscriptList: TranscriptLine[] = [
   {
     speaker: "SPEAKER_00",
     start: 0,
-    end: 14,
-    text: "Chào mừng các bạn đến với bài giảng về Trí tuệ Nhân tạo.",
+    end: 15,
+    text: "Chào mừng các bạn đến với bài giảng giới thiệu về Học Sâu và Trí tuệ Nhân tạo đa phương thức.",
     words: [
-      { word: "Chào", start: 0, end: 0.3, time: "00:00.0" },
-      { word: "mừng", start: 0.3, end: 0.6, time: "00:00.3" },
-      { word: "các", start: 0.6, end: 0.8, time: "00:00.6" },
-      { word: "bạn", start: 0.8, end: 1.0, time: "00:00.8" },
-      { word: "đến", start: 1.0, end: 1.2, time: "00:01.0" },
-      { word: "với", start: 1.2, end: 1.4, time: "00:01.2" },
-      { word: "bài", start: 1.4, end: 1.6, time: "00:01.4" },
-      { word: "giảng", start: 1.6, end: 1.9, time: "00:01.6" },
-      { word: "về", start: 1.9, end: 2.1, time: "00:01.9" },
-      { word: "Trí", start: 2.1, end: 2.4, time: "00:02.1" },
-      { word: "tuệ", start: 2.4, end: 2.6, time: "00:02.4" },
-      { word: "Nhân", start: 2.6, end: 2.9, time: "00:02.6" },
-      { word: "tạo.", start: 2.9, end: 3.5, time: "00:02.9" },
+      { word: "Chào", start: 0.2, end: 0.8, time: "00:00" },
+      { word: "mừng", start: 0.8, end: 1.2, time: "00:00" },
+      { word: "các", start: 1.2, end: 1.5, time: "00:01" },
+      { word: "bạn", start: 1.5, end: 1.8, time: "00:01" },
+      { word: "đến", start: 1.8, end: 2.1, time: "00:01" },
+      { word: "với", start: 2.1, end: 2.4, time: "00:02" },
+      { word: "bài", start: 2.4, end: 2.7, time: "00:02" },
+      { word: "giảng", start: 2.7, end: 3.2, time: "00:02" },
+      { word: "giới", start: 3.2, end: 3.6, time: "00:03" },
+      { word: "thiệu", start: 3.6, end: 4.0, time: "00:03" },
+      { word: "về", start: 4.0, end: 4.3, time: "00:04" },
+      { word: "Học", start: 4.3, end: 4.8, time: "00:04" },
+      { word: "Sâu", start: 4.8, end: 5.4, time: "00:04" },
+      { word: "và", start: 5.4, end: 5.8, time: "00:05" },
+      { word: "Trí", start: 5.8, end: 6.2, time: "00:05" },
+      { word: "tuệ", start: 6.2, end: 6.6, time: "00:06" },
+      { word: "Nhân", start: 6.6, end: 7.0, time: "00:06" },
+      { word: "tạo.", start: 7.0, end: 7.8, time: "00:07" }
     ]
   },
   {
     speaker: "SPEAKER_00",
     start: 15,
-    end: 311,
-    text: "Hôm nay chúng ta sẽ đi sâu vào cấu trúc của mạng nơ-ron nhân tạo.",
+    end: 312,
+    text: "Hôm nay chúng ta sẽ đi sâu vào cấu trúc cơ bản của mạng nơ-ron nhân tạo thông qua mô hình Perceptron.",
     words: [
-      { word: "Hôm", start: 15.0, end: 15.3, time: "00:15.0" },
-      { word: "nay", start: 15.3, end: 15.6, time: "00:15.3" },
-      { word: "chúng", start: 15.6, end: 15.8, time: "00:15.6" },
-      { word: "ta", start: 15.8, end: 16.0, time: "00:16.0" },
-      { word: "sẽ", start: 16.0, end: 16.2, time: "00:16.2" },
-      { word: "đi", start: 16.2, end: 16.5, time: "00:16.2" },
-      { word: "sâu", start: 16.5, end: 16.8, time: "00:16.5" },
-      { word: "vào", start: 16.8, end: 17.1, time: "00:16.8" },
-      { word: "cấu", start: 17.1, end: 17.4, time: "00:17.1" },
-      { word: "trúc", start: 17.4, end: 17.7, time: "00:17.4" },
-      { word: "của", start: 17.7, end: 17.9, time: "00:17.7" },
-      { word: "mạng", start: 17.9, end: 18.2, time: "00:17.9" },
-      { word: "nơ-ron", start: 18.2, end: 18.7, time: "00:18.2" },
-      { word: "nhân", start: 18.7, end: 19.0, time: "00:18.7" },
-      { word: "tạo.", start: 19.0, end: 19.5, time: "00:19.0" },
+      { word: "Hôm", start: 15.1, end: 15.5, time: "00:15" },
+      { word: "nay", start: 15.5, end: 15.8, time: "00:15" },
+      { word: "chúng", start: 15.8, end: 16.1, time: "00:15" },
+      { word: "ta", start: 16.1, end: 16.4, time: "00:16" },
+      { word: "sẽ", start: 16.4, end: 16.8, time: "00:16" },
+      { word: "đi", start: 16.8, end: 17.1, time: "00:16" },
+      { word: "sâu", start: 17.1, end: 17.5, time: "00:17" },
+      { word: "vào", start: 17.5, end: 17.9, time: "00:17" },
+      { word: "cấu", start: 17.9, end: 18.2, time: "00:17" },
+      { word: "trúc", start: 18.2, end: 18.6, time: "00:18" },
+      { word: "cơ", start: 18.6, end: 18.9, time: "00:18" },
+      { word: "bản", start: 18.9, end: 19.3, time: "00:18" },
+      { word: "của", start: 19.3, end: 19.6, time: "00:19" },
+      { word: "mạng", start: 19.6, end: 20.0, time: "00:19" },
+      { word: "nơ-ron", start: 20.0, end: 20.6, time: "00:20" },
+      { word: "nhân", start: 20.6, end: 21.0, time: "00:20" },
+      { word: "tạo.", start: 21.0, end: 21.6, time: "00:21" }
     ]
   },
   {
     speaker: "SPEAKER_00",
     start: 312,
-    end: 339,
-    text: "Khái niệm quan trọng nhất ở đây là Backpropagation (Lan truyền ngược). Nó giúp điều chỉnh trọng số...",
+    end: 750,
+    text: "Cơ chế cốt lõi để cập nhật trọng số trong mạng nơ-ron là thuật toán lan truyền ngược Backpropagation.",
     words: [
-      { word: "Khái", start: 312.0, end: 312.4, time: "05:12.0" },
-      { word: "niệm", start: 312.4, end: 312.7, time: "05:12.4" },
-      { word: "quan", start: 312.7, end: 313.0, time: "05:12.7" },
-      { word: "trọng", start: 313.0, end: 313.3, time: "05:13.0" },
-      { word: "nhất", start: 313.3, end: 313.6, time: "05:13.3" },
-      { word: "ở", start: 313.6, end: 313.8, time: "05:13.6" },
-      { word: "đây", start: 313.8, end: 314.1, time: "05:13.8" },
-      { word: "là", start: 314.1, end: 314.3, time: "05:14.1" },
-      { word: "Backpropagation", start: 314.3, end: 315.2, time: "05:14.3" },
-      { word: "(Lan", start: 315.2, end: 315.5, time: "05:15.2" },
-      { word: "truyền", start: 315.5, end: 315.8, time: "05:15.5" },
-      { word: "ngược).", start: 315.8, end: 316.2, time: "05:15.8" },
-      { word: "Nó", start: 316.2, end: 316.4, time: "05:16.2" },
-      { word: "giúp", start: 316.4, end: 316.7, time: "05:16.4" },
-      { word: "điều", start: 316.7, end: 317.0, time: "05:16.7" },
-      { word: "chỉnh", start: 317.0, end: 317.3, time: "05:17.0" },
-      { word: "trọng", start: 317.3, end: 317.6, time: "05:17.3" },
-      { word: "số...", start: 317.6, end: 318.5, time: "05:17.6" },
-    ]
-  },
-  {
-    speaker: "SPEAKER_00",
-    start: 340,
-    end: 749,
-    text: "Hãy nhìn vào đạo hàm của hàm mất mát. Chúng ta tính gradient để tìm điểm cực tiểu.",
-    words: [
-      { word: "Hãy", start: 340.0, end: 340.3, time: "05:40.0" },
-      { word: "nhìn", start: 340.3, end: 340.6, time: "05:40.3" },
-      { word: "vào", start: 340.6, end: 340.8, time: "05:40.6" },
-      { word: "đạo", start: 340.8, end: 341.1, time: "05:40.8" },
-      { word: "hàm", start: 341.1, end: 341.4, time: "05:41.1" },
-      { word: "của", start: 341.4, end: 341.6, time: "05:41.4" },
-      { word: "hàm", start: 341.6, end: 341.9, time: "05:41.6" },
-      { word: "mất", start: 341.9, end: 342.2, time: "05:41.9" },
-      { word: "mát.", start: 342.2, end: 342.6, time: "05:42.2" },
-      { word: "Chúng", start: 342.6, end: 342.9, time: "05:42.6" },
-      { word: "ta", start: 342.9, end: 343.1, time: "05:42.9" },
-      { word: "tính", start: 343.1, end: 343.4, time: "05:43.1" },
-      { word: "gradient", start: 343.4, end: 344.0, time: "05:43.4" },
-      { word: "để", start: 344.0, end: 344.2, time: "05:44.0" },
-      { word: "tìm", start: 344.2, end: 344.5, time: "05:44.2" },
-      { word: "điểm", start: 344.5, end: 344.8, time: "05:44.5" },
-      { word: "cực", start: 344.8, end: 345.1, time: "05:44.8" },
-      { word: "tiểu.", start: 345.1, end: 346.0, time: "05:45.1" },
+      { word: "Cơ", start: 312.2, end: 312.6, time: "05:12" },
+      { word: "chế", start: 312.6, end: 312.9, time: "05:12" },
+      { word: "cốt", start: 312.9, end: 313.2, time: "05:12" },
+      { word: "lõi", start: 313.2, end: 313.5, time: "05:13" },
+      { word: "để", start: 313.5, end: 313.8, time: "05:13" },
+      { word: "cập", start: 313.8, end: 314.1, time: "05:13" },
+      { word: "nhật", start: 314.1, end: 314.4, time: "05:14" },
+      { word: "trọng", start: 314.4, end: 314.8, time: "05:14" },
+      { word: "số", start: 314.8, end: 315.2, time: "05:14" },
+      { word: "trong", start: 315.2, end: 315.5, time: "05:15" },
+      { word: "mạng", start: 315.5, end: 315.8, time: "05:15" },
+      { word: "nơ-ron", start: 315.8, end: 316.3, time: "05:15" },
+      { word: "là", start: 316.3, end: 316.6, time: "05:16" },
+      { word: "thuật", start: 316.6, end: 317.0, time: "05:16" },
+      { word: "toán", start: 317.0, end: 317.4, time: "05:17" },
+      { word: "lan", start: 317.4, end: 317.8, time: "05:17" },
+      { word: "truyền", start: 317.8, end: 318.2, time: "05:17" },
+      { word: "ngược.", start: 318.2, end: 319.0, time: "05:18" }
     ]
   },
   {
     speaker: "SPEAKER_00",
     start: 750,
-    end: 919,
-    text: "Đối với các chuỗi dài, mạng RNN gặp hiện tượng tiêu biến gradient.",
+    end: 920,
+    text: "Đối với chuỗi dữ liệu rất dài, mạng tuần tự RNN thường gặp lỗi triệt tiêu hoặc bùng nổ gradient.",
     words: [
-      { word: "Đối", start: 750.0, end: 750.4, time: "12:30.0" },
-      { word: "với", start: 750.4, end: 750.7, time: "12:30.4" },
-      { word: "các", start: 750.7, end: 751.0, time: "12:30.7" },
-      { word: "chuỗi", start: 751.0, end: 751.3, time: "12:31.0" },
-      { word: "dài,", start: 751.3, end: 751.6, time: "12:31.3" },
-      { word: "mạng", start: 751.6, end: 751.9, time: "12:31.6" },
-      { word: "RNN", start: 751.9, end: 752.5, time: "12:31.9" },
-      { word: "gặp", start: 752.5, end: 752.8, time: "12:32.5" },
-      { word: "hiện", start: 752.8, end: 753.1, time: "12:32.8" },
-      { word: "tượng", start: 753.1, end: 753.4, time: "12:33.1" },
-      { word: "tiêu", start: 753.4, end: 753.7, time: "12:33.4" },
-      { word: "biến", start: 753.7, end: 754.0, time: "12:33.7" },
-      { word: "gradient.", start: 754.0, end: 755.0, time: "12:34.0" },
+      { word: "Đối", start: 750.1, end: 750.5, time: "12:30" },
+      { word: "với", start: 750.5, end: 750.8, time: "12:30" },
+      { word: "chuỗi", start: 750.8, end: 751.2, time: "12:30" },
+      { word: "dữ", start: 751.2, end: 751.5, time: "12:31" },
+      { word: "liệu", start: 751.5, end: 751.8, time: "12:31" },
+      { word: "rất", start: 751.8, end: 752.2, time: "12:32" },
+      { word: "dài,", start: 752.2, end: 752.6, time: "12:32" },
+      { word: "mạng", start: 752.6, end: 753.0, time: "12:33" },
+      { word: "tuần", start: 753.0, end: 753.4, time: "12:33" },
+      { word: "tự", start: 753.4, end: 753.8, time: "12:33" },
+      { word: "RNN", start: 753.8, end: 754.4, time: "12:34" },
+      { word: "thường", start: 754.4, end: 754.8, time: "12:34" },
+      { word: "gặp", start: 754.8, end: 755.2, time: "12:34" },
+      { word: "lỗi", start: 755.2, end: 755.5, time: "12:35" },
+      { word: "triệt", start: 755.5, end: 755.9, time: "12:35" },
+      { word: "tiêu", start: 755.9, end: 756.3, time: "12:36" },
+      { word: "hoặc", start: 756.3, end: 756.7, time: "12:36" },
+      { word: "bùng", start: 756.7, end: 757.1, time: "12:37" },
+      { word: "nổ.", start: 757.1, end: 757.8, time: "12:37" }
     ]
   },
   {
     speaker: "SPEAKER_00",
     start: 920,
     end: 2710,
-    text: "Tiếp theo, hãy chuyển sang các kiến trúc hiện đại hơn như mô hình Transformer.",
+    text: "Để giải quyết vấn đề này, kiến trúc Transformer đã ra đời sử dụng hoàn toàn cơ chế tự chú ý Self-Attention.",
     words: [
-      { word: "Tiếp", start: 920.0, end: 920.3, time: "15:20.0" },
-      { word: "theo,",
-        start: 920.3,
-        end: 920.6,
-        time: "15:20.3"
-      },
-      { word: "hãy", start: 920.6, end: 920.8, time: "15:20.6" },
-      { word: "chuyển", start: 920.8, end: 921.1, time: "15:20.8" },
-      { word: "sang", start: 921.1, end: 921.4, time: "15:21.1" },
-      { word: "các", start: 921.4, end: 921.6, time: "15:21.4" },
-      { word: "kiến", start: 921.6, end: 921.9, time: "15:21.6" },
-      { word: "trúc", start: 921.9, end: 922.2, time: "15:21.9" },
-      { word: "hiện", start: 922.2, end: 922.5, time: "15:22.2" },
-      { word: "đại", start: 922.5, end: 922.8, time: "15:22.5" },
-      { word: "hơn", start: 922.8, end: 923.0, time: "15:22.8" },
-      { word: "như", start: 923.0, end: 923.3, time: "15:23.0" },
-      { word: "mô", start: 923.3, end: 923.5, time: "15:23.3" },
-      { word: "hình", start: 923.5, end: 923.8, time: "15:23.5" },
-      { word: "Transformer.", start: 923.8, end: 925.0, time: "15:23.8" },
+      { word: "Để", start: 920.1, end: 920.5, time: "15:20" },
+      { word: "giải", start: 920.5, end: 920.8, time: "15:20" },
+      { word: "quyết", start: 920.8, end: 921.2, time: "15:21" },
+      { word: "vấn", start: 921.2, end: 921.5, time: "15:21" },
+      { word: "đề", start: 921.5, end: 921.8, time: "15:21" },
+      { word: "này,", start: 921.8, end: 922.2, time: "15:22" },
+      { word: "kiến", start: 922.2, end: 922.6, time: "15:22" },
+      { word: "trúc", start: 922.6, end: 923.0, time: "15:23" },
+      { word: "Transformer", start: 923.0, end: 923.8, time: "15:23" },
+      { word: "đã", start: 923.8, end: 924.1, time: "15:24" },
+      { word: "ra", start: 924.1, end: 924.4, time: "15:24" },
+      { word: "đời", start: 924.4, end: 924.8, time: "15:24" },
+      { word: "sử", start: 924.8, end: 925.1, time: "15:25" },
+      { word: "dụng", start: 925.1, end: 925.4, time: "15:25" },
+      { word: "hoàn", start: 925.4, end: 925.8, time: "15:25" },
+      { word: "toàn", start: 925.8, end: 926.2, time: "15:26" },
+      { word: "cơ", start: 926.2, end: 926.5, time: "15:26" },
+      { word: "chế", start: 926.5, end: 926.8, time: "15:26" },
+      { word: "tự", start: 926.8, end: 927.1, time: "15:27" },
+      { word: "chú", start: 927.1, end: 927.4, time: "15:27" },
+      { word: "ý.", start: 927.4, end: 928.0, time: "15:27" }
     ]
   }
 ];
 
-export const _mockChapters: Chapter[] = [
-  { start: "00:00", end: "05:12", title: "1. Giới thiệu Deep Learning", summary: "Phần này giới thiệu bài giảng." },
-  { start: "05:12", end: "12:30", title: "2. Thuật toán Backpropagation & Gradient Descent", summary: "Giới thiệu lan truyền ngược." },
-  { start: "12:30", end: "15:20", title: "3. Hạn chế của mạng RNN", summary: "Giải thích lý do RNN gặp lỗi với chuỗi dài." },
-  { start: "15:20", end: "45:10", title: "4. Kiến trúc Transformer & Self-Attention", summary: "Tìm hiểu kiến trúc mới." },
-];
-
-// Helper to parse transcript string into TranscriptLine format
-const parseTranscriptText = (text: string): TranscriptLine[] => {
-  if (!text) return [];
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  let currentStart = 0;
-  
-  return sentences.map((sentence) => {
-    const trimmed = sentence.trim();
-    const words = trimmed.split(/\s+/);
-    const duration = Math.max(words.length * 0.4, 3.0);
-    const end = currentStart + duration;
-    
-    const wordTokens = words.map((w, wIdx) => {
-      const wDur = duration / words.length;
-      const wStart = currentStart + wIdx * wDur;
-      const wEnd = wStart + wDur;
-      return {
-        word: w,
-        start: wStart,
-        end: wEnd,
-        time: formatTime(wStart),
-      };
-    });
-    
-    const line: TranscriptLine = {
-      speaker: "SPEAKER_00",
-      start: currentStart,
-      end: end,
-      text: trimmed,
-      words: wordTokens,
-    };
-    
-    currentStart = end;
-    return line;
-  });
-};
-
 export const ResultsPage: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const videoId = searchParams.get('videoId') || searchParams.get('id');
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   const [videoData, setVideoData] = useState<VideoDTO | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryDTO | null>(null);
@@ -275,61 +299,18 @@ export const ResultsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (!videoId) {
-      // Fallback to fetch first video
-      api.getVideos().then(res => {
-        if (res.success && res.data && res.data.length > 0) {
-          const firstDone = res.data.find((v: any) => v.status === 'done');
-          if (firstDone) {
-            setSearchParams({ videoId: firstDone.videoId });
-          }
-        }
-      });
-      return;
-    }
-
     setLoading(true);
-    setError(null);
+    const timer = setTimeout(() => {
+      setVideoData(mockVideoData);
+      setDuration(mockVideoData.duration || 2710);
+      setSummaryData(mockSummaryData);
+      setChaptersList(mockChaptersList);
+      setTranscriptList(mockTranscriptList);
+      setLoading(false);
+    }, 400);
 
-    Promise.all([
-      api.getVideo(videoId).catch(() => null),
-      api.getSummary(videoId).catch(() => null)
-    ])
-      .then(([videoRes, summaryRes]) => {
-        if (videoRes && videoRes.success) {
-          setVideoData(videoRes.data);
-          setDuration(videoRes.data.duration || 0);
-        }
-        if (summaryRes && summaryRes.success && summaryRes.data) {
-          setSummaryData(summaryRes.data);
-          
-          // Parse chapters
-          if (summaryRes.data.chapters) {
-            const mappedChapters = summaryRes.data.chapters.map((c: any) => ({
-              start: formatTime(c.startTime),
-              end: formatTime(c.endTime),
-              title: c.title,
-              summary: c.summary,
-            }));
-            setChaptersList(mappedChapters);
-          }
-
-          // Parse transcript
-          if (summaryRes.data.transcriptText) {
-            const parsedLines = parseTranscriptText(summaryRes.data.transcriptText);
-            setTranscriptList(parsedLines);
-          }
-        } else {
-          setError("Không tìm thấy kết quả tóm tắt cho video này. Tiến trình xử lý có thể đang diễn ra.");
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message || "Lỗi khi lấy thông tin kết quả.");
-        setLoading(false);
-      });
-  }, [videoId, setSearchParams]);
-
+    return () => clearTimeout(timer);
+  }, [videoId]);
 
   // Handle Play/Pause
   const togglePlay = () => {
@@ -412,13 +393,6 @@ export const ResultsPage: React.FC = () => {
     }
   };
 
-  // Set start time to video element on initial mount
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = currentTime;
-    }
-  }, []);
-
   // Compute active transcript line and active chapter
   const getActiveLineIndex = () => {
     let activeIdx = -1;
@@ -487,267 +461,336 @@ export const ResultsPage: React.FC = () => {
   const isYouTube = !!(videoData?.originalUrl && (videoData.originalUrl.includes('youtube.com') || videoData.originalUrl.includes('youtu.be')));
 
   const getYouTubeEmbedUrl = (url: string) => {
-    let videoId = '';
+    let yid = '';
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-      videoId = match[2];
+      yid = match[2];
     }
-    return videoId ? `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&autoplay=1` : '';
+    return yid ? `https://www.youtube-nocookie.com/embed/${yid}?enablejsapi=1&autoplay=1` : '';
   };
 
   if (loading) {
     return (
-      <div className="results-page flex-center" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-        <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '3rem', color: 'var(--primary)', marginBottom: '20px' }}></i>
-        <p style={{ color: 'var(--text-muted)' }}>Đang tải kết quả tóm tắt từ Database...</p>
+      <div className="flex flex-col justify-center items-center h-[60vh] bg-background text-on-surface">
+        <span className="material-symbols-outlined text-[48px] text-vibrant-cyan animate-spin mb-4">autorenew</span>
+        <p className="text-secondary text-sm font-semibold">Đang tải kết quả tóm tắt từ Database...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="results-page flex-center animate-fade-in" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-        <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '3rem', color: '#ef4444', marginBottom: '20px' }}></i>
-        <p style={{ color: '#ef4444', fontWeight: 500, textAlign: 'center', maxWidth: '500px' }}>{error}</p>
-        <Link to="/history" className="btn primary" style={{ marginTop: '20px' }}>Quay lại Lịch sử</Link>
+      <div className="flex flex-col justify-center items-center h-[60vh] bg-background p-6 text-center">
+        <span className="material-symbols-outlined text-[48px] text-error mb-4">warning</span>
+        <p className="text-error font-bold max-w-md mb-6 text-sm">{error}</p>
+        <Link 
+          to="/history" 
+          className="px-6 py-2 bg-deep-navy text-white rounded hover:bg-primary font-semibold text-sm transition-all"
+        >
+          Quay lại Lịch sử
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="results-page animate-fade-in">
-      <div className="nav-actions">
-        <Link to="/" className="btn"><i className="fa-solid fa-house"></i> Trang chủ</Link>
-        <Link to="/history" className="btn"><i className="fa-solid fa-clock-rotate-left"></i> Lịch sử</Link>
-        <button className="btn" onClick={() => handleExport('pdf')}><i className="fa-solid fa-file-pdf"></i> Xuất PDF</button>
-        <button className="btn" onClick={() => handleExport('txt')}><i className="fa-solid fa-file-lines"></i> Xuất TXT</button>
-        <Link to={`/qa?videoId=${videoId}`} className="btn primary"><i className="fa-solid fa-comments"></i> Hỏi Đáp RAG</Link>
+    <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
+      {/* Top Nav/Actions Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-outline-variant/30">
+        <div className="flex items-center gap-2">
+          <Link to="/" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+            <span className="material-symbols-outlined text-sm">home</span> Trang chủ
+          </Link>
+          <Link to="/history" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+            <span className="material-symbols-outlined text-sm">history</span> Lịch sử
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleExport('pdf')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+            <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Xuất PDF
+          </button>
+          <button onClick={() => handleExport('txt')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+            <span className="material-symbols-outlined text-sm">description</span> Xuất TXT
+          </button>
+          <Link to={`/qa?videoId=${videoId}`} className="px-4 py-2 bg-deep-navy text-white rounded-lg hover:opacity-90 text-xs font-bold transition-all flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm">forum</span> Hỏi Đáp RAG
+          </Link>
+        </div>
       </div>
 
-      <div className="layout-grid">
-        {/* Left Column: Video & Transcript */}
-        <div className="card left-column">
-          <h2><i className="fa-brands fa-youtube" style={{ color: '#ef4444' }}></i> Bài Giảng Gốc & Transcript (WhisperX)</h2>
-          
-          {/* Custom Video Player / YouTube Embed */}
-          <div className="video-player-wrapper" style={{ marginBottom: '20px' }}>
-            {isYouTube ? (
-              <div className="iframe-container" style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden', borderRadius: '8px', boxShadow: 'var(--shadow-md)' }}>
-                <iframe
-                  src={getYouTubeEmbedUrl(videoData!.originalUrl!)}
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <div className={`video-container ${isPlaying ? 'playing' : ''}`} id="videoContainer">
-                <video 
-                  ref={videoRef}
-                  src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
-                  poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onClick={togglePlay}
-                  playsInline
-                  loop
-                />
-                
-                {/* Center Play Button Overlay */}
-                <button className={`play-overlay-btn ${isPlaying ? 'playing' : ''}`} onClick={togglePlay}>
-                  <i className="fa-solid fa-play"></i>
-                </button>
+      {/* Main Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Video Player & Transcripts */}
+        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col justify-between shadow-sm space-y-6">
+          <div>
+            <h2 className="font-headline-md text-lg font-bold text-deep-navy mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-error">play_circle</span>
+              Bài Giảng Gốc &amp; Transcript (WhisperX)
+            </h2>
+            
+            {/* Player Container */}
+            <div className="w-full mb-6">
+              {isYouTube ? (
+                <div className="relative aspect-video w-full rounded-lg overflow-hidden shadow-sm">
+                  <iframe
+                    src={getYouTubeEmbedUrl(videoData!.originalUrl!)}
+                    className="absolute inset-0 w-full h-full"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div className="relative group aspect-video bg-video-background rounded-lg overflow-hidden border border-outline-variant shadow-sm" id="videoContainer">
+                  <video 
+                    ref={videoRef}
+                    src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
+                    poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
+                    className="w-full h-full object-cover"
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onClick={togglePlay}
+                    playsInline
+                    loop
+                  />
+                  
+                  {/* Center Play button */}
+                  {!isPlaying && (
+                    <button onClick={togglePlay} className="absolute inset-0 m-auto w-14 h-14 bg-vibrant-cyan text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-20">
+                      <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+                    </button>
+                  )}
 
-                {/* Video Controls Overlay */}
-                <div className="controls-overlay">
-                  <div className="progress-container">
-                    <input 
-                      type="range" 
-                      className="seek-slider" 
-                      min={0} 
-                      max={duration || 2710} 
-                      step={0.1}
-                      value={currentTime} 
-                      onChange={handleSeekChange}
-                      style={seekSliderStyle}
-                    />
-                  </div>
-
-                  <div className="controls-row">
-                    <div className="controls-left">
-                      <button className="control-btn" onClick={togglePlay}>
-                        <i className={isPlaying ? "fa-solid fa-pause" : "fa-solid fa-play"}></i>
-                      </button>
-                      <div className="volume-container">
-                        <button className="control-btn" onClick={toggleMute}>
-                          <i className={isMuted || volume === 0 ? "fa-solid fa-volume-xmark" : volume < 0.5 ? "fa-solid fa-volume-low" : "fa-solid fa-volume-high"}></i>
-                        </button>
-                        <input 
-                          type="range" 
-                          className="volume-slider" 
-                          min={0} 
-                          max={1} 
-                          step={0.05} 
-                          value={isMuted ? 0 : volume} 
-                          onChange={handleVolumeChange}
-                        />
-                      </div>
-                      <span className="time-display">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                  {/* HTML Video Custom Controls Overlay */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/85 to-transparent flex flex-col gap-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-full flex items-center">
+                      <input 
+                        type="range" 
+                        className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan" 
+                        min={0} 
+                        max={duration || 2710} 
+                        step={0.1}
+                        value={currentTime} 
+                        onChange={handleSeekChange}
+                        style={seekSliderStyle}
+                      />
                     </div>
-
-                    <div className="controls-right">
-                      {/* Speed Adjustment */}
-                      <div className="speed-container">
-                        <button className="control-btn" onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)}>
-                          {playbackRate}x
+                    <div className="flex justify-between items-center text-white text-xs">
+                      <div className="flex items-center gap-3">
+                        <button onClick={togglePlay} className="hover:text-vibrant-cyan transition-colors">
+                          <span className="material-symbols-outlined text-sm">{isPlaying ? "pause" : "play_arrow"}</span>
                         </button>
-                        <div className={`speed-menu ${isSpeedMenuOpen ? 'show' : ''}`}>
-                          {[0.5, 1.0, 1.25, 1.5, 2.0].map((rate) => (
-                            <div 
-                              key={rate} 
-                              className={`speed-option ${playbackRate === rate ? 'active' : ''}`}
-                              onClick={() => selectSpeed(rate)}
-                            >
-                              {rate === 1.0 ? '1.0x (Standard)' : `${rate}x`}
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={toggleMute} className="hover:text-vibrant-cyan transition-colors">
+                            <span className="material-symbols-outlined text-sm">{isMuted || volume === 0 ? "volume_off" : "volume_up"}</span>
+                          </button>
+                          <input 
+                            type="range" 
+                            className="w-12 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan volume-slider" 
+                            min={0} 
+                            max={1} 
+                            step={0.05} 
+                            value={isMuted ? 0 : volume} 
+                            onChange={handleVolumeChange}
+                          />
                         </div>
+                        <span className="font-mono-data text-[10px]">{formatTime(currentTime)} / {formatTime(duration)}</span>
                       </div>
-                      <button className="control-btn" onClick={toggleFullscreen}>
-                        <i className="fa-solid fa-expand"></i>
-                      </button>
+                      
+                      <div className="flex items-center gap-3 relative">
+                        <div className="relative">
+                          <button onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)} className="hover:text-vibrant-cyan transition-colors px-1 bg-slate-800 rounded font-mono-data text-[10px]">
+                            {playbackRate}x
+                          </button>
+                          {isSpeedMenuOpen && (
+                            <div className="absolute bottom-6 right-0 bg-slate-900 border border-slate-700 rounded shadow-md flex flex-col overflow-hidden text-[10px] z-50">
+                              {[0.5, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                                <button 
+                                  key={rate} 
+                                  onClick={() => selectSpeed(rate)}
+                                  className={`px-3 py-1 text-left hover:bg-vibrant-cyan hover:text-deep-navy font-semibold ${playbackRate === rate ? 'text-vibrant-cyan' : 'text-white'}`}
+                                >
+                                  {rate}x
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={toggleFullscreen} className="hover:text-vibrant-cyan transition-colors">
+                          <span className="material-symbols-outlined text-sm">fullscreen</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* Transcript Sync Area */}
+            <div className="border border-outline-variant/60 rounded-xl overflow-hidden bg-background">
+              <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-outline-variant/60">
+                <span className="font-label-md text-xs font-bold uppercase tracking-wider text-outline">Timestamps &amp; Transcript</span>
+                <div className="flex items-center glass-panel px-3 py-1.5 rounded-full border border-outline-variant/60 focus-within:border-vibrant-cyan transition-all max-w-[200px] sm:max-w-xs bg-white">
+                  <span className="material-symbols-outlined text-outline text-sm">search</span>
+                  <input 
+                    ref={searchInputRef}
+                    className="bg-transparent border-none focus:ring-0 text-xs w-full px-2 outline-none" 
+                    placeholder="Tìm kiếm từ khóa..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    type="text"
+                  />
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* Transcript Section */}
-          <div className="transcript">
-            <h3 className="transcript-header">
-              <span>Word-level Timestamps</span>
-              <div className="search-wrapper">
-                <i className="fa-solid fa-magnifying-glass search-icon"></i>
-                <input 
-                  ref={searchInputRef}
-                  type="text" 
-                  placeholder="Tìm kiếm nội dung bài giảng..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+              <div className="h-[250px] overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                {transcriptList.map((line, idx) => {
+                  const isLineActive = idx === activeLineIdx;
+                  const matchesSearch = searchQuery.trim() === '' || line.text.toLowerCase().includes(searchQuery.toLowerCase());
+                  
+                  if (!matchesSearch) return null;
+
+                  return (
+                    <div 
+                      key={idx}
+                      ref={isLineActive ? activeLineRef : null}
+                      onClick={() => seekTo(line.start)}
+                      className={`flex gap-3 items-start p-2 rounded-lg cursor-pointer transition-colors duration-150 ${
+                        isLineActive ? 'bg-secondary-container/20 border-l-2 border-vibrant-cyan' : 'hover:bg-surface-container-low'
+                      }`}
+                    >
+                      <span className={`font-mono-data text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 mt-0.5 ${
+                        isLineActive ? 'bg-vibrant-cyan text-white' : 'bg-surface-container-high text-deep-navy'
+                      }`}>
+                        {formatTime(line.start)}
+                      </span>
+                      <p className="text-xs text-deep-navy leading-relaxed flex-1 flex flex-wrap">
+                        {line.words?.map((word, wIdx) => {
+                          const isWordActive = isLineActive && currentTime >= word.start && currentTime <= word.end;
+                          const isSearchMatch = searchQuery.trim() !== '' && word.word.toLowerCase().includes(searchQuery.toLowerCase());
+
+                          return (
+                            <span 
+                              key={wIdx}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                seekTo(word.start);
+                              }}
+                              className={`mr-1 px-0.5 rounded cursor-pointer transition-all ${
+                                isWordActive 
+                                  ? 'bg-vibrant-cyan text-white font-bold' 
+                                  : isSearchMatch 
+                                    ? 'bg-status-warning/20 text-deep-navy border-b border-status-warning' 
+                                    : 'hover:text-vibrant-cyan'
+                              }`}
+                            >
+                              {word.word}
+                            </span>
+                          );
+                        })}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-            </h3>
-            
-            <div className="transcript-body">
-              {transcriptList.map((line, idx) => {
-                const isLineActive = idx === activeLineIdx;
-                const matchesSearch = searchQuery.trim() === '' || line.text.toLowerCase().includes(searchQuery.toLowerCase());
-                
-                if (!matchesSearch) return null;
-
-                return (
-                  <div 
-                    key={idx}
-                    ref={isLineActive ? activeLineRef : null}
-                    className={`transcript-line ${isLineActive ? 'active' : ''}`}
-                    onClick={() => seekTo(line.start)}
-                  >
-                    <span className="ts">{formatTime(line.start)}</span>
-                    <span className="words-container">
-                      {line.words?.map((word, wIdx) => {
-                        const isWordActive = isLineActive && currentTime >= word.start && currentTime <= word.end;
-                        const isSearchMatch = searchQuery.trim() !== '' && word.word.toLowerCase().includes(searchQuery.toLowerCase());
-
-                        return (
-                          <span 
-                            key={wIdx}
-                            className={`word ${isWordActive ? 'word-active' : ''} ${isSearchMatch ? 'search-match' : ''}`}
-                            data-start={word.start}
-                            data-end={word.end}
-                            data-time={word.time}
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent line seek
-                              seekTo(word.start);
-                            }}
-                          >
-                            {word.word}{' '}
-                          </span>
-                        );
-                      })}
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>
 
         {/* Right Column: Summarization & Partition */}
-        <div className="card right-column">
-          <h2><i className="fa-solid fa-brain" style={{ color: 'var(--primary)' }}></i> Kết Quả Tổng Hợp (Multimodal Fusion)</h2>
-          
-          <h3 className="section-title-sm"><i className="fa-solid fa-align-left"></i> Tóm Tắt Abstractive (GPT/Gemini)</h3>
-          <div className="summary-box" style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-            {summaryData?.summaryText}
-          </div>
+        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col justify-between shadow-sm space-y-6">
+          <div className="space-y-6">
+            <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2">
+              <span className="material-symbols-outlined text-vibrant-cyan">hub</span>
+              Kết Quả Tóm Tắt (AI Fusion)
+            </h2>
+            
+            <div>
+              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-vibrant-cyan text-base">align_left</span>
+                Tóm tắt nội dung bài giảng
+              </h3>
+              <div className="p-4 bg-background border border-outline-variant/60 rounded-xl text-sm text-secondary leading-relaxed max-h-[220px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+                {summaryData?.summaryText}
+              </div>
+            </div>
 
-          <h3 className="section-title-sm"><i className="fa-solid fa-list"></i> Phân Chương Tự Động</h3>
-          <div className="chapters">
-            {chaptersList.map((chapter, idx) => {
-              const isChapterActive = idx === activeChapterIdx;
-              const chStartSecs = parseTimeText(chapter.start);
+            <div>
+              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-vibrant-cyan text-base">list</span>
+                Phân chương bài học tự động
+              </h3>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+                {chaptersList.map((chapter, idx) => {
+                  const isChapterActive = idx === activeChapterIdx;
+                  const chStartSecs = parseTimeText(chapter.start);
 
-              return (
-                <div 
-                  key={idx} 
-                  className={`chapter-item ${isChapterActive ? 'active' : ''}`}
-                  onClick={() => seekTo(chStartSecs)}
-                >
-                  <span>{chapter.title}</span>
-                  <span className="ts">{chapter.start}</span>
-                </div>
-              );
-            })}
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => seekTo(chStartSecs)}
+                      className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-colors duration-150 ${
+                        isChapterActive 
+                          ? 'border-vibrant-cyan bg-secondary-container/20 text-deep-navy font-bold' 
+                          : 'border-outline-variant/50 bg-background text-secondary hover:border-vibrant-cyan'
+                      }`}
+                    >
+                      <span className="text-xs truncate max-w-[200px] sm:max-w-xs">{chapter.title}</span>
+                      <span className="font-mono-data text-[10px] px-1.5 py-0.5 bg-surface-container-high rounded text-deep-navy font-bold">
+                        {chapter.start}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Keyframes Gallery (Multimodal Visual Pipeline) */}
+      {/* Keyframes Gallery Section */}
       {summaryData?.keyframes && summaryData.keyframes.length > 0 && (
-        <div className="card keyframes-card-section" style={{ marginTop: '30px' }}>
-          <h2><i className="fa-solid fa-images" style={{ color: 'var(--primary)', marginRight: '10px' }}></i> Keyframes Phân Tích Hình Ảnh (CLIP & BLIP-2)</h2>
-          <div className="keyframes-gallery" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginTop: '20px' }}>
+        <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm space-y-6">
+          <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2">
+            <span className="material-symbols-outlined text-vibrant-cyan">image_search</span>
+            Keyframes trích xuất từ Video bài giảng (CLIP)
+          </h2>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {summaryData.keyframes.map((kf, idx) => (
               <div 
                 key={idx} 
-                className="keyframe-item-card" 
-                style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.2s' }}
                 onClick={() => seekTo(kf.timestamp)}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                className="group border border-outline-variant/60 rounded-xl overflow-hidden hover:border-vibrant-cyan transition-all duration-300 cursor-pointer bg-background flex flex-col justify-between"
               >
-                <div style={{ position: 'relative', paddingBottom: '56.25%', background: '#000' }}>
+                <div className="relative aspect-video w-full bg-black overflow-hidden shrink-0">
                   <img 
                     src={`${CONFIG.API_BASE_URL.replace('/api/v1', '')}${kf.imageUrl}`} 
-                     alt={kf.description}
-                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
-                   />
-                 </div>
-                 <div style={{ padding: '15px' }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
-                     <span style={{ color: 'var(--primary)', fontWeight: 500 }}><i className="fa-regular fa-clock"></i> {formatTime(kf.timestamp)}</span>
-                     <span style={{ color: 'var(--text-muted)' }}>Độ quan trọng: {Math.round(kf.importanceScore * 100)}%</span>
-                   </div>
-                   <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: '1.4' }}>{kf.description}</p>
-                 </div>
-               </div>
-             ))}
-           </div>
-         </div>
-       )}
+                    alt={kf.description}
+                    className="absolute inset-0 w-full h-full object-contain transform group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-deep-navy/85 text-white font-mono-data text-[9px] rounded font-bold">
+                    {formatTime(kf.timestamp)}
+                  </div>
+                </div>
+                
+                <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
+                  <p className="text-xs text-deep-navy leading-normal line-clamp-3">
+                    {kf.description}
+                  </p>
+                  <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30 text-[10px] text-secondary">
+                    <span className="font-bold text-vibrant-cyan">Độ quan trọng</span>
+                    <span className="font-mono-data font-bold bg-surface-container-high px-1.5 py-0.5 rounded text-deep-navy">
+                      {Math.round(kf.importanceScore * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

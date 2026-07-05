@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import Chart from 'chart.js/auto';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
-import './AdminPage.css';
+
+const formatTime = (secs: number) => {
+  const m = Math.floor(secs / 60).toString().padStart(2, '0');
+  const s = Math.floor(secs % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+};
 
 interface UserItem {
   id: string;
@@ -89,7 +95,7 @@ export const AdminPage: React.FC = () => {
     setJobModalOpen(true);
   };
 
-  // 1. Chart initialization (only when on stats tab)
+  // Chart initialization (only when on stats tab)
   useEffect(() => {
     if (activeTab !== 'stats') {
       if (barInstance.current) barInstance.current.destroy();
@@ -106,9 +112,9 @@ export const AdminPage: React.FC = () => {
             datasets: [{
               label: 'Số Video Xử Lý',
               data: [320, 450, 680, 890, 1200, 1540],
-              backgroundColor: '#4f46e5',
+              backgroundColor: '#06B6D4',
               borderRadius: 6,
-              barThickness: 20
+              barThickness: 15
             }]
           },
           options: {
@@ -116,7 +122,7 @@ export const AdminPage: React.FC = () => {
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              y: { grid: { color: '#e2e8f0' }, beginAtZero: true },
+              y: { grid: { color: '#eceef0' }, beginAtZero: true },
               x: { grid: { display: false } }
             }
           }
@@ -130,7 +136,7 @@ export const AdminPage: React.FC = () => {
             labels: ['GPT-4o API', 'Gemini 1.5 API', 'Qwen2.5 Local'],
             datasets: [{
               data: [30, 25, 45],
-              backgroundColor: ['#3b82f6', '#ec4899', '#10b981'],
+              backgroundColor: ['#06B6D4', '#d5e3fd', '#0F172A'],
               borderWidth: 0,
               hoverOffset: 4
             }]
@@ -141,10 +147,10 @@ export const AdminPage: React.FC = () => {
             plugins: {
               legend: {
                 position: 'bottom',
-                labels: { padding: 15, usePointStyle: true, font: { size: 11 } }
+                labels: { padding: 15, usePointStyle: true, font: { size: 10 } }
               }
             },
-            cutout: '75%'
+            cutout: '70%'
           }
         });
       }
@@ -157,7 +163,7 @@ export const AdminPage: React.FC = () => {
     };
   }, [activeTab]);
 
-  // 1b. Fetch dynamic stats counts and videos list for General Dashboard
+  // Fetch dynamic stats counts and videos list for General Dashboard
   useEffect(() => {
     if (activeTab === 'stats') {
       setStatsLoading(true);
@@ -198,7 +204,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [activeTab]);
 
-  // 2. Fetch video standards from API when entering standard config tab
+  // Fetch video standards from API when entering standard config tab
   useEffect(() => {
     if (activeTab === 'videos') {
       setStandardsLoading(true);
@@ -221,7 +227,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [activeTab]);
 
-  // 3. Fetch Celery Jobs/Videos list when entering Queue tab
+  // Fetch Celery Jobs/Videos list when entering Queue tab
   useEffect(() => {
     if (activeTab === 'celery') {
       setQueueLoading(true);
@@ -240,7 +246,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [activeTab]);
 
-  // 4. Fetch registered users list from API
+  // Fetch registered users list from API
   useEffect(() => {
     if (activeTab === 'users') {
       api.getUsers()
@@ -262,7 +268,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [activeTab]);
 
-  // 5. Fetch all system videos (Admin only)
+  // Fetch all system videos (Admin only)
   useEffect(() => {
     if (activeTab === 'system-videos') {
       setVideoLoading(true);
@@ -281,7 +287,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [activeTab]);
 
-  // 6. Fetch all system jobs (Admin only)
+  // Fetch all system jobs (Admin only)
   useEffect(() => {
     if (activeTab === 'system-jobs') {
       setJobsLoading(true);
@@ -375,615 +381,694 @@ export const AdminPage: React.FC = () => {
   };
 
   return (
-    <div className="admin-page animate-fade-in">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-background text-on-surface">
       {/* Sidebar Navigation */}
-      <div className="admin-sidebar">
-        
-        <div className="admin-nav-group">
-          <div className="admin-nav-label">Analytics</div>
-          <a href="#stats" className={`admin-nav-item ${activeTab === 'stats' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('stats'); }}>
-            <i className="fa-solid fa-chart-pie"></i> Báo cáo hệ thống
-          </a>
-          <a href="#metrics" className={`admin-nav-item ${activeTab === 'metrics' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('metrics'); }}>
-            <i className="fa-solid fa-chart-line"></i> Hiệu suất AI
-          </a>
+      <aside className="w-64 border-r border-outline-variant bg-surface-container-low flex flex-col shrink-0 p-4 gap-2">
+        <div className="px-2 py-4 border-b border-outline-variant/30 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-vibrant-cyan">admin_panel_settings</span>
+            <span className="font-headline-md text-sm font-bold text-deep-navy">Quản Trị Hệ Thống</span>
+          </div>
         </div>
-        
-        <div className="admin-nav-group">
-          <div className="admin-nav-label">Quản lý</div>
-          <a href="#users" className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('users'); }}>
-            <i className="fa-solid fa-users"></i> Người dùng
-          </a>
-          <a href="#system-videos" className={`admin-nav-item ${activeTab === 'system-videos' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('system-videos'); }}>
-            <i className="fa-solid fa-film"></i> Quản lý Video
-          </a>
-          <a href="#system-jobs" className={`admin-nav-item ${activeTab === 'system-jobs' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('system-jobs'); }}>
-            <i className="fa-solid fa-list-check"></i> Quản lý Tác vụ (Jobs)
-          </a>
-          <a href="#videos" className={`admin-nav-item ${activeTab === 'videos' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('videos'); }}>
-            <i className="fa-solid fa-sliders"></i> Tiêu chuẩn Video
-          </a>
-          <a href="#celery" className={`admin-nav-item ${activeTab === 'celery' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('celery'); }}>
-            <i className="fa-solid fa-server"></i> Celery Job Queue
-          </a>
+
+        <div className="flex-1 space-y-4">
+          <div>
+            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">Analytics</div>
+            <nav className="flex flex-col gap-1">
+              <button 
+                onClick={() => setActiveTab('stats')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'stats' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">bar_chart</span> Báo cáo tổng hợp
+              </button>
+              <button 
+                onClick={() => setActiveTab('metrics')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'metrics' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">insights</span> Hiệu suất AI
+              </button>
+            </nav>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">Quản lý</div>
+            <nav className="flex flex-col gap-1">
+              <button 
+                onClick={() => setActiveTab('users')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'users' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">group</span> Người dùng
+              </button>
+              <button 
+                onClick={() => setActiveTab('system-videos')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'system-videos' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">video_library</span> Quản lý Video
+              </button>
+              <button 
+                onClick={() => setActiveTab('system-jobs')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'system-jobs' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">worklist</span> Tác vụ (Jobs)
+              </button>
+              <button 
+                onClick={() => setActiveTab('videos')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'videos' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">settings_suggest</span> Tiêu chuẩn Video
+              </button>
+              <button 
+                onClick={() => setActiveTab('celery')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left text-xs font-semibold w-full ${
+                  activeTab === 'celery' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">dns</span> Celery Queue
+              </button>
+            </nav>
+          </div>
         </div>
-      </div>
+      </aside>
       
       {/* Main Panel Content Area */}
-      <div className="admin-main-content">
-        
-        {/* TAB 1: GENERAL STATS */}
-        {activeTab === 'stats' && (
-          <>
-            <div className="admin-header">
-              <h1>Báo Cáo Thống Kê Tổng Hợp</h1>
-              <div className="calendar-selector">
-                <i className="fa-regular fa-calendar"></i> Hôm nay <i className="fa-solid fa-chevron-down" style={{ marginLeft: '10px', fontSize: '0.8rem' }}></i>
-              </div>
-            </div>
-            
-            <div className="admin-stats-grid">
-              <div className="admin-stat-card">
-                <h3>Người dùng <i className="fa-solid fa-users" style={{ color: 'var(--primary)' }}></i></h3>
-                <div className="value">{users.length}</div>
-                <div className="trend up"><i className="fa-solid fa-arrow-trend-up"></i> +12.5%</div>
-              </div>
-              <div className="admin-stat-card">
-                <h3>Video Xử Lý <i className="fa-solid fa-film" style={{ color: 'var(--primary)' }}></i></h3>
-                <div className="value">{allVideos.length}</div>
-                <div className="trend up"><i className="fa-solid fa-arrow-trend-up"></i> +8.2%</div>
-              </div>
-              <div className="admin-stat-card">
-                <h3>Audio WER <i className="fa-solid fa-microphone-lines" style={{ color: '#ec4899' }}></i></h3>
-                <div className="value">7.8%</div>
-                <div className="trend label-ok"><i className="fa-solid fa-check"></i> Đạt chuẩn &lt; 10%</div>
-              </div>
-              <div className="admin-stat-card">
-                <h3>Keyframe F-score <i className="fa-solid fa-image" style={{ color: '#3b82f6' }}></i></h3>
-                <div className="value">0.52</div>
-                <div className="trend label-ok"><i className="fa-solid fa-check"></i> Vượt mục tiêu (0.45)</div>
-              </div>
-            </div>
-            
-            <div className="admin-charts-row">
-              <div className="admin-chart-card">
-                <h3>Lưu lượng Video (Job Queue)</h3>
-                <div className="canvas-wrapper">
-                  <canvas ref={barChartRef}></canvas>
+      <main className="flex-1 overflow-y-auto p-6 md:p-margin-desktop bg-background custom-scrollbar">
+        <div className="max-w-container-max mx-auto space-y-6">
+          
+          {/* TAB 1: GENERAL STATS */}
+          {activeTab === 'stats' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Báo Cáo Thống Kê Tổng Hợp</h1>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 border border-outline-variant bg-white text-xs font-bold rounded-lg text-secondary cursor-pointer">
+                  <span className="material-symbols-outlined text-sm">calendar_month</span> Hôm nay
                 </div>
-              </div>
-              <div className="admin-chart-card">
-                <h3>Sử dụng Mô hình LLM</h3>
-                <div className="canvas-wrapper doughnut-wrapper">
-                  <canvas ref={doughnutChartRef}></canvas>
-                </div>
-              </div>
-            </div>
-            
-            <div className="admin-table-card">
-              <h3 className="admin-table-title">Tác vụ Xử lý Gần Đây (PostgreSQL `videos` table)</h3>
-              <div className="admin-table-container">
-                {statsLoading ? (
-                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
-                    <p style={{ marginTop: '10px', color: 'var(--text-muted)' }}>Đang tải danh sách tác vụ...</p>
-                  </div>
-                ) : statsVideos.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <i className="fa-solid fa-list-check" style={{ fontSize: '2rem', marginBottom: '10px' }}></i>
-                    <p>Chưa có tác vụ nào được lưu trong hệ thống.</p>
-                  </div>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Video ID</th>
-                        <th>Email User</th>
-                        <th>Tên File / Nguồn</th>
-                        <th>Độ dài</th>
-                        <th>Trạng thái</th>
-                        <th>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {statsVideos.map(v => (
-                        <tr key={v.videoId}>
-                          <td className="uuid">#{v.videoId.substring(0, 8)}...</td>
-                          <td>{v.email}</td>
-                          <td>
-                            {v.originalUrl ? (
-                              <a href={v.originalUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                                Youtube Link
-                              </a>
-                            ) : (
-                              v.title
-                            )}
-                          </td>
-                          <td>{Math.round(v.duration)}s</td>
-                          <td>
-                            <span className={`status ${v.status === VideoStatus.DONE ? 'done' : v.status === VideoStatus.FAILED ? 'failed' : 'processing'}`}>
-                              {v.status === VideoStatus.DONE ? 'Hoàn tất' : v.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
-                            </span>
-                          </td>
-                          <td>
-                            <button className="btn-small" onClick={() => openVideoDetail(v)}>
-                              <i className="fa-solid fa-circle-info"></i> Chi tiết
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* TAB 2: AI METRICS PERFORMANCE */}
-        {activeTab === 'metrics' && (
-          <>
-            <div className="admin-header">
-              <h1>Hiệu Suất & Chất Lượng AI Pipeline</h1>
-            </div>
-            
-            <div className="metrics-summary-grid">
-              <div className="admin-stat-card">
-                <h3>Word Error Rate (ASR) <i className="fa-solid fa-spell-check" style={{ color: '#a855f7' }}></i></h3>
-                <div className="value">7.8%</div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Độ chính xác nhận diện từ</p>
-              </div>
-              <div className="admin-stat-card">
-                <h3>CLIP Keyframe F1 <i className="fa-solid fa-crop" style={{ color: '#3b82f6' }}></i></h3>
-                <div className="value">0.52</div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Độ khớp so với giảng viên</p>
-              </div>
-              <div className="admin-stat-card">
-                <h3>LLM Latency (avg) <i className="fa-solid fa-gauge-high" style={{ color: '#ec4899' }}></i></h3>
-                <div className="value">1.4s</div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Thời gian phản hồi tóm tắt</p>
-              </div>
-              <div className="admin-stat-card">
-                <h3>Tổng Chi Phí Token <i className="fa-solid fa-wallet" style={{ color: '#10b981' }}></i></h3>
-                <div className="value">$12.45</div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '5px 0 0 0' }}>Tháng hiện tại</p>
-              </div>
-            </div>
-
-            <div className="admin-chart-card" style={{ marginBottom: '30px' }}>
-              <h3>Đánh giá chi tiết các Mô hình</h3>
-              <div style={{ marginTop: '15px' }}>
-                <div className="metric-bar-group">
-                  <div className="metric-bar-header">
-                    <span>WhisperX ASR (Nhận diện giọng nói)</span>
-                    <span>Độ chính xác: 92.2%</span>
-                  </div>
-                  <div className="metric-bar-container">
-                    <div className="metric-bar-fill" style={{ width: '92.2%', backgroundColor: '#a855f7' }}></div>
-                  </div>
-                </div>
-                
-                <div className="metric-bar-group">
-                  <div className="metric-bar-header">
-                    <span>CLIP Keyframe (Cắt khung ảnh bài giảng)</span>
-                    <span>F1 Score: 85.0%</span>
-                  </div>
-                  <div className="metric-bar-container">
-                    <div className="metric-bar-fill" style={{ width: '85%', backgroundColor: '#3b82f6' }}></div>
-                  </div>
-                </div>
-
-                <div className="metric-bar-group">
-                  <div className="metric-bar-header">
-                    <span>Gemini 1.5 Flash (Tóm tắt RAG & Hỏi đáp)</span>
-                    <span>Độ khớp ý kiến: 89.5%</span>
-                  </div>
-                  <div className="metric-bar-container">
-                    <div className="metric-bar-fill" style={{ width: '89.5%', backgroundColor: '#ec4899' }}></div>
-                  </div>
-                </div>
-
-                <div className="metric-bar-group">
-                  <div className="metric-bar-header">
-                    <span>Qwen 2.5 14B Local (Tóm tắt bài giảng)</span>
-                    <span>Độ khớp ý kiến: 81.2%</span>
-                  </div>
-                  <div className="metric-bar-container">
-                    <div className="metric-bar-fill" style={{ width: '81.2%', backgroundColor: '#10b981' }}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* TAB 3: USER MANAGEMENT */}
-        {activeTab === 'users' && (
-          <>
-            <div className="admin-header">
-              <h1>Quản Lý Thành Viên Hệ Thống</h1>
-            </div>
-            
-            <div className="admin-table-card">
-              <h3 className="admin-table-title">Danh sách thành viên đăng ký</h3>
-              <div className="admin-table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Thành viên</th>
-                      <th>Email</th>
-                      <th>Quyền Hạn</th>
-                      <th>Trạng thái</th>
-                      <th>Ngày Đăng Ký</th>
-                      <th>Hành Động</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map(u => (
-                      <tr key={u.id}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div className="user-avatar">{u.email.charAt(0).toUpperCase()}</div>
-                            <span style={{ fontWeight: '500' }}>{u.email.split('@')[0]}</span>
-                          </div>
-                        </td>
-                        <td>{u.email}</td>
-                        <td>
-                          <span className={`badge ${u.role === 'ADMIN' ? 'blocked' : 'active'}`} style={{ background: u.role === 'ADMIN' ? '#fee2e2' : '#eef2ff', color: u.role === 'ADMIN' ? '#ef4444' : '#4f46e5' }}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge ${u.active ? 'active' : 'blocked'}`}>
-                            {u.active ? 'Hoạt động' : 'Bị khóa'}
-                          </span>
-                        </td>
-                        <td>{u.joined}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn-small" onClick={() => toggleUserRole(u.id)}>
-                              Đổi Vai Trò
-                            </button>
-                            <button className={`btn-small ${u.active ? 'danger' : ''}`} onClick={() => toggleUserActive(u.id)}>
-                              {u.active ? 'Khóa' : 'Mở khóa'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* TAB 4: VIDEO STANDARD SETTINGS */}
-        {activeTab === 'videos' && (
-          <>
-            <div className="admin-header">
-              <h1>Cấu Hình Tiêu Chuẩn Phân Tích Video</h1>
-            </div>
-            
-            <div className="admin-chart-card">
-              <h3>Giới hạn tải lên & Xác thực video</h3>
-              {standardsLoading ? (
-                <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
-                  <p style={{ marginTop: '10px', color: 'var(--text-muted)' }}>Đang tải cấu hình...</p>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveStandards} className="settings-form">
-                  <div className="form-group">
-                    <label>Thời lượng video tối đa (Giây)</label>
-                    <input 
-                      type="number" 
-                      value={maxDuration} 
-                      onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
-                      required
-                    />
-                    <span className="help-text">Mặc định là 3600 giây (1 giờ). Video dài hơn sẽ bị chặn.</span>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Các định dạng được cho phép (Dấu phẩy phân tách)</label>
-                    <input 
-                      type="text" 
-                      value={allowedFormats} 
-                      onChange={(e) => setAllowedFormats(e.target.value)}
-                      required
-                    />
-                    <span className="help-text">Ví dụ: mp4,avi,mkv,webm</span>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Dung lượng file tối đa (Megabytes)</label>
-                    <input 
-                      type="number" 
-                      value={maxFileSize} 
-                      onChange={(e) => setMaxFileSize(parseInt(e.target.value) || 0)}
-                      required
-                    />
-                    <span className="help-text">Giới hạn dung lượng tối đa cho mỗi lần tải video lên.</span>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Chất lượng âm thanh tối thiểu (SNR)</label>
-                    <input 
-                      type="number" 
-                      step="0.1"
-                      value={minAudioQuality} 
-                      onChange={(e) => setMinAudioQuality(parseFloat(e.target.value) || 0)}
-                      required
-                    />
-                    <span className="help-text">Tỷ lệ Tín hiệu trên Nhiễu (SNR) tối thiểu. Để 0.0 để không kiểm tra.</span>
-                  </div>
-
-                  {standardsMsg && (
-                    <div style={{ color: standardsMsg.type === 'success' ? '#10b981' : '#ef4444', fontSize: '0.9rem', fontWeight: '600' }}>
-                      <i className={`fa-solid ${standardsMsg.type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'}`} style={{ marginRight: '6px' }}></i>
-                      {standardsMsg.text}
-                    </div>
-                  )}
-
-                  <div>
-                    <button type="submit" className="btn primary">
-                      <i className="fa-regular fa-floppy-disk"></i> Lưu cấu hình vào DB
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* TAB 5: CELERY JOB QUEUE */}
-        {activeTab === 'celery' && (
-          <>
-            <div className="admin-header">
-              <h1>Hệ Thống Hàng Đợi Celery Job Queue</h1>
-            </div>
-            
-            <div className="admin-table-card">
-              <div style={{ padding: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Các tiến trình AI đang hoạt động trong hàng đợi</h3>
-                <span className="badge active" style={{ background: '#d1fae5', color: '#047857' }}>Celery Worker: Active (1)</span>
               </div>
               
-              <div className="admin-table-container">
-                {queueLoading ? (
-                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
-                    <p style={{ marginTop: '10px', color: 'var(--text-muted)' }}>Đang đồng bộ hàng đợi...</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
+                    Thành viên
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm">group</span>
+                  </h3>
+                  <div className="text-2xl font-bold text-deep-navy">{users.length}</div>
+                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">trending_up</span> +12.5%</div>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
+                    Video Phân Tích
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm">video_library</span>
+                  </h3>
+                  <div className="text-2xl font-bold text-deep-navy">{allVideos.length}</div>
+                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">trending_up</span> +8.2%</div>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
+                    Audio WER
+                    <span className="material-symbols-outlined text-pink-500 text-sm">graphic_eq</span>
+                  </h3>
+                  <div className="text-2xl font-bold text-deep-navy">7.8%</div>
+                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Đạt chuẩn (&lt;10%)</div>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
+                    Keyframe F-score
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm">image_search</span>
+                  </h3>
+                  <div className="text-2xl font-bold text-deep-navy">0.52</div>
+                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Vượt mục tiêu (0.45)</div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                  <h3 className="text-xs font-bold text-deep-navy mb-4">Lưu lượng Video (Job Queue)</h3>
+                  <div className="h-64 relative">
+                    <canvas ref={barChartRef}></canvas>
                   </div>
-                ) : queueJobs.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <i className="fa-solid fa-list-check" style={{ fontSize: '2rem', marginBottom: '10px' }}></i>
-                    <p>Hiện không có job nào đang chạy hoặc bị lỗi.</p>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                  <h3 className="text-xs font-bold text-deep-navy mb-4">Sử dụng Mô hình LLM</h3>
+                  <div className="h-64 relative">
+                    <canvas ref={doughnutChartRef}></canvas>
                   </div>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Video ID</th>
-                        <th>Nguồn Video</th>
-                        <th>Ngôn Ngữ</th>
-                        <th>Trạng Thái Pipeline</th>
-                        <th>Thao Tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {queueJobs.map(job => (
-                        <tr key={job.videoId}>
-                          <td className="uuid">#{job.videoId.substring(0, 8)}...</td>
-                          <td>
-                            {job.originalUrl ? (
-                              <a href={job.originalUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                                Youtube Link
-                              </a>
-                            ) : (
-                              `File: ${job.filePath?.split('/').pop() || 'uploaded_video.mp4'}`
-                            )}
-                          </td>
-                          <td>{job.language.toUpperCase()}</td>
-                          <td>
-                            <span className={`status ${job.status === VideoStatus.DONE ? 'done' : job.status === VideoStatus.FAILED ? 'failed' : 'processing'}`}>
-                              {job.status === VideoStatus.DONE ? 'Hoàn tất' : job.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn-small" onClick={() => openJobDetail(job)}>Xem chi tiết</button>
-                              {job.status !== VideoStatus.DONE && job.status !== VideoStatus.FAILED && (
-                                <button className="btn-small danger">Dừng</button>
+                </div>
+              </div>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                <h3 className="text-xs font-bold text-deep-navy mb-4">Tác vụ Xử lý Gần Đây (PostgreSQL `videos`)</h3>
+                <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
+                  {statsLoading ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
+                      <p className="text-xs mt-2">Đang tải danh sách tác vụ...</p>
+                    </div>
+                  ) : statsVideos.length === 0 ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-3xl">list_alt</span>
+                      <p className="text-xs mt-2">Chưa có tác vụ nào được lưu trong hệ thống.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">Email User</th>
+                          <th className="p-3">Tên File / Nguồn</th>
+                          <th className="p-3">Độ dài</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {statsVideos.map(v => (
+                          <tr key={v.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                            <td className="p-3 font-mono-data text-[10px]">#{v.videoId.substring(0, 8)}...</td>
+                            <td className="p-3">{v.email}</td>
+                            <td className="p-3 truncate max-w-[200px]" title={v.originalUrl || v.title}>
+                              {v.originalUrl ? (
+                                <a href={v.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
+                                  Youtube Link
+                                </a>
+                              ) : (
+                                v.title
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* TAB: SYSTEM VIDEOS MANAGEMENT */}
-        {activeTab === 'system-videos' && (
-          <>
-            <div className="admin-header">
-              <h1>Quản Lý Toàn Bộ Video Hệ Thống</h1>
-            </div>
-            
-            <div className="admin-table-card">
-              <h3 className="admin-table-title">Danh sách Video đã tải lên (PostgreSQL `videos` table)</h3>
-              <div className="admin-table-container">
-                {videoLoading ? (
-                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
-                    <p style={{ marginTop: '10px', color: 'var(--text-muted)' }}>Đang tải danh sách video...</p>
-                  </div>
-                ) : allVideos.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <i className="fa-solid fa-film" style={{ fontSize: '2rem', marginBottom: '10px' }}></i>
-                    <p>Chưa có video nào được tải lên hệ thống.</p>
-                  </div>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Video ID</th>
-                        <th>User ID</th>
-                        <th>Nguồn Video / Tên File</th>
-                        <th>Độ dài (Giây)</th>
-                        <th>Ngôn ngữ</th>
-                        <th>Trạng thái</th>
-                        <th>Ngày tải</th>
-                        <th>Hành động</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allVideos.map((v: any) => (
-                        <tr key={v.videoId}>
-                          <td className="uuid" title={v.videoId}>#{v.videoId.substring(0, 8)}...</td>
-                          <td className="uuid" title={v.userId}>#{v.userId.substring(0, 8)}...</td>
-                          <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {v.originalUrl ? (
-                              <a href={v.originalUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                                {v.originalUrl}
-                              </a>
-                            ) : (
-                              v.filePath?.split('/').pop() || 'Video File'
-                            )}
-                          </td>
-                          <td>{Math.round(v.duration)}s</td>
-                          <td>{v.language.toUpperCase()}</td>
-                          <td>
-                            <span className={`status ${v.status === VideoStatus.DONE ? 'done' : v.status === VideoStatus.FAILED ? 'failed' : 'processing'}`}>
-                              {v.status === VideoStatus.DONE ? 'Hoàn tất' : v.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
-                            </span>
-                          </td>
-                          <td>{new Date(v.uploadedAt).toLocaleDateString('vi-VN')}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn-small" onClick={() => openVideoDetail(v)}>
-                                <i className="fa-solid fa-circle-info"></i> Chi tiết
-                              </button>
-                              <button className="btn-small danger" onClick={() => handleDeleteVideo(v.videoId)}>
-                                <i className="fa-regular fa-trash-can"></i> Xóa
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* TAB: SYSTEM JOBS MANAGEMENT */}
-        {activeTab === 'system-jobs' && (
-          <>
-            <div className="admin-header">
-              <h1>Quản Lý Toàn Bộ Tác Vụ (Jobs)</h1>
-            </div>
-            
-            <div className="admin-table-card">
-              <h3 className="admin-table-title">Danh sách tiến trình chạy ngầm (PostgreSQL `jobs` table)</h3>
-              <div className="admin-table-container">
-                {jobsLoading ? (
-                  <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)' }}></i>
-                    <p style={{ marginTop: '10px', color: 'var(--text-muted)' }}>Đang tải danh sách tác vụ...</p>
-                  </div>
-                ) : allJobs.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <i className="fa-solid fa-list-check" style={{ fontSize: '2rem', marginBottom: '10px' }}></i>
-                    <p>Chưa có tác vụ nào được chạy trên hệ thống.</p>
-                  </div>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Job ID</th>
-                        <th>Video ID</th>
-                        <th>Loại tác vụ</th>
-                        <th>Trạng thái</th>
-                        <th>Bắt đầu</th>
-                        <th>Hoàn thành</th>
-                        <th>Log lỗi</th>
-                        <th>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allJobs.map((j: any) => (
-                        <tr key={j.jobId}>
-                          <td className="uuid" title={j.jobId}>#{j.jobId.substring(0, 8)}...</td>
-                          <td className="uuid" title={j.videoId}>#{j.videoId.substring(0, 8)}...</td>
-                          <td>
-                            <span className="badge active" style={{ background: '#f3e8ff', color: '#6b21a8' }}>
-                              {j.jobType.toUpperCase()}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`status ${j.status === 'done' || j.status === 'completed' ? 'done' : j.status === 'failed' ? 'failed' : 'processing'}`}>
-                              {j.status === 'done' || j.status === 'completed' ? 'Hoàn tất' : j.status === 'failed' ? 'Lỗi' : 'Đang xử lý'}
-                            </span>
-                          </td>
-                          <td>{j.startedAt ? new Date(j.startedAt).toLocaleTimeString('vi-VN') : '-'}</td>
-                          <td>{j.completedAt ? new Date(j.completedAt).toLocaleTimeString('vi-VN') : '-'}</td>
-                          <td style={{ maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {j.errorLog ? (
-                              <span className="error-text" title={j.errorLog} style={{ color: '#ef4444', fontSize: '0.85rem' }}>
-                                {j.errorLog}
+                            </td>
+                            <td className="p-3">{Math.round(v.duration)}s</td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                v.status === VideoStatus.DONE ? 'bg-status-success/15 text-status-success' : v.status === VideoStatus.FAILED ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                              }`}>
+                                {v.status === VideoStatus.DONE ? 'Hoàn tất' : v.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
                               </span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>-</span>
-                            )}
+                            </td>
+                            <td className="p-3">
+                              <button onClick={() => openVideoDetail(v)} className="px-2 py-1 bg-surface-container-high rounded text-[10px] font-bold text-deep-navy border border-outline-variant hover:bg-outline-variant/30 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs">info</span> Chi tiết
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: AI METRICS PERFORMANCE */}
+          {activeTab === 'metrics' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Hiệu Suất &amp; Chất Lượng AI Pipeline</h1>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-1">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">Word Error Rate (ASR) <span className="material-symbols-outlined text-purple-600 text-sm">spellcheck</span></h3>
+                  <div className="text-2xl font-bold text-deep-navy">7.8%</div>
+                  <p className="text-[10px] text-secondary">Độ chính xác nhận diện từ</p>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-1">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">CLIP Keyframe F1 <span className="material-symbols-outlined text-vibrant-cyan text-sm">crop_free</span></h3>
+                  <div className="text-2xl font-bold text-deep-navy">0.52</div>
+                  <p className="text-[10px] text-secondary">Độ khớp so với giảng viên</p>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-1">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">LLM Latency (avg) <span className="material-symbols-outlined text-pink-500 text-sm">timer</span></h3>
+                  <div className="text-2xl font-bold text-deep-navy">1.4s</div>
+                  <p className="text-[10px] text-secondary">Thời gian phản hồi tóm tắt</p>
+                </div>
+                <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-1">
+                  <h3 className="text-xs text-secondary font-bold flex justify-between items-center">Tổng Chi Phí Token <span className="material-symbols-outlined text-status-success text-sm">payments</span></h3>
+                  <div className="text-2xl font-bold text-deep-navy">$12.45</div>
+                  <p className="text-[10px] text-secondary">Tháng hiện tại</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-6">
+                <h3 className="text-xs font-bold text-deep-navy">Đánh giá chi tiết các Mô hình</h3>
+                
+                <div className="space-y-4 text-xs">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold text-deep-navy">
+                      <span>WhisperX ASR (Nhận diện giọng nói)</span>
+                      <span>Độ chính xác: 92.2%</span>
+                    </div>
+                    <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+                      <div className="bg-purple-600 h-full rounded-full" style={{ width: '92.2%' }}></div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold text-deep-navy">
+                      <span>CLIP Keyframe (Cắt khung ảnh bài giảng)</span>
+                      <span>F1 Score: 85.0%</span>
+                    </div>
+                    <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+                      <div className="bg-vibrant-cyan h-full rounded-full" style={{ width: '85%' }}></div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold text-deep-navy">
+                      <span>Gemini 1.5 Flash (Tóm tắt RAG &amp; Hỏi đáp)</span>
+                      <span>Độ khớp ý kiến: 89.5%</span>
+                    </div>
+                    <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+                      <div className="bg-pink-500 h-full rounded-full" style={{ width: '89.5%' }}></div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between font-bold text-deep-navy">
+                      <span>Qwen 2.5 14B Local (Tóm tắt bài giảng)</span>
+                      <span>Độ khớp ý kiến: 81.2%</span>
+                    </div>
+                    <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+                      <div className="bg-deep-navy h-full rounded-full" style={{ width: '81.2%' }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: USER MANAGEMENT */}
+          {activeTab === 'users' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Quản Lý Thành Viên Hệ Thống</h1>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách thành viên đăng ký</h3>
+                <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                        <th className="p-3">Thành viên</th>
+                        <th className="p-3">Email</th>
+                        <th className="p-3">Quyền Hạn</th>
+                        <th className="p-3">Trạng thái</th>
+                        <th className="p-3">Ngày Đăng Ký</th>
+                        <th className="p-3">Hành Động</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map(u => (
+                        <tr key={u.id} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                          <td className="p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-deep-navy text-vibrant-cyan flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                                {u.email.charAt(0)}
+                              </div>
+                              <span className="font-semibold text-deep-navy">{u.email.split('@')[0]}</span>
+                            </div>
                           </td>
-                          <td>
-                            <button className="btn-small" onClick={() => openJobDetail(j)}>
-                              <i className="fa-solid fa-circle-info"></i> Chi tiết
-                            </button>
+                          <td className="p-3">{u.email}</td>
+                          <td className="p-3">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              u.role === 'ADMIN' ? 'bg-status-warning/15 text-status-warning border border-status-warning/20' : 'bg-secondary-container text-primary border border-outline-variant/30'
+                            }`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              u.active ? 'bg-status-success/15 text-status-success' : 'bg-error/15 text-error'
+                            }`}>
+                              {u.active ? 'Hoạt động' : 'Bị khóa'}
+                            </span>
+                          </td>
+                          <td className="p-3">{u.joined}</td>
+                          <td className="p-3">
+                            <div className="flex gap-2">
+                              <button onClick={() => toggleUserRole(u.id)} className="px-2 py-1 text-[10px] font-bold bg-white border border-outline-variant rounded hover:bg-surface-container-low text-deep-navy transition-all">
+                                Đổi Vai Trò
+                              </button>
+                              <button 
+                                onClick={() => toggleUserActive(u.id)} 
+                                className={`px-2 py-1 text-[10px] font-bold border rounded transition-all ${
+                                  u.active ? 'border-error/50 bg-error/10 hover:bg-error/20 text-error' : 'border-outline-variant hover:bg-surface-container-low text-deep-navy'
+                                }`}
+                              >
+                                {u.active ? 'Khóa' : 'Mở khóa'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: VIDEO STANDARD SETTINGS */}
+          {activeTab === 'videos' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Cấu Hình Tiêu Chuẩn Phân Tích Video</h1>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm">
+                <h3 className="text-xs font-bold text-deep-navy mb-4 pb-2 border-b border-outline-variant/30 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-vibrant-cyan text-base">settings_suggest</span> Giới hạn tải lên &amp; Xác thực video
+                </h3>
+                {standardsLoading ? (
+                  <div className="p-12 text-center text-secondary">
+                    <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
+                    <p className="text-xs mt-2">Đang tải cấu hình...</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveStandards} className="space-y-4 max-w-xl text-xs text-deep-navy">
+                    <div className="flex flex-col gap-1">
+                      <label className="font-bold">Thời lượng video tối đa (Giây)</label>
+                      <input 
+                        type="number" 
+                        value={maxDuration} 
+                        onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all"
+                        required
+                      />
+                      <span className="text-[10px] text-secondary">Mặc định là 3600 giây (1 giờ). Video dài hơn sẽ bị chặn.</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-bold">Các định dạng được cho phép (Dấu phẩy phân tách)</label>
+                      <input 
+                        type="text" 
+                        value={allowedFormats} 
+                        onChange={(e) => setAllowedFormats(e.target.value)}
+                        className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all"
+                        required
+                      />
+                      <span className="text-[10px] text-secondary">Ví dụ: mp4,avi,mkv,webm</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-bold">Dung lượng file tối đa (Megabytes)</label>
+                      <input 
+                        type="number" 
+                        value={maxFileSize} 
+                        onChange={(e) => setMaxFileSize(parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all"
+                        required
+                      />
+                      <span className="text-[10px] text-secondary">Giới hạn dung lượng tối đa cho mỗi lần tải video lên.</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-bold">Chất lượng âm thanh tối thiểu (SNR)</label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        value={minAudioQuality} 
+                        onChange={(e) => setMinAudioQuality(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all"
+                        required
+                      />
+                      <span className="text-[10px] text-secondary">Tỷ lệ Tín hiệu trên Nhiễu (SNR) tối thiểu. Để 0.0 để không kiểm tra.</span>
+                    </div>
+
+                    {standardsMsg && (
+                      <div className={`text-xs font-semibold flex items-center gap-1.5 ${
+                        standardsMsg.type === 'success' ? 'text-status-success' : 'text-error'
+                      }`}>
+                        <span className="material-symbols-outlined text-sm">
+                          {standardsMsg.type === 'success' ? 'check_circle' : 'warning'}
+                        </span>
+                        {standardsMsg.text}
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      <button type="submit" className="px-5 py-2.5 bg-vibrant-cyan hover:brightness-110 text-deep-navy font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-98">
+                        <span className="material-symbols-outlined text-base">save</span> Lưu cấu hình vào DB
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
             </div>
-          </>
-        )}
+          )}
+
+          {/* TAB 5: CELERY JOB QUEUE */}
+          {activeTab === 'celery' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Hệ Thống Hàng Đợi Celery Job Queue</h1>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-outline-variant/30 text-xs">
+                  <h3 className="font-bold text-deep-navy">Các tiến trình AI đang hoạt động trong hàng đợi</h3>
+                  <span className="px-3 py-1 bg-status-success/15 text-status-success border border-status-success/20 rounded-full font-bold">Celery Worker: Active (1)</span>
+                </div>
+                
+                <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
+                  {queueLoading ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
+                      <p className="text-xs mt-2">Đang đồng bộ hàng đợi...</p>
+                    </div>
+                  ) : queueJobs.length === 0 ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-3xl">queue_play_next</span>
+                      <p className="text-xs mt-2">Hiện không có job nào đang chạy hoặc bị lỗi.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">Nguồn Video</th>
+                          <th className="p-3">Ngôn Ngữ</th>
+                          <th className="p-3">Trạng Thái Pipeline</th>
+                          <th className="p-3">Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {queueJobs.map(job => (
+                          <tr key={job.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                            <td className="p-3 font-mono-data text-[10px]">#{job.videoId.substring(0, 8)}...</td>
+                            <td className="p-3 truncate max-w-[200px]" title={job.originalUrl || job.filePath}>
+                              {job.originalUrl ? (
+                                <a href={job.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
+                                  Youtube Link
+                                </a>
+                              ) : (
+                                `File: ${job.filePath?.split('/').pop() || 'uploaded_video.mp4'}`
+                              )}
+                            </td>
+                            <td className="p-3 font-semibold">{job.language.toUpperCase()}</td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                job.status === VideoStatus.DONE ? 'bg-status-success/15 text-status-success' : job.status === VideoStatus.FAILED ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                              }`}>
+                                {job.status === VideoStatus.DONE ? 'Hoàn tất' : job.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex gap-2">
+                                <button onClick={() => openJobDetail(job)} className="px-2 py-1 text-[10px] bg-surface-container-high rounded border border-outline-variant font-bold hover:bg-outline-variant/30 text-deep-navy">Xem chi tiết</button>
+                                {job.status !== VideoStatus.DONE && job.status !== VideoStatus.FAILED && (
+                                  <button className="px-2 py-1 text-[10px] border border-error/50 bg-error/10 hover:bg-error/20 text-error rounded font-bold">Dừng</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: SYSTEM VIDEOS MANAGEMENT */}
+          {activeTab === 'system-videos' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Quản Lý Toàn Bộ Video Hệ Thống</h1>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách Video đã tải lên (PostgreSQL `videos` table)</h3>
+                <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
+                  {videoLoading ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
+                      <p className="text-xs mt-2">Đang tải danh sách video...</p>
+                    </div>
+                  ) : allVideos.length === 0 ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-3xl">movie</span>
+                      <p className="text-xs mt-2">Chưa có video nào được tải lên hệ thống.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">User ID</th>
+                          <th className="p-3">Nguồn Video / Tên File</th>
+                          <th className="p-3">Độ dài (Giây)</th>
+                          <th className="p-3">Ngôn ngữ</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Ngày tải</th>
+                          <th className="p-3">Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allVideos.map((v: any) => (
+                          <tr key={v.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                            <td className="p-3 font-mono-data text-[10px]" title={v.videoId}>#{v.videoId.substring(0, 8)}...</td>
+                            <td className="p-3 font-mono-data text-[10px]" title={v.userId}>#{v.userId.substring(0, 8)}...</td>
+                            <td className="p-3 truncate max-w-[150px]">
+                              {v.originalUrl ? (
+                                <a href={v.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
+                                  {v.originalUrl}
+                                </a>
+                              ) : (
+                                v.filePath?.split('/').pop() || 'Video File'
+                              )}
+                            </td>
+                            <td className="p-3">{Math.round(v.duration)}s</td>
+                            <td className="p-3 font-semibold">{v.language.toUpperCase()}</td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                v.status === VideoStatus.DONE ? 'bg-status-success/15 text-status-success' : v.status === VideoStatus.FAILED ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                              }`}>
+                                {v.status === VideoStatus.DONE ? 'Hoàn tất' : v.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
+                              </span>
+                            </td>
+                            <td className="p-3">{new Date(v.uploadedAt).toLocaleDateString('vi-VN')}</td>
+                            <td className="p-3">
+                              <div className="flex gap-2">
+                                <button onClick={() => openVideoDetail(v)} className="px-2 py-1 text-[10px] bg-surface-container-high rounded border border-outline-variant font-bold hover:bg-outline-variant/30 text-deep-navy flex items-center gap-0.5">
+                                  <span className="material-symbols-outlined text-xs">info</span> Chi tiết
+                                </button>
+                                <button onClick={() => handleDeleteVideo(v.videoId)} className="px-2 py-1 text-[10px] border border-error/50 bg-error/10 hover:bg-error/20 text-error rounded font-bold flex items-center gap-0.5">
+                                  <span className="material-symbols-outlined text-xs">delete_outline</span> Xóa
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: SYSTEM JOBS MANAGEMENT */}
+          {activeTab === 'system-jobs' && (
+            <div className="space-y-6">
+              <h1 className="font-headline-xl text-xl font-bold text-deep-navy">Quản Lý Toàn Bộ Tác Vụ (Jobs)</h1>
+              
+              <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách tiến trình chạy ngầm (PostgreSQL `jobs` table)</h3>
+                <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
+                  {jobsLoading ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
+                      <p className="text-xs mt-2">Đang tải danh sách tác vụ...</p>
+                    </div>
+                  ) : allJobs.length === 0 ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-3xl">task</span>
+                      <p className="text-xs mt-2">Chưa có tác vụ nào được chạy trên hệ thống.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Job ID</th>
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">Loại tác vụ</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Bắt đầu</th>
+                          <th className="p-3">Hoàn thành</th>
+                          <th className="p-3">Log lỗi</th>
+                          <th className="p-3">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allJobs.map((j: any) => (
+                          <tr key={j.jobId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                            <td className="p-3 font-mono-data text-[10px]" title={j.jobId}>#{j.jobId.substring(0, 8)}...</td>
+                            <td className="p-3 font-mono-data text-[10px]" title={j.videoId}>#{j.videoId.substring(0, 8)}...</td>
+                            <td className="p-3">
+                              <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-800 font-bold rounded text-[9px] uppercase tracking-wider">
+                                {j.jobType.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                j.status === 'done' || j.status === 'completed' ? 'bg-status-success/15 text-status-success' : j.status === 'failed' ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                              }`}>
+                                {j.status === 'done' || j.status === 'completed' ? 'Hoàn tất' : j.status === 'failed' ? 'Lỗi' : 'Đang xử lý'}
+                              </span>
+                            </td>
+                            <td className="p-3">{j.startedAt ? new Date(j.startedAt).toLocaleTimeString('vi-VN') : '-'}</td>
+                            <td className="p-3">{j.completedAt ? new Date(j.completedAt).toLocaleTimeString('vi-VN') : '-'}</td>
+                            <td className="p-3 truncate max-w-[150px]" title={j.errorLog}>
+                              {j.errorLog ? (
+                                <span className="text-error font-semibold">{j.errorLog}</span>
+                              ) : (
+                                <span className="text-secondary">-</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <button onClick={() => openJobDetail(j)} className="px-2 py-1 text-[10px] bg-surface-container-high rounded border border-outline-variant font-bold hover:bg-outline-variant/30 text-deep-navy flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-xs">info</span> Chi tiết
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
 
       {/* Video Detail Modal */}
       {videoModalOpen && selectedVideo && (
-        <div className="admin-modal-overlay" onClick={() => setVideoModalOpen(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <h2>Chi Tiết Video Hệ Thống</h2>
-              <button className="admin-modal-close" onClick={() => setVideoModalOpen(false)}>&times;</button>
+        <div onClick={() => setVideoModalOpen(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl bg-white border border-outline-variant rounded-2xl shadow-xl flex flex-col max-h-[90vh] overflow-hidden text-xs">
+            <div className="flex justify-between items-center p-4 border-b border-outline-variant shrink-0 bg-surface">
+              <h2 className="text-sm font-bold text-deep-navy">Chi Tiết Video Hệ Thống</h2>
+              <button onClick={() => setVideoModalOpen(false)} className="text-secondary hover:text-primary text-xl shrink-0 font-bold leading-none">&times;</button>
             </div>
             
-            <div className="admin-modal-body">
-              <div className="detail-grid">
-                <div className="detail-item">
-                  <span className="detail-label">Video ID:</span>
-                  <span className="detail-val uuid">{selectedVideo.videoId}</span>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar text-deep-navy">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Video ID:</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedVideo.videoId}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">User ID (Sở hữu):</span>
-                  <span className="detail-val uuid">{selectedVideo.userId}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">User ID (Sở hữu):</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedVideo.userId}</span>
                 </div>
-                <div className="detail-item" style={{ gridColumn: 'span 2' }}>
-                  <span className="detail-label">Nguồn Video / URL:</span>
-                  <span className="detail-val">
+                <div className="flex flex-col gap-0.5 sm:col-span-2">
+                  <span className="text-secondary font-bold">Nguồn Video / URL:</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded break-all">
                     {selectedVideo.originalUrl ? (
-                      <a href={selectedVideo.originalUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                      <a href={selectedVideo.originalUrl} target="_blank" rel="noreferrer" className="text-vibrant-cyan hover:underline">
                         {selectedVideo.originalUrl}
                       </a>
                     ) : (
@@ -991,52 +1076,58 @@ export const AdminPage: React.FC = () => {
                     )}
                   </span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Thời lượng:</span>
-                  <span className="detail-val">{Math.round(selectedVideo.duration)}s (~{Math.round(selectedVideo.duration / 60)} phút)</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Thời lượng:</span>
+                  <span className="font-semibold">{Math.round(selectedVideo.duration)}s (~{Math.round(selectedVideo.duration / 60)} phút)</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Ngôn ngữ:</span>
-                  <span className="detail-val">{selectedVideo.language.toUpperCase()}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Ngôn ngữ:</span>
+                  <span className="font-semibold uppercase">{selectedVideo.language}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Trạng thái:</span>
-                  <span className={`status ${selectedVideo.status?.toLowerCase() === 'done' ? 'done' : selectedVideo.status?.toLowerCase() === 'failed' ? 'failed' : 'processing'}`}>
-                    {selectedVideo.status?.toLowerCase() === 'done' ? 'Hoàn tất' : selectedVideo.status?.toLowerCase() === 'failed' ? 'Lỗi' : 'Đang xử lý'}
-                  </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Trạng thái:</span>
+                  <div>
+                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      selectedVideo.status?.toLowerCase() === 'done' ? 'bg-status-success/15 text-status-success' : selectedVideo.status?.toLowerCase() === 'failed' ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                    }`}>
+                      {selectedVideo.status?.toLowerCase() === 'done' ? 'Hoàn tất' : selectedVideo.status?.toLowerCase() === 'failed' ? 'Lỗi' : 'Đang xử lý'}
+                    </span>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Ngày tải lên:</span>
-                  <span className="detail-val">{new Date(selectedVideo.uploadedAt).toLocaleString('vi-VN')}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Ngày tải lên:</span>
+                  <span className="font-semibold">{new Date(selectedVideo.uploadedAt).toLocaleString('vi-VN')}</span>
                 </div>
               </div>
 
               {loadingSummary && (
-                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '1.5rem', color: 'var(--primary)', marginRight: '8px' }}></i>
-                  Đang tải tóm tắt & phân tích AI...
+                <div className="p-8 text-center text-secondary">
+                  <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan mr-2">autorenew</span>
+                  Đang tải tóm tắt &amp; phân tích AI...
                 </div>
               )}
 
               {!loadingSummary && videoSummary && (
-                <div className="modal-summary-section" style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '10px' }}>Tóm Tắt Toàn Văn (AI Summary)</h3>
-                  <div className="summary-text-box" style={{ background: 'var(--bg-secondary)', padding: '15px', borderRadius: '8px', fontSize: '0.95rem', lineHeight: '1.6', margin: '10px 0', border: '1px solid var(--border)', color: 'var(--text-main)' }}>
-                    {videoSummary.summaryText}
+                <div className="pt-4 border-t border-outline-variant space-y-4">
+                  <div>
+                    <h3 className="font-bold text-deep-navy mb-2 text-xs">Tóm Tắt Toàn Văn (AI Summary)</h3>
+                    <div className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-xl text-secondary leading-relaxed max-h-40 overflow-y-auto custom-scrollbar">
+                      {videoSummary.summaryText}
+                    </div>
                   </div>
 
                   {videoSummary.chaptersJson && videoSummary.chaptersJson.length > 0 && (
-                    <div style={{ marginTop: '20px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '10px' }}>Phân Chia Chương Bài Giảng ({videoSummary.chaptersJson.length})</h3>
-                      <div className="chapters-list" style={{ marginTop: '10px' }}>
+                    <div>
+                      <h3 className="font-bold text-deep-navy mb-2 text-xs">Phân Chia Chương Bài Giảng ({videoSummary.chaptersJson.length})</h3>
+                      <div className="space-y-2 max-h-44 overflow-y-auto custom-scrollbar">
                         {videoSummary.chaptersJson.map((ch: any, idx: number) => (
-                          <div key={idx} className="chapter-row" style={{ display: 'flex', gap: '15px', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                            <span style={{ fontWeight: 'bold', color: 'var(--primary)', minWidth: '90px' }}>
-                              {Math.floor(ch.startTime / 60)}:{(ch.startTime % 60).toString().padStart(2, '0')} - {Math.floor(ch.endTime / 60)}:{(ch.endTime % 60).toString().padStart(2, '0')}
+                          <div key={idx} className="flex gap-4 p-2.5 border-b border-outline-variant/30 last:border-0">
+                            <span className="font-bold text-vibrant-cyan shrink-0 font-mono-data text-[10px] w-24">
+                              {formatTime(ch.startTime)} - {formatTime(ch.endTime)}
                             </span>
                             <div>
-                              <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{ch.title}</div>
-                              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>{ch.summary}</div>
+                              <div className="font-bold text-deep-navy">{ch.title}</div>
+                              <div className="text-[10px] text-secondary mt-1">{ch.summary}</div>
                             </div>
                           </div>
                         ))}
@@ -1045,16 +1136,16 @@ export const AdminPage: React.FC = () => {
                   )}
 
                   {videoSummary.keyframesJson && videoSummary.keyframesJson.length > 0 && (
-                    <div style={{ marginTop: '20px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '10px' }}>Slide Ảnh Keyframe Quan Trọng ({videoSummary.keyframesJson.length})</h3>
-                      <div className="keyframes-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px', marginTop: '10px' }}>
+                    <div>
+                      <h3 className="font-bold text-deep-navy mb-2 text-xs">Slide Ảnh Keyframe Quan Trọng ({videoSummary.keyframesJson.length})</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-44 overflow-y-auto p-1 custom-scrollbar">
                         {videoSummary.keyframesJson.map((kf: any, idx: number) => (
-                          <div key={idx} className="keyframe-card" style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-secondary)' }}>
-                            <img src={`${CONFIG.API_BASE_URL.replace('/api/v1', '')}${kf.imageUrl}`} alt={kf.description} style={{ width: '100%', height: '100px', objectFit: 'cover' }} />
-                            <div style={{ padding: '8px', fontSize: '0.8rem' }}>
-                              <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>Mốc: {Math.floor(kf.timestamp / 60)}:{(kf.timestamp % 60).toString().padStart(2, '0')}</div>
-                              <div style={{ color: 'var(--text-muted)', marginTop: '4px', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={kf.description}>{kf.description}</div>
-                              <div style={{ color: '#10b981', fontSize: '0.75rem', fontWeight: 'bold', marginTop: '4px' }}>Điểm: {Math.round(kf.importanceScore * 100)}%</div>
+                          <div key={idx} className="border border-outline-variant rounded-xl overflow-hidden bg-background">
+                            <img src={`${CONFIG.API_BASE_URL.replace('/api/v1', '')}${kf.imageUrl}`} alt={kf.description} className="w-full h-20 object-cover" />
+                            <div className="p-2 space-y-1">
+                              <div className="font-bold text-vibrant-cyan text-[10px]">Mốc: {formatTime(kf.timestamp)}</div>
+                              <div className="text-[10px] text-secondary truncate" title={kf.description}>{kf.description}</div>
+                              <div className="text-status-success text-[10px] font-bold">CLIP: {Math.round(kf.importanceScore * 100)}%</div>
                             </div>
                           </div>
                         ))}
@@ -1065,19 +1156,19 @@ export const AdminPage: React.FC = () => {
               )}
 
               {!loadingSummary && !videoSummary && selectedVideo.status?.toLowerCase() === 'done' && (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#ef4444' }}>
-                  <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '8px' }}></i>
+                <div className="p-4 text-center text-error font-semibold">
+                  <span className="material-symbols-outlined text-sm mr-1">warning</span>
                   Không tìm thấy tóm tắt cho video này.
                 </div>
               )}
             </div>
             
-            <div className="admin-modal-footer">
-              <button className="btn" onClick={() => setVideoModalOpen(false)}>Đóng</button>
+            <div className="flex justify-end gap-2 p-4 border-t border-outline-variant shrink-0 bg-surface">
+              <button onClick={() => setVideoModalOpen(false)} className="px-4 py-2 border border-outline-variant hover:bg-surface-container-high rounded-lg font-bold transition-all text-deep-navy">Đóng</button>
               {selectedVideo.status?.toLowerCase() === 'done' && (
-                <a href={`#/video/${selectedVideo.videoId}`} className="btn primary" onClick={() => setVideoModalOpen(false)} style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  <i className="fa-regular fa-eye"></i> Xem Trang Client
-                </a>
+                <Link to={`/results?videoId=${selectedVideo.videoId}`} onClick={() => setVideoModalOpen(false)} className="px-4 py-2 bg-deep-navy text-white rounded-lg hover:opacity-90 font-bold transition-all flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">visibility</span> Xem Trang Client
+                </Link>
               )}
             </div>
           </div>
@@ -1086,58 +1177,64 @@ export const AdminPage: React.FC = () => {
 
       {/* Job Detail Modal */}
       {jobModalOpen && selectedJob && (
-        <div className="admin-modal-overlay" onClick={() => setJobModalOpen(false)}>
-          <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <h2>Chi Tiết Tác Vụ Celery</h2>
-              <button className="admin-modal-close" onClick={() => setJobModalOpen(false)}>&times;</button>
+        <div onClick={() => setJobModalOpen(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xl bg-white border border-outline-variant rounded-2xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden text-xs">
+            <div className="flex justify-between items-center p-4 border-b border-outline-variant shrink-0 bg-surface">
+              <h2 className="text-sm font-bold text-deep-navy">Chi Tiết Tác Vụ Celery</h2>
+              <button onClick={() => setJobModalOpen(false)} className="text-secondary hover:text-primary text-xl font-bold leading-none shrink-0">&times;</button>
             </div>
             
-            <div className="admin-modal-body">
-              <div className="detail-grid">
-                <div className="detail-item">
-                  <span className="detail-label">Job ID (Tác vụ):</span>
-                  <span className="detail-val uuid">{selectedJob.jobId}</span>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar text-deep-navy">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Job ID (Tác vụ):</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.jobId}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Video ID liên quan:</span>
-                  <span className="detail-val uuid">{selectedJob.videoId}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Video ID liên quan:</span>
+                  <span className="font-mono-data text-[10px] bg-surface-container-low px-2 py-1 border border-outline-variant/30 rounded">{selectedJob.videoId}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Loại tác vụ:</span>
-                  <span className="detail-val badge" style={{ background: '#f3e8ff', color: '#6b21a8', display: 'inline-block' }}>
-                    {selectedJob.jobType.toUpperCase()}
-                  </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Loại tác vụ:</span>
+                  <div>
+                    <span className="inline-block px-2.5 py-0.5 bg-purple-100 text-purple-800 font-bold rounded text-[9px] uppercase tracking-wider">
+                      {selectedJob.jobType.toUpperCase()}
+                    </span>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Trạng thái:</span>
-                  <span className={`status ${selectedJob.status === 'done' || selectedJob.status === 'completed' ? 'done' : selectedJob.status === 'failed' ? 'failed' : 'processing'}`}>
-                    {selectedJob.status === 'done' || selectedJob.status === 'completed' ? 'Hoàn tất' : selectedJob.status === 'failed' ? 'Lỗi' : 'Đang xử lý'}
-                  </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Trạng thái:</span>
+                  <div>
+                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      selectedJob.status === 'done' || selectedJob.status === 'completed' ? 'bg-status-success/15 text-status-success' : selectedJob.status === 'failed' ? 'bg-error/15 text-error' : 'bg-status-warning/15 text-status-warning'
+                    }`}>
+                      {selectedJob.status === 'done' || selectedJob.status === 'completed' ? 'Hoàn tất' : selectedJob.status === 'failed' ? 'Lỗi' : 'Đang xử lý'}
+                    </span>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Thời gian bắt đầu:</span>
-                  <span className="detail-val">{selectedJob.startedAt ? new Date(selectedJob.startedAt).toLocaleString('vi-VN') : '-'}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Thời gian bắt đầu:</span>
+                  <span className="font-semibold">{selectedJob.startedAt ? new Date(selectedJob.startedAt).toLocaleString('vi-VN') : '-'}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Thời gian hoàn thành:</span>
-                  <span className="detail-val">{selectedJob.completedAt ? new Date(selectedJob.completedAt).toLocaleString('vi-VN') : '-'}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-secondary font-bold">Thời gian hoàn thành:</span>
+                  <span className="font-semibold">{selectedJob.completedAt ? new Date(selectedJob.completedAt).toLocaleString('vi-VN') : '-'}</span>
                 </div>
               </div>
 
               {selectedJob.errorLog && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-                  <h3 style={{ color: '#ef4444', fontSize: '1.1rem', fontWeight: '700' }}>Nhật ký báo lỗi (Error Log / Traceback)</h3>
-                  <pre style={{ background: '#fef2f2', color: '#b91c1c', padding: '15px', borderRadius: '8px', overflowX: 'auto', fontSize: '0.85rem', whiteSpace: 'pre-wrap', border: '1px solid #fee2e2', marginTop: '10px' }}>
+                <div className="pt-4 border-t border-outline-variant space-y-2">
+                  <h3 className="text-error font-bold text-xs">Nhật ký báo lỗi (Error Log / Traceback)</h3>
+                  <pre className="bg-error/5 text-error border border-error/20 p-4 rounded-xl text-[10px] font-mono-data overflow-x-auto whitespace-pre-wrap leading-relaxed">
                     {selectedJob.errorLog}
                   </pre>
                 </div>
               )}
               
               {!selectedJob.errorLog && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-                  <h3 style={{ color: '#10b981', fontSize: '1.1rem', fontWeight: '700' }}>Nhật ký tiến trình (System Log)</h3>
-                  <pre style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '15px', borderRadius: '8px', overflowX: 'auto', fontSize: '0.85rem', whiteSpace: 'pre-wrap', border: '1px solid var(--border)', marginTop: '10px' }}>
+                <div className="pt-4 border-t border-outline-variant space-y-2">
+                  <h3 className="text-status-success font-bold text-xs">Nhật ký tiến trình (System Log)</h3>
+                  <pre className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-xl text-[10px] font-mono-data overflow-x-auto whitespace-pre-wrap leading-relaxed text-secondary">
                     [INFO] {new Date(selectedJob.startedAt).toISOString()} - Khởi chạy pipeline phân tích đa phương tiện cho Video {selectedJob.videoId}.
                     {"\n"}[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...
                     {selectedJob.completedAt && (
@@ -1155,14 +1252,12 @@ export const AdminPage: React.FC = () => {
               )}
             </div>
             
-            <div className="admin-modal-footer">
-              <button className="btn" onClick={() => setJobModalOpen(false)}>Đóng</button>
+            <div className="flex justify-end p-4 border-t border-outline-variant shrink-0 bg-surface">
+              <button onClick={() => setJobModalOpen(false)} className="px-4 py-2 border border-outline-variant hover:bg-surface-container-high rounded-lg font-bold transition-all text-deep-navy">Đóng</button>
             </div>
           </div>
         </div>
       )}
-
-      </div>
     </div>
   );
 };

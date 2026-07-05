@@ -1,9 +1,43 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import Field, HttpUrl
 from app.schemas.base import CamelModel
 from app.core.constants import VideoStatus
+
+
+class VideoMetadataBase(CamelModel):
+    fps: float = Field(..., description="Frames per second of the video")
+    frame_count: int = Field(..., description="Total frame count of the video")
+    width: int = Field(..., description="Width of the video in pixels")
+    height: int = Field(..., description="Height of the video in pixels")
+    video_source: str = Field(..., description="Source of the video (e.g. youtube)")
+    video_path: str = Field(..., description="Original video file path/key")
+
+
+class VideoMetadataDTO(VideoMetadataBase):
+    video_id: uuid.UUID = Field(
+        ..., description="The unique UUID of the video this metadata belongs to"
+    )
+
+
+class VideoSceneBase(CamelModel):
+    scene_index: int = Field(..., description="Sequence number of the scene (1-indexed)")
+    start_seconds: float = Field(..., description="Scene start time in seconds")
+    end_seconds: float = Field(..., description="Scene end time in seconds")
+    start_timecode: str = Field(..., description="Scene start timecode (HH:MM:SS.mmm)")
+    end_timecode: str = Field(..., description="Scene end timecode (HH:MM:SS.mmm)")
+    start_frame: int = Field(..., description="Scene start frame number")
+    end_frame: int = Field(..., description="Scene end frame number")
+    keyframe_path: str = Field(..., description="Storage key/path of the keyframe image")
+    keyframe_url: str = Field(..., description="Publicly accessible URL of the keyframe image")
+    caption: str = Field(..., description="AI description of the keyframe slide/image")
+    script: Optional[str] = Field(None, description="The transcribed script text of this scene")
+
+
+class VideoSceneDTO(VideoSceneBase):
+    scene_id: uuid.UUID = Field(..., description="The unique UUID of this scene")
+    video_id: uuid.UUID = Field(..., description="The unique UUID of the video this scene belongs to")
 
 
 class VideoBase(CamelModel):
@@ -43,6 +77,12 @@ class VideoDTO(VideoBase):
     )
     uploaded_at: datetime = Field(
         ..., description="The timestamp when the video was uploaded"
+    )
+    video_metadata: Optional[VideoMetadataDTO] = Field(
+        None, description="The detailed video dimensions and source info"
+    )
+    scenes: Optional[List[VideoSceneDTO]] = Field(
+        None, description="The detected scenes list with keyframes and scripts"
     )
 
 

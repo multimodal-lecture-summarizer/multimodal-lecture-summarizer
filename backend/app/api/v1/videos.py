@@ -9,10 +9,10 @@ from app.core.exceptions import NotFoundException, ValidationException, Forbidde
 from app.core.config import settings
 from app.core.constants import VideoStatus, JobType, JobStatus, UserRole
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase
+from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase, VideoMetadataDTO, VideoSceneDTO
 from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
-from app.models.video import Video, VideoStandard
+from app.models.video import Video, VideoStandard, VideoMetadata, VideoScene
 from app.models.job import Job
 from app.models.summary import Summary
 from app.services.r2 import r2_service
@@ -408,6 +408,73 @@ def get_video(
         success=True,
         data=VideoDTO.model_validate(video),
         message="Video details retrieved successfully",
+    )
+
+
+@router.get(
+    "/{video_id}/metadata",
+    response_model=BaseDTO[VideoMetadataDTO],
+    summary="Get video metadata details",
+    description="Retrieves the technical metadata dimensions, FPS, and frame count of a video.",
+)
+def get_video_metadata(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retrieve video metadata."""
+    # Check that video exists and belongs to current user
+    video = (
+        db.query(Video)
+        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
+        .first()
+    )
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    metadata = db.query(VideoMetadata).filter(VideoMetadata.video_id == video_id).first()
+    if not metadata:
+        raise NotFoundException(message=f"Metadata for video {video_id} not found")
+
+    return BaseDTO(
+        success=True,
+        data=VideoMetadataDTO.model_validate(metadata),
+        message="Video metadata retrieved successfully",
+    )
+
+
+@router.get(
+    "/{video_id}/scenes",
+    response_model=BaseDTO[List[VideoSceneDTO]],
+    summary="Get video scenes list",
+    description="Retrieves the segmented list of scenes with timestamps, keyframe images, and transcripts.",
+)
+def get_video_scenes(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retrieve video scenes."""
+    # Check that video exists and belongs to current user
+    video = (
+        db.query(Video)
+        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
+        .first()
+    )
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    scenes = (
+        db.query(VideoScene)
+        .filter(VideoScene.video_id == video_id)
+        .order_by(VideoScene.scene_index.asc())
+        .all()
+    )
+
+    return BaseDTO(
+        success=True,
+        data=[VideoSceneDTO.model_validate(s) for s in scenes],
+        message="Video scenes retrieved successfully",
     )
 
 
