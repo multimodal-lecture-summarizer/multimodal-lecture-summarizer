@@ -1313,7 +1313,7 @@ export const AdminPage: React.FC = () => {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-44 overflow-y-auto p-1 custom-scrollbar">
                         {videoSummary.keyframesJson.map((kf: any, idx: number) => (
                           <div key={idx} className="border border-outline-variant rounded-xl overflow-hidden bg-background">
-                            <img src={`${CONFIG.API_BASE_URL.replace('/api/v1', '')}${kf.imageUrl}`} alt={kf.description} className="w-full h-20 object-cover" />
+                            <img src={kf.imageUrl?.startsWith('http') ? kf.imageUrl : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${kf.imageUrl}`} alt={kf.description} className="w-full h-20 object-cover" />
                             <div className="p-2 space-y-1">
                               <div className="font-bold text-vibrant-cyan text-[10px]">Mốc: {formatTime(kf.timestamp)}</div>
                               <div className="text-[10px] text-secondary truncate" title={kf.description}>{kf.description}</div>

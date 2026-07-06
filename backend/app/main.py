@@ -56,7 +56,9 @@ async def lifespan(app: FastAPI):
     initialize_database_data()
 
     # Create mock storage directory for video and keyframe static files serving
-    mock_dir = os.path.join(os.getcwd(), "storage", "mock_r2_bucket", "keyframes")
+    # The storage folder is in the project root, one level up from the backend directory
+    project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+    mock_dir = os.path.join(project_root, "storage", "mock_r2_bucket", "keyframes")
     if not os.path.exists(mock_dir):
         os.makedirs(mock_dir, exist_ok=True)
 
@@ -135,7 +137,9 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # Mount local mock static directory to serve mock R2 keyframes images
-mock_storage_path = os.path.join(os.getcwd(), "storage", "mock_r2_bucket")
+# The storage folder is in the project root, one level up from the backend directory
+project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
+mock_storage_path = os.path.join(project_root, "storage", "mock_r2_bucket")
 if not os.path.exists(mock_storage_path):
     os.makedirs(mock_storage_path, exist_ok=True)
 app.mount("/static/mock_r2", StaticFiles(directory=mock_storage_path), name="mock_r2")

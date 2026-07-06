@@ -50,26 +50,53 @@ class Summarizer:
         Returns:
             Structured summary with chapters.
         """
-        transcript = " ".join([u.get("text", "") for u in utterances])
-        if not transcript.strip():
+        # Convert seconds to MM:SS format for better LLM context
+        def format_time(secs: float) -> str:
+            m = int(secs) // 60
+            s = int(secs) % 60
+            return f"{m:02d}:{s:02d}"
+
+        transcript_lines = []
+        for u in utterances:
+            start_ts = format_time(u.get("start", 0))
+            text = u.get("text", "").strip()
+            if text:
+                transcript_lines.append(f"[{start_ts}] {text}")
+        
+        transcript = "\n".join(transcript_lines)
+        
+        # Calculate max duration
+        duration = utterances[-1]["end"] if utterances else (slides[-1]["end_seconds"] if slides else 0.0)
+        formatted_duration = format_time(duration)
+        # Format visual descriptions from slides
+        visual_descriptions = []
+        for slide in slides:
+            timecode = slide.get("start_timecode", "00:00:00")
+            caption = slide.get("caption", "").strip()
+            if caption and caption != "[Nhạc nền / Im lặng]":
+                visual_descriptions.append(f"[{timecode}] {caption}")
+        visual_text = "\n".join(visual_descriptions)
+
+        # Bail out only if BOTH transcript and visual data are empty
+        if not transcript.strip() and not visual_text.strip():
             return {
-                "video_title": "Video bài giảng không có nội dung thoại",
-                "summary": "No lecture content to summarize.",
+                "video_title": "Video không có nội dung để tóm tắt",
+                "summary": "No content (audio or visual) to summarize.",
                 "chapters": []
             }
 
         # Fallback if API key is not configured
         if not self.api_key:
-            duration = utterances[-1]["end"] if utterances else 10.0
+            duration = utterances[-1]["end"] if utterances else (slides[-1]["end_seconds"] if slides else 10.0)
             return {
-                "video_title": "Bài giảng chưa đặt tên (Chưa cấu hình API Key)",
-                "summary": "Lecture Summary\n\nLecture transcribed successfully. Please configure GROQ_API_KEY in the .env file to generate a detailed AI summary.",
+                "video_title": "Video chưa đặt tên (Chưa cấu hình API Key)",
+                "summary": "Nội dung video đã được trích xuất thành công. Vui lòng cấu hình GROQ_API_KEY trong file .env để tạo tóm tắt AI chi tiết.",
                 "chapters": [
                     {
-                        "title": "Main Lecture Content",
+                        "title": "Nội dung chính",
                         "startTime": 0.0,
                         "endTime": duration,
-                        "summary": "Summary of the content spoken throughout the lecture."
+                        "summary": "Tổng hợp nội dung xuyên suốt video."
                     }
                 ],
                 "model_used": "None"
@@ -82,22 +109,31 @@ class Summarizer:
         )
 
         prompt = f"""
-        You are a professional AI assistant tasked with summarizing lecture videos.
-        Analyze the following transcript to:
-        1. Create a detailed lecture summary in plain text format (do NOT use markdown syntax like #, ##, **, -, *, etc. Use standard paragraphs and clear spacing, around 300-500 words).
-        2. Automatically generate a concise, academic title for this lecture video (video_title - a short string of 5-10 words, in the same language as the transcript).
-        3. Automatically divide the lecture into logical chapters according to timestamps. Each chapter must contain:
+        You are a professional AI assistant tasked with summarizing lecture or informational videos.
+        Analyze the following audio transcript AND visual keyframe descriptions to:
+        1. Create a detailed video summary in plain text format (do NOT use markdown syntax like #, ##, **, -, *, etc. Use standard paragraphs and clear spacing, around 300-500 words).
+        2. Automatically generate a concise, descriptive title for this video (video_title - a short string of 5-10 words, in the same language as the content).
+        3. Automatically divide the video into logical chapters according to timestamps. Each chapter must contain:
            - Chapter title (title)
            - Start time (startTime - in seconds, as float/int)
            - End time (endTime - in seconds, as float/int)
            - Brief chapter summary (summary - about 1-2 sentences)
 
-        Lecture Transcript:
-        {transcript}
+        CRITICAL CONSTRAINTS FOR CHAPTERS:
+        - The total duration of this video is {duration} seconds ({formatted_duration}).
+        - You MUST NOT generate any chapters with an endTime greater than {duration}.
+        - The last chapter's endTime MUST be exactly {duration}.
+        - Base your chapters strictly on the timestamps provided in the transcript and visual context. Do not invent non-existent topics for silent parts (e.g. [Nhạc nền / Im lặng]).
+
+        Audio Transcript (with timestamps):
+        {transcript if transcript.strip() else "[No speech detected]"}
+
+        Visual Context (Descriptions of key scenes at specific timestamps):
+        {visual_text if visual_text else "[No visual descriptions available]"}
 
         Please return the result in the following STRICT JSON format (with no other explanations outside the JSON):
         {{
-            "video_title": "Concise Academic Lecture Title Here",
+            "video_title": "Concise Descriptive Video Title Here",
             "summary": "Plain text summary content here...",
             "chapters": [
                 {{
