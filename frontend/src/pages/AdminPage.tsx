@@ -5,6 +5,83 @@ import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
 import { useToast } from '../context/ToastContext';
+import { Skeleton } from '../components/Skeleton';
+
+const PaginationControl: React.FC<{
+  currentPage: number;
+  totalItems: number;
+  limit: number;
+  onPageChange: (page: number) => void;
+}> = ({ currentPage, totalItems, limit, onPageChange }) => {
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  if (totalPages <= 1) return null;
+
+  // Compute page numbers to display
+  const pageNumbers: (number | string)[] = [];
+  const addPage = (p: number) => pageNumbers.push(p);
+
+  addPage(1);
+  if (currentPage > 3) pageNumbers.push('...');
+
+  for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+    addPage(i);
+  }
+
+  if (currentPage < totalPages - 2) pageNumbers.push('...');
+  if (totalPages > 1) addPage(totalPages);
+
+  // Filter out duplicates and format clean pages list
+  const uniquePages = pageNumbers.filter((v, i, a) => a.indexOf(v) === i);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-outline-variant/30 text-xs font-semibold text-deep-navy shrink-0">
+      <span className="text-secondary">
+        Hiển thị {Math.min(totalItems, (currentPage - 1) * limit + 1)} - {Math.min(currentPage * limit, totalItems)} trên tổng số {totalItems}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="px-2.5 py-1.5 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:cursor-not-allowed text-deep-navy"
+        >
+          Trước
+        </button>
+        {uniquePages.map((page, idx) => {
+          if (page === '...') {
+            return (
+              <span key={`dots-${idx}`} className="px-2 text-outline">
+                ...
+              </span>
+            );
+          }
+          return (
+            <button
+              key={`page-${page}`}
+              type="button"
+              onClick={() => onPageChange(page as number)}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                currentPage === page
+                  ? 'bg-deep-navy text-white shadow-sm'
+                  : 'border border-outline-variant hover:bg-surface-container-low text-deep-navy'
+              }`}
+            >
+              {page}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="px-2.5 py-1.5 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:cursor-not-allowed text-deep-navy"
+        >
+          Sau
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const formatTime = (secs: number) => {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -84,22 +161,36 @@ export const AdminPage: React.FC = () => {
   const [standardsMsg, setStandardsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Users state
-  const [users, setUsers] = useState<UserItem[]>([
-    { id: '1', email: 'hungphitran.22@gmail.com', role: 'ADMIN', active: true, joined: '2026-07-03' },
-    { id: '2', email: 'nguyen.van.a@gmail.com', role: 'USER', active: true, joined: '2026-06-25' },
-    { id: '3', email: 'tran.thi.b@student.edu.vn', role: 'USER', active: false, joined: '2026-06-18' },
-    { id: '4', email: 'le.van.c@company.com', role: 'USER', active: true, joined: '2026-05-12' },
-  ]);
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersTotal, setUsersTotal] = useState<number | null>(null);
 
   // Celery queue tasks
   const [queueJobs, setQueueJobs] = useState<any[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueTotal, setQueueTotal] = useState<number | null>(null);
 
   // System Videos and Jobs
   const [allVideos, setAllVideos] = useState<any[]>([]);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [systemVideosPage, setSystemVideosPage] = useState(1);
+  const [systemVideosTotal, setSystemVideosTotal] = useState<number | null>(null);
+  
+  const [videosCompleted, setVideosCompleted] = useState<number | null>(null);
+  const [videosFailed, setVideosFailed] = useState<number | null>(null);
+  const [videosProcessing, setVideosProcessing] = useState<number | null>(null);
+
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
+  const [systemJobsPage, setSystemJobsPage] = useState(1);
+  const [systemJobsTotal, setSystemJobsTotal] = useState<number | null>(null);
+  const [jobsTrigger, setJobsTrigger] = useState(0);
+
+  const [jobsCompleted, setJobsCompleted] = useState<number | null>(null);
+  const [jobsFailed, setJobsFailed] = useState<number | null>(null);
+  const [jobsProcessing, setJobsProcessing] = useState<number | null>(null);
 
   // Dashboard Stats Videos State
   const [statsVideos, setStatsVideos] = useState<any[]>([]);
@@ -246,8 +337,13 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'stats') {
       const fetchStats = () => {
-        Promise.all([api.getUsers(), api.getAllVideosAdmin(10)])
-          .then(([usersRes, videosRes]) => {
+        Promise.all([
+          api.getUsers(), 
+          api.getAllVideosAdmin(10),
+          api.getAllJobsAdmin(1),
+          api.getVideos(undefined, 1)
+        ])
+          .then(([usersRes, videosRes, jobsRes, queueRes]) => {
             const emailMap: Record<string, string> = {};
             if (usersRes.success && usersRes.data) {
               const mappedUsers = usersRes.data.map((u: any) => ({
@@ -258,6 +354,7 @@ export const AdminPage: React.FC = () => {
                 joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
               }));
               setUsers(mappedUsers);
+              setUsersTotal(usersRes.metadata?.totalResults || usersRes.metadata?.total || usersRes.data.length);
               
               usersRes.data.forEach((u: any) => {
                 emailMap[u.userId] = u.email;
@@ -266,12 +363,27 @@ export const AdminPage: React.FC = () => {
 
             if (videosRes.success && videosRes.data) {
               setAllVideos(videosRes.data);
+              setSystemVideosTotal(videosRes.metadata?.totalResults || videosRes.metadata?.total || videosRes.data.length);
+              setVideosCompleted(videosRes.metadata?.completed || 0);
+              setVideosFailed(videosRes.metadata?.failed || 0);
+              setVideosProcessing(videosRes.metadata?.processing || 0);
               const mappedVideos = videosRes.data.map((v: any) => ({
                 ...v,
                 email: emailMap[v.userId] || "Unknown User",
                 title: v.title || (v.originalUrl ? "YouTube Video" : (v.r2Url ? (v.r2Url.split('?')[0].split('/').pop() || "Video File") : (v.filePath && !v.filePath.includes('/stream') ? (v.filePath.split('?')[0].split('/').pop() || "Video File") : "Uploaded Video"))),
               }));
               setStatsVideos(mappedVideos);
+            }
+
+            if (jobsRes.success) {
+              setSystemJobsTotal(jobsRes.metadata?.totalResults || jobsRes.metadata?.total || 0);
+              setJobsCompleted(jobsRes.metadata?.completed || 0);
+              setJobsFailed(jobsRes.metadata?.failed || 0);
+              setJobsProcessing(jobsRes.metadata?.processing || 0);
+            }
+
+            if (queueRes.success) {
+              setQueueTotal(queueRes.metadata?.totalResults || queueRes.metadata?.total || 0);
             }
           })
           .catch(err => {
@@ -284,8 +396,6 @@ export const AdminPage: React.FC = () => {
 
       setStatsLoading(true);
       fetchStats();
-      const interval = setInterval(fetchStats, 5000);
-      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -316,14 +426,17 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'celery') {
       const fetchQueue = () => {
-        api.getVideos()
+        api.getVideos(undefined, 10, (queuePage - 1) * 10)
           .then(res => {
             if (res.success && res.data) {
               setQueueJobs(res.data);
+              setQueueTotal(res.metadata?.totalResults || res.metadata?.total || res.data.length);
             }
           })
           .catch(err => {
-            console.warn("Failed to load queue videos, using fallback mock jobs.", err);
+            console.error("Failed to load queue videos:", err);
+            setQueueJobs([]);
+            setQueueTotal(0);
           })
           .finally(() => {
             setQueueLoading(false);
@@ -332,16 +445,14 @@ export const AdminPage: React.FC = () => {
 
       setQueueLoading(true);
       fetchQueue();
-      const interval = setInterval(fetchQueue, 4000);
-      return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, queuePage]);
 
   // Fetch registered users list from API
   useEffect(() => {
     if (activeTab === 'users') {
       const fetchUsersList = () => {
-        api.getUsers()
+        api.getUsers(10, (usersPage - 1) * 10)
           .then(res => {
             if (res.success && res.data) {
               const mappedUsers = res.data.map((u: any) => ({
@@ -352,31 +463,39 @@ export const AdminPage: React.FC = () => {
                 joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
               }));
               setUsers(mappedUsers);
+              setUsersTotal(res.metadata?.totalResults || res.metadata?.total || res.data.length);
             }
           })
           .catch(err => {
-            console.warn("Failed to fetch real users from backend, using default mock list.", err);
+            console.error("Failed to fetch users from backend:", err);
+            setUsers([]);
+            setUsersTotal(0);
+          })
+          .finally(() => {
+            setUsersLoading(false);
           });
       };
 
+      setUsersLoading(true);
       fetchUsersList();
-      const interval = setInterval(fetchUsersList, 6000);
-      return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, usersPage]);
 
   // Fetch all system videos (Admin only)
   useEffect(() => {
     if (activeTab === 'system-videos') {
       const fetchSystemVideosList = () => {
-        api.getAllVideosAdmin()
+        api.getAllVideosAdmin(10, (systemVideosPage - 1) * 10)
           .then(res => {
             if (res.success && res.data) {
               setAllVideos(res.data);
+              setSystemVideosTotal(res.metadata?.totalResults || res.metadata?.total || res.data.length);
             }
           })
           .catch(err => {
-            console.warn("Failed to load system videos from API, using empty list fallback.", err);
+            console.error("Failed to load system videos from API:", err);
+            setAllVideos([]);
+            setSystemVideosTotal(0);
           })
           .finally(() => {
             setVideoLoading(false);
@@ -385,23 +504,24 @@ export const AdminPage: React.FC = () => {
 
       setVideoLoading(true);
       fetchSystemVideosList();
-      const interval = setInterval(fetchSystemVideosList, 4000);
-      return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, systemVideosPage]);
 
   // Fetch all system jobs (Admin only)
   useEffect(() => {
     if (activeTab === 'system-jobs') {
       const fetchSystemJobsList = () => {
-        api.getAllJobsAdmin()
+        api.getAllJobsAdmin(10, (systemJobsPage - 1) * 10)
           .then(res => {
             if (res.success && res.data) {
               setAllJobs(res.data);
+              setSystemJobsTotal(res.metadata?.totalResults || res.metadata?.total || res.data.length);
             }
           })
           .catch(err => {
-            console.warn("Failed to load system jobs from API, using empty list fallback.", err);
+            console.error("Failed to load system jobs from API:", err);
+            setAllJobs([]);
+            setSystemJobsTotal(0);
           })
           .finally(() => {
             setJobsLoading(false);
@@ -410,10 +530,8 @@ export const AdminPage: React.FC = () => {
 
       setJobsLoading(true);
       fetchSystemJobsList();
-      const interval = setInterval(fetchSystemJobsList, 4000);
-      return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, systemJobsPage, jobsTrigger]);
   
   // Continuous Polling for Job details when Job Modal is open
   useEffect(() => {
@@ -641,32 +759,76 @@ export const AdminPage: React.FC = () => {
                     Thành viên
                     <span className="material-symbols-outlined text-vibrant-cyan text-sm">group</span>
                   </h3>
-                  <div className="text-2xl font-bold text-deep-navy">{users.length}</div>
-                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">trending_up</span> +12.5%</div>
+                  {usersTotal === null ? (
+                    <Skeleton className="h-7 w-16 my-1.5" />
+                  ) : (
+                    <div className="text-2xl font-bold text-deep-navy">{usersTotal}</div>
+                  )}
+                  {usersTotal === null ? (
+                    <Skeleton className="h-3.5 w-24" />
+                  ) : (
+                    <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">trending_up</span> Hoạt động</div>
+                  )}
                 </div>
                 <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
                   <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
                     Video Phân Tích
                     <span className="material-symbols-outlined text-vibrant-cyan text-sm">video_library</span>
                   </h3>
-                  <div className="text-2xl font-bold text-deep-navy">{allVideos.length}</div>
-                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">trending_up</span> +8.2%</div>
+                  {systemVideosTotal === null ? (
+                    <Skeleton className="h-7 w-16 my-1.5" />
+                  ) : (
+                    <div className="text-2xl font-bold text-deep-navy">{systemVideosTotal}</div>
+                  )}
+                  {systemVideosTotal === null ? (
+                    <Skeleton className="h-3.5 w-32" />
+                  ) : (
+                    <div className="text-[9px] text-secondary font-bold flex items-center gap-1 flex-wrap">
+                      <span className="text-status-success">Đạt: {videosCompleted}</span>
+                      <span className="text-outline">•</span>
+                      <span className="text-status-warning">Chạy: {videosProcessing}</span>
+                      <span className="text-outline">•</span>
+                      <span className="text-error">Lỗi: {videosFailed}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
                   <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
-                    Audio WER
-                    <span className="material-symbols-outlined text-pink-500 text-sm">graphic_eq</span>
+                    Tổng tác vụ (Jobs)
+                    <span className="material-symbols-outlined text-purple-600 text-sm">task</span>
                   </h3>
-                  <div className="text-2xl font-bold text-deep-navy">7.8%</div>
-                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Đạt chuẩn (&lt;10%)</div>
+                  {systemJobsTotal === null ? (
+                    <Skeleton className="h-7 w-16 my-1.5" />
+                  ) : (
+                    <div className="text-2xl font-bold text-deep-navy">{systemJobsTotal}</div>
+                  )}
+                  {systemJobsTotal === null ? (
+                    <Skeleton className="h-3.5 w-32" />
+                  ) : (
+                    <div className="text-[9px] text-secondary font-bold flex items-center gap-1 flex-wrap">
+                      <span className="text-status-success">Đạt: {jobsCompleted}</span>
+                      <span className="text-outline">•</span>
+                      <span className="text-status-warning">Chạy: {jobsProcessing}</span>
+                      <span className="text-outline">•</span>
+                      <span className="text-error">Lỗi: {jobsFailed}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm space-y-2">
                   <h3 className="text-xs text-secondary font-bold flex justify-between items-center">
-                    Keyframe F-score
-                    <span className="material-symbols-outlined text-vibrant-cyan text-sm">image_search</span>
+                    Hàng đợi Celery
+                    <span className="material-symbols-outlined text-vibrant-cyan text-sm">queue_play_next</span>
                   </h3>
-                  <div className="text-2xl font-bold text-deep-navy">0.52</div>
-                  <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Vượt mục tiêu (0.45)</div>
+                  {queueTotal === null ? (
+                    <Skeleton className="h-7 w-16 my-1.5" />
+                  ) : (
+                    <div className="text-2xl font-bold text-deep-navy">{queueTotal}</div>
+                  )}
+                  {queueTotal === null ? (
+                    <Skeleton className="h-3.5 w-24" />
+                  ) : (
+                    <div className="text-[10px] text-status-success font-bold flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">check_circle</span> Đồng bộ</div>
+                  )}
                 </div>
               </div>
               
@@ -825,63 +987,96 @@ export const AdminPage: React.FC = () => {
               <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
                 <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách thành viên đăng ký</h3>
                 <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
-                        <th className="p-3">Thành viên</th>
-                        <th className="p-3">Email</th>
-                        <th className="p-3">Quyền Hạn</th>
-                        <th className="p-3">Trạng thái</th>
-                        <th className="p-3">Ngày Đăng Ký</th>
-                        <th className="p-3">Hành Động</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map(u => (
-                        <tr key={u.id} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
-                          <td className="p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-deep-navy text-vibrant-cyan flex items-center justify-center font-bold text-xs uppercase shadow-sm">
-                                {u.email.charAt(0)}
-                              </div>
-                              <span className="font-semibold text-deep-navy">{u.email.split('@')[0]}</span>
-                            </div>
-                          </td>
-                          <td className="p-3">{u.email}</td>
-                          <td className="p-3">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                              u.role === 'ADMIN' ? 'bg-status-warning/15 text-status-warning border border-status-warning/20' : 'bg-secondary-container text-primary border border-outline-variant/30'
-                            }`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                              u.active ? 'bg-status-success/15 text-status-success' : 'bg-error/15 text-error'
-                            }`}>
-                              {u.active ? 'Hoạt động' : 'Bị khóa'}
-                            </span>
-                          </td>
-                          <td className="p-3">{u.joined}</td>
-                          <td className="p-3">
-                            <div className="flex gap-2">
-                              <button onClick={() => toggleUserRole(u.id)} className="px-2 py-1 text-[10px] font-bold bg-white border border-outline-variant rounded hover:bg-surface-container-low text-deep-navy transition-all">
-                                Đổi Vai Trò
-                              </button>
-                              <button 
-                                onClick={() => toggleUserActive(u.id)} 
-                                className={`px-2 py-1 text-[10px] font-bold border rounded transition-all ${
-                                  u.active ? 'border-error/50 bg-error/10 hover:bg-error/20 text-error' : 'border-outline-variant hover:bg-surface-container-low text-deep-navy'
-                                }`}
-                              >
-                                {u.active ? 'Khóa' : 'Mở khóa'}
-                              </button>
-                            </div>
-                          </td>
+                  {usersLoading ? (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Thành viên</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Quyền Hạn</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Ngày Đăng Ký</th>
+                          <th className="p-3">Hành Động</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <Skeleton.TableRow key={idx} cells={6} />
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : users.length === 0 ? (
+                    <div className="p-12 text-center text-secondary">
+                      <span className="material-symbols-outlined text-3xl">people</span>
+                      <p className="text-xs mt-2">Chưa có người dùng nào đăng ký.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Thành viên</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Quyền Hạn</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Ngày Đăng Ký</th>
+                          <th className="p-3">Hành Động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map(u => (
+                          <tr key={u.id} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
+                            <td className="p-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-deep-navy text-vibrant-cyan flex items-center justify-center font-bold text-xs uppercase shadow-sm">
+                                  {u.email.charAt(0)}
+                                </div>
+                                <span className="font-semibold text-deep-navy">{u.email.split('@')[0]}</span>
+                              </div>
+                            </td>
+                            <td className="p-3">{u.email}</td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                u.role === 'ADMIN' ? 'bg-status-warning/15 text-status-warning border border-status-warning/20' : 'bg-secondary-container text-primary border border-outline-variant/30'
+                              }`}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                u.active ? 'bg-status-success/15 text-status-success' : 'bg-error/15 text-error'
+                              }`}>
+                                {u.active ? 'Hoạt động' : 'Bị khóa'}
+                              </span>
+                            </td>
+                            <td className="p-3">{u.joined}</td>
+                            <td className="p-3">
+                              <div className="flex gap-2">
+                                <button onClick={() => toggleUserRole(u.id)} className="px-2 py-1 text-[10px] font-bold bg-white border border-outline-variant rounded hover:bg-surface-container-low text-deep-navy transition-all">
+                                  Đổi Vai Trò
+                                </button>
+                                <button 
+                                  onClick={() => toggleUserActive(u.id)} 
+                                  className={`px-2 py-1 text-[10px] font-bold border rounded transition-all ${
+                                    u.active ? 'border-error/50 bg-error/10 hover:bg-error/20 text-error' : 'border-outline-variant hover:bg-surface-container-low text-deep-navy'
+                                  }`}
+                                >
+                                  {u.active ? 'Khóa' : 'Mở khóa'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <PaginationControl
+                    currentPage={usersPage}
+                    totalItems={usersTotal || 0}
+                    limit={10}
+                    onPageChange={setUsersPage}
+                  />
                 </div>
               </div>
             </div>
@@ -987,10 +1182,22 @@ export const AdminPage: React.FC = () => {
                 
                 <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
                   {queueLoading ? (
-                    <div className="p-12 text-center text-secondary">
-                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
-                      <p className="text-xs mt-2">Đang đồng bộ hàng đợi...</p>
-                    </div>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">Nguồn Video</th>
+                          <th className="p-3">Ngôn Ngữ</th>
+                          <th className="p-3">Trạng Thái Pipeline</th>
+                          <th className="p-3">Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <Skeleton.TableRow key={idx} cells={5} />
+                        ))}
+                      </tbody>
+                    </table>
                   ) : queueJobs.length === 0 ? (
                     <div className="p-12 text-center text-secondary">
                       <span className="material-symbols-outlined text-3xl">queue_play_next</span>
@@ -1036,6 +1243,14 @@ export const AdminPage: React.FC = () => {
                     </table>
                   )}
                 </div>
+                <div className="mt-4">
+                  <PaginationControl
+                    currentPage={queuePage}
+                    totalItems={queueTotal || 0}
+                    limit={10}
+                    onPageChange={setQueuePage}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1049,10 +1264,25 @@ export const AdminPage: React.FC = () => {
                 <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách Video đã tải lên (PostgreSQL `videos` table)</h3>
                 <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
                   {videoLoading ? (
-                    <div className="p-12 text-center text-secondary">
-                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
-                      <p className="text-xs mt-2">Đang tải danh sách video...</p>
-                    </div>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">User ID</th>
+                          <th className="p-3">Nguồn / File</th>
+                          <th className="p-3">Độ dài (Giây)</th>
+                          <th className="p-3">Ngôn ngữ</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Ngày tải</th>
+                          <th className="p-3">Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <Skeleton.TableRow key={idx} cells={8} />
+                        ))}
+                      </tbody>
+                    </table>
                   ) : allVideos.length === 0 ? (
                     <div className="p-12 text-center text-secondary">
                       <span className="material-symbols-outlined text-3xl">movie</span>
@@ -1129,6 +1359,14 @@ export const AdminPage: React.FC = () => {
                     </table>
                   )}
                 </div>
+                <div className="mt-4">
+                  <PaginationControl
+                    currentPage={systemVideosPage}
+                    totalItems={systemVideosTotal || 0}
+                    limit={10}
+                    onPageChange={setSystemVideosPage}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1142,10 +1380,25 @@ export const AdminPage: React.FC = () => {
                 <h3 className="text-xs font-bold text-deep-navy mb-4">Danh sách tiến trình chạy ngầm (PostgreSQL `jobs` table)</h3>
                 <div className="overflow-x-auto border border-outline-variant/60 rounded-xl">
                   {jobsLoading ? (
-                    <div className="p-12 text-center text-secondary">
-                      <span className="material-symbols-outlined text-2xl animate-spin text-vibrant-cyan">autorenew</span>
-                      <p className="text-xs mt-2">Đang tải danh sách tác vụ...</p>
-                    </div>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
+                          <th className="p-3">Job ID</th>
+                          <th className="p-3">Video ID</th>
+                          <th className="p-3">Loại tác vụ</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Bắt đầu</th>
+                          <th className="p-3">Hoàn thành</th>
+                          <th className="p-3">Log lỗi</th>
+                          <th className="p-3">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <Skeleton.TableRow key={idx} cells={8} />
+                        ))}
+                      </tbody>
+                    </table>
                   ) : allJobs.length === 0 ? (
                     <div className="p-12 text-center text-secondary">
                       <span className="material-symbols-outlined text-3xl">task</span>
@@ -1201,6 +1454,14 @@ export const AdminPage: React.FC = () => {
                       </tbody>
                     </table>
                   )}
+                </div>
+                <div className="mt-4">
+                  <PaginationControl
+                    currentPage={systemJobsPage}
+                    totalItems={systemJobsTotal || 0}
+                    limit={10}
+                    onPageChange={setSystemJobsPage}
+                  />
                 </div>
               </div>
             </div>
@@ -1414,13 +1675,34 @@ export const AdminPage: React.FC = () => {
                 <div className="pt-4 border-t border-outline-variant space-y-2">
                   <h3 className="text-status-success font-bold text-xs">Nhật ký tiến trình (System Log)</h3>
                   <pre className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-xl text-[10px] font-mono-data overflow-x-auto whitespace-pre-wrap leading-relaxed text-secondary">
-                    {getSystemLogs(selectedJob)}
+                    {selectedJob.logs && selectedJob.logs.length > 0 
+                      ? selectedJob.logs.join('\n') 
+                      : getSystemLogs(selectedJob)}
                   </pre>
                 </div>
               )}
             </div>
             
-            <div className="flex justify-end p-4 border-t border-outline-variant shrink-0 bg-surface">
+            <div className="flex justify-end gap-2 p-4 border-t border-outline-variant shrink-0 bg-surface">
+              {(selectedJob.status === 'running' || selectedJob.status === 'pending' || selectedJob.status === 'RUNNING' || selectedJob.status === 'PENDING') && (
+                <button 
+                  onClick={async () => {
+                    if (window.confirm("Bạn có chắc chắn muốn dừng tác vụ này không?")) {
+                      try {
+                        await api.cancelJob(selectedJob.jobId);
+                        toast.success("Đã dừng tác vụ thành công!", "Thành công");
+                        setJobModalOpen(false);
+                        setJobsTrigger(prev => prev + 1);
+                      } catch (err: any) {
+                        toast.error(`Lỗi: ${err.message}`, "Thất bại");
+                      }
+                    }
+                  }} 
+                  className="px-4 py-2 bg-error hover:bg-error/90 text-white rounded-lg font-bold transition-all"
+                >
+                  Dừng tác vụ
+                </button>
+              )}
               <button onClick={() => setJobModalOpen(false)} className="px-4 py-2 border border-outline-variant hover:bg-surface-container-high rounded-lg font-bold transition-all text-deep-navy">Đóng</button>
             </div>
           </div>

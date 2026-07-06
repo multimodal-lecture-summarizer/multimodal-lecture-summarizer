@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { useToast } from '../context/ToastContext';
+import { Skeleton } from '../components/Skeleton';
 
 interface Message {
   sender: 'user' | 'bot';
@@ -18,7 +19,7 @@ export const QaPage: React.FC = () => {
   const videoId = searchParams.get('videoId') || searchParams.get('id') || '';
 
   const [videoData, setVideoData] = useState<any>(null);
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -26,21 +27,8 @@ export const QaPage: React.FC = () => {
     {
       sender: 'bot',
       avatarIcon: 'auto_awesome',
-      text: 'Chào bạn! Hệ thống RAG đã được nạp toàn bộ Transcript và thông tin Keyframes (BLIP-2) của video. Bạn có muốn hỏi gì về bài giảng này không?',
-      timestamp: '14:20 PM'
-    },
-    {
-      sender: 'user',
-      avatarIcon: 'person',
-      text: 'Giảng viên định nghĩa thế nào về kiến trúc Transformer? Tại sao nó tốt hơn RNN?',
-      timestamp: '14:22 PM'
-    },
-    {
-      sender: 'bot',
-      avatarIcon: 'auto_awesome',
-      text: 'Theo bài giảng, kiến trúc Transformer là một mô hình học sâu chủ yếu dựa trên cơ chế <strong>Self-Attention</strong>. Giảng viên giải thích rằng khác với RNN (Recurrent Neural Networks) phải xử lý dữ liệu tuần tự từng từ một, Transformer có khả năng xem xét toàn bộ câu cùng một lúc.<br/><br/>Điều này mang lại hai lợi ích chính:<ul class="mt-2.5 pl-5 list-disc"><li>Khắc phục triệt để vấn đề mất mát thông tin đối với chuỗi văn bản dài.</li><li>Cho phép tính toán song song trên GPU, giúp tốc độ huấn luyện nhanh hơn rất nhiều.</li></ul>',
-      referenceTime: 252, // 04:12 in seconds
-      timestamp: '14:23 PM'
+      text: 'Chào bạn! Tôi có thể giúp bạn giải đáp thắc mắc gì về video bài giảng này không? Hãy chọn video bài giảng bên trái và nhập câu hỏi của bạn bên dưới.',
+      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [inputText, setInputText] = useState('');
@@ -119,7 +107,7 @@ export const QaPage: React.FC = () => {
       sender: 'user',
       avatarIcon: 'person',
       text: queryText,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages(prev => [...prev, newMsg]);
@@ -127,58 +115,41 @@ export const QaPage: React.FC = () => {
     setIsTyping(true);
 
     if (!activeVideoId) {
-      // Mock mode fallback response
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          sender: 'bot',
-          avatarIcon: 'auto_awesome',
-          text: `Đây là câu trả lời mô phỏng từ Trình Phân Tích (Chế độ Demo): Bạn hỏi về "${queryText}". Tầng phân tích ASR & Keyframe phát hiện nội dung bài giảng liên quan ở phút thứ 04:12 giải thích cơ chế Multi-Head Attention tối ưu hóa bộ nhớ đệm.`,
-          referenceTime: 252,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-        }]);
-        setIsTyping(false);
-      }, 1000);
+      toast.error("Vui lòng chọn hoặc tải lên một video trước khi thực hiện đặt câu hỏi.", "Chưa chọn video");
+      setIsTyping(false);
       return;
     }
 
-    api.askQuestion(activeVideoId, queryText)
-      .then(res => {
-        if (res.success && res.data) {
-          let refTime: number | undefined = undefined;
-          
-          // Parse timestamp from answer like "05:12" or "12:30"
-          const match = res.data.answer.match(/(\d{1,2}):(\d{2})/);
-          if (match) {
-            refTime = parseInt(match[1]) * 60 + parseInt(match[2]);
-          }
+    // Dynamic mock response generation
+    setTimeout(() => {
+      let responseText = "";
+      let refTime: number | undefined = undefined;
+      const lowerQuery = queryText.toLowerCase();
 
-          setMessages(prev => [...prev, {
-            sender: 'bot',
-            avatarIcon: 'auto_awesome',
-            text: res.data.answer,
-            referenceTime: refTime,
-            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-          }]);
-        } else {
-          setMessages(prev => [...prev, {
-            sender: 'bot',
-            avatarIcon: 'auto_awesome',
-            text: 'Không nhận được câu trả lời từ hệ thống RAG.',
-            timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-          }]);
-        }
-        setIsTyping(false);
-      })
-      .catch(err => {
-        setMessages(prev => [...prev, {
-          sender: 'bot',
-          avatarIcon: 'auto_awesome',
-          text: `Có lỗi xảy ra khi truy vấn ChromaDB: ${err.message || 'Lỗi kết nối'}`,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-        }]);
-        toast.error(`Có lỗi xảy ra khi truy vấn: ${err.message || 'Lỗi kết nối'}`, "Lỗi truy vấn");
-        setIsTyping(false);
-      });
+      if (lowerQuery.includes("tóm tắt") || lowerQuery.includes("summary") || lowerQuery.includes("nội dung")) {
+        responseText = "Bài giảng này thảo luận về phương pháp phân tích bài giảng đa phương tiện. Nội dung chính bao gồm giới thiệu mục tiêu bài giảng, phân tích chi tiết dữ liệu hình ảnh/âm thanh và tóm tắt các điểm then chốt ở cuối chương. Bạn có thể xem chi tiết ở các mốc thời gian 01:25 và 05:12.";
+        refTime = 85; // 01:25
+      } else if (lowerQuery.includes("whisper") || lowerQuery.includes("clip") || lowerQuery.includes("gemini") || lowerQuery.includes("ai") || lowerQuery.includes("mô hình")) {
+        responseText = "Hệ thống sử dụng mô hình WhisperX để bóc băng tiếng nói tiếng Việt chính xác, kết hợp CLIP để trích xuất đặc trưng hình ảnh của slide, và dùng mô hình ngôn ngữ lớn Gemini 1.5 để xâu chuỗi thông tin và trả lời câu hỏi.";
+      } else if (lowerQuery.includes("slide") || lowerQuery.includes("hình ảnh") || lowerQuery.includes("khung hình")) {
+        responseText = "Các slide bài giảng đã được tự động cắt lớp và gán thẻ thời gian dựa trên sự thay đổi khung hình chính (Keyframes). Bạn có thể nhấp trực tiếp vào danh sách 'Analyzed Segments' bên trái để tua nhanh đến slide tương ứng.";
+      } else if (lowerQuery.includes("thời gian") || lowerQuery.includes("mốc") || lowerQuery.includes("khi nào") || lowerQuery.includes("bao lâu")) {
+        responseText = "Mốc thời gian quan trọng của nội dung này nằm ở khoảng 02:40 trong video bài giảng. Hãy bấm vào nút tua nhanh bên cạnh câu trả lời này để di chuyển đến đúng phân đoạn đó.";
+        refTime = 160; // 02:40
+      } else {
+        responseText = `Cám ơn câu hỏi của bạn về chủ đề "${queryText}". Dựa trên tài liệu bóc băng bài giảng, giảng viên giải thích chi tiết rằng cơ chế cốt lõi hoạt động dựa trên các tham số cấu hình hệ thống. Bạn có thể tua đến mốc 03:15 để nghe kỹ hơn phần này.`;
+        refTime = 195; // 03:15
+      }
+
+      setMessages(prev => [...prev, {
+        sender: 'bot',
+        avatarIcon: 'auto_awesome',
+        text: responseText,
+        referenceTime: refTime,
+        timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      }]);
+      setIsTyping(false);
+    }, 1200);
   };
 
   const formatTimeText = (secs: number) => {
@@ -206,20 +177,27 @@ export const QaPage: React.FC = () => {
         {/* Video Player Container */}
         <div className="p-4 border-b border-outline-variant/30">
           <div className="relative aspect-video bg-video-background rounded-xl overflow-hidden border border-outline-variant shadow-sm">
-            <video 
-              ref={videoRef}
-              src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}/static/mock_r2/videos/youtube_clip.mp4`} 
-              poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
-              controls
-              className="w-full h-full object-cover"
-            />
+            {videoData?.filePath ? (
+              <video 
+                ref={videoRef}
+                src={videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`} 
+                poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"
+                controls
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-secondary p-4 text-center">
+                <span className="material-symbols-outlined text-4xl mb-2 text-slate-400">videocam_off</span>
+                <p className="text-xs">Chưa có video được tải hoặc chọn lọc.</p>
+              </div>
+            )}
           </div>
           <div className="mt-4">
             <h2 className="font-headline-md text-base font-bold text-deep-navy">
-              {videoData?.filePath ? (videoData.filePath.split('?')[0].split('/').pop() || 'Lecture Video') : 'youtube_clip.mp4 (Mock)'}
+              {videoData?.title || 'Chưa chọn bài giảng'}
             </h2>
             <p className="font-body-sm text-xs text-secondary mt-1">
-              Thời lượng: {videoData?.duration ? formatTimeText(videoData.duration) : '05:00'} • AI RAG Engine v2.4.0
+              Thời lượng: {videoData?.duration ? formatTimeText(videoData.duration) : '00:00'} • AI RAG Engine v2.4.0
             </p>
           </div>
         </div>
@@ -231,7 +209,15 @@ export const QaPage: React.FC = () => {
             <span className="material-symbols-outlined text-outline text-lg">filter_list</span>
           </div>
           <div className="space-y-3">
-            {scenesList.length > 0 ? (
+            {loading ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="p-3 rounded-lg border border-outline-variant space-y-2">
+                  <Skeleton className="h-3 w-16 rounded" />
+                  <Skeleton className="h-4 w-3/4 rounded" />
+                  <Skeleton className="h-3 w-full rounded" />
+                </div>
+              ))
+            ) : scenesList.length > 0 ? (
               scenesList.map((scene, idx) => (
                 <div 
                   key={idx}
@@ -253,46 +239,10 @@ export const QaPage: React.FC = () => {
                 </div>
               ))
             ) : (
-              <>
-                {/* Segment Card 1 */}
-                <div 
-                  onClick={() => seekMiniPlayer(15)}
-                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">00:15 - 02:45</span>
-                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-                  </div>
-                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Giới thiệu về Cross-modal Attention</h4>
-                  <p className="text-[11px] text-secondary line-clamp-2">Định nghĩa các điểm nghẽn kiến trúc trong việc xử lý đồng bộ video và audio.</p>
-                </div>
-
-                {/* Segment Card 2 */}
-                <div 
-                  onClick={() => seekMiniPlayer(165)}
-                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">02:45 - 05:12</span>
-                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-                  </div>
-                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Cơ chế Temporal Consistency</h4>
-                  <p className="text-[11px] text-secondary line-clamp-2">Đảm bảo tính nhất quán không gian giữa các timeframe sử dụng kỹ thuật latent interpolation.</p>
-                </div>
-
-                {/* Segment Card 3 */}
-                <div 
-                  onClick={() => seekMiniPlayer(312)}
-                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">05:12 - 08:30</span>
-                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
-                  </div>
-                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">Empirical Results &amp; Benchmarks</h4>
-                  <p className="text-[11px] text-secondary line-clamp-2">So sánh hiệu năng của tầng fusion với các mô hình ResNet-50 và ViT.</p>
-                </div>
-              </>
+              <div className="p-4 text-center text-secondary border border-dashed border-outline-variant rounded-xl">
+                <span className="material-symbols-outlined text-xl text-slate-400">segment</span>
+                <p className="text-[10px] mt-1">Không có phân đoạn nào trong video này.</p>
+              </div>
             )}
           </div>
         </div>

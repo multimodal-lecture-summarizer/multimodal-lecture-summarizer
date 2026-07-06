@@ -1,4 +1,4 @@
-from app.schemas.base import BaseDTO, CamelModel
+from app.schemas.base import BaseDTO, CamelModel, PaginationMetadata, create_pagination_metadata
 from app.schemas.user import UserCreate, UserLogin, UserDTO, Token, TokenData
 from app.schemas.video import (
     VideoCreate,
@@ -16,6 +16,8 @@ from app.schemas.stats import AdminDashboardStats, SystemStatDTO
 __all__ = [
     "BaseDTO",
     "CamelModel",
+    "PaginationMetadata",
+    "create_pagination_metadata",
     "UserCreate",
     "UserLogin",
     "UserDTO",
@@ -36,3 +38,4 @@ __all__ = [
     "AdminDashboardStats",
     "SystemStatDTO",
 ]
+

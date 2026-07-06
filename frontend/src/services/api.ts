@@ -215,10 +215,13 @@ export const api = {
   },
 
   // Users Management
-  async getUsers() {
-    const response = await customFetch(`${CONFIG.API_BASE_URL}/users`, {
-      headers: getAuthHeaders(),
-    });
+  async getUsers(limit = 10, offset = 0) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/users?limit=${limit}&offset=${offset}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
     const result = await response.json();
     if (!response.ok)
       throw new Error(result.message || "Không thể lấy danh sách người dùng");
@@ -310,5 +313,19 @@ export const api = {
         result.message || "Không thể lấy báo cáo thống kê quản trị"
       );
     return result; // returns BaseDTO[AdminStatsDTO]
+  },
+
+  async cancelJob(jobId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/jobs/${jobId}/cancel`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể dừng tiến trình này");
+    return result; // returns BaseDTO[JobDTO]
   },
 };

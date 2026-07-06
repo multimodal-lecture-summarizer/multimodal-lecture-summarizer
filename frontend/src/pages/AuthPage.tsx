@@ -150,49 +150,51 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     e.preventDefault();
     setErrorMessage(null);
     
-    // 1. Try to authenticate against the real backend API
+    // Try to authenticate against the real backend API
     try {
-      const result = await api.login(email, password);
+      const result = isLogin 
+        ? await api.login(email, password)
+        : await api.register(email, password);
+
       if (result.success && result.data) {
-        const token = result.data.accessToken;
-        localStorage.setItem('token', token);
+        // If it was register, we might need to log in first or we get token directly
+        // Let's assume login is needed or the response contains token (api.ts registers via POST /auth/register and returns BaseDTO[UserDTO], let's check login if it was login)
+        let token = result.data.accessToken;
         
-        // Fetch user profile to get the role
-        const profileResult = await api.getMe();
-        if (profileResult.success && profileResult.data) {
-          const userData = {
-            email: profileResult.data.email,
-            role: profileResult.data.role.toLowerCase(), // admin or user
-          };
-          if (onLogin) onLogin(userData);
-          toast.success(isLogin ? "Đăng nhập thành công!" : "Đăng ký thành công!", "Thành công");
-          
-          if (userData.role === 'admin') {
-            navigate('/admin');
-          } else {
-            navigate('/history');
+        if (!isLogin) {
+          // Auto login after registration
+          const loginRes = await api.login(email, password);
+          token = loginRes.data.accessToken;
+        }
+
+        if (token) {
+          localStorage.setItem('token', token);
+          // Fetch user profile to get the role
+          const profileResult = await api.getMe();
+          if (profileResult.success && profileResult.data) {
+            const userData = {
+              email: profileResult.data.email,
+              role: profileResult.data.role.toLowerCase(), // admin or user
+            };
+            if (onLogin) onLogin(userData);
+            toast.success(isLogin ? "Đăng nhập thành công!" : "Đăng ký thành công!", "Thành công");
+            
+            if (userData.role === 'admin') {
+              navigate('/admin');
+            } else {
+              navigate('/history');
+            }
+            return;
           }
-          return;
         }
       }
-    } catch (error) {
-      console.warn('Backend API connection failed, falling back to simulated client-side auth.', error);
-    }
-    
-    // 2. Fallback to simulated client-side authentication if backend is down
-    const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
-    const userData = {
-      email: email,
-      role: role,
-    };
-    
-    if (onLogin) onLogin(userData);
-    toast.success(isLogin ? "Đăng nhập thành công! (Môi trường giả lập)" : "Đăng ký thành công! (Môi trường giả lập)", "Thành công");
-    
-    if (role === 'admin') {
-      navigate('/admin');
-    } else {
-      navigate('/history');
+      setErrorMessage("Không nhận được token xác thực từ máy chủ.");
+      toast.error("Không nhận được token xác thực!", "Lỗi");
+    } catch (error: any) {
+      console.error('API connection failed:', error);
+      const errMsg = error.message || "Kết nối máy chủ thất bại. Vui lòng kiểm tra lại.";
+      setErrorMessage(errMsg);
+      toast.error(errMsg, "Lỗi kết nối");
     }
   };
 

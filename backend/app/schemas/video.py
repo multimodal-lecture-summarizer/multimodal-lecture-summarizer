@@ -82,6 +82,12 @@ class VideoBase(CamelModel):
     stage: Optional[str] = Field(
         None, description="The current execution stage name"
     )
+    logs: Optional[List[str]] = Field(
+        None, description="The latest rolling log messages of the video processing"
+    )
+    job_id: Optional[uuid.UUID] = Field(
+        None, description="The ID of the currently active job, if any"
+    )
 
 
 class VideoCreate(CamelModel):
@@ -125,6 +131,8 @@ class VideoDTO(VideoBase):
                 latest_job = jobs[-1]
                 data.progress = getattr(latest_job, "progress", None)
                 data.stage = getattr(latest_job, "stage", None)
+                data.logs = getattr(latest_job, "logs", [])
+                data.job_id = getattr(latest_job, "job_id", None)
         return data
 
     @model_validator(mode="after")

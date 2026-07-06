@@ -3,13 +3,13 @@ import os
 import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db, SessionLocal
 from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException
 from app.core.config import settings
 from app.core.constants import VideoStatus, JobType, JobStatus, UserRole
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase, VideoMetadataDTO, VideoSceneDTO
+from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase, VideoMetadataDTO, VideoSceneDTO, create_pagination_metadata
 from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
 from app.models.video import Video, VideoStandard, VideoMetadata, VideoScene
@@ -239,7 +239,8 @@ def list_videos(
     if status:
         query = query.filter(Video.status == status)
 
-    videos = query.order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
+    total = query.count()
+    videos = query.options(joinedload(Video.scenes)).order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
 
     # Sync active job statuses to update progress/status of processing videos
     from app.api.v1.jobs import sync_job_status
@@ -252,7 +253,12 @@ def list_videos(
         success=True,
         data=[VideoDTO.model_validate(v) for v in videos],
         message="Videos list retrieved successfully",
-        metadata={"limit": limit, "offset": offset, "count": len(videos)},
+        metadata=create_pagination_metadata(
+            limit=limit,
+            offset=offset,
+            total=total,
+            count=len(videos)
+        ),
     )
 
 
@@ -509,12 +515,25 @@ def list_all_videos(
     current_user: User = Depends(check_admin),
 ):
     """Lists all videos for administration. Requires Admin role."""
+    total = db.query(Video).count()
+    completed = db.query(Video).filter(Video.status == VideoStatus.DONE).count()
+    failed = db.query(Video).filter(Video.status == VideoStatus.FAILED).count()
+    processing = db.query(Video).filter(Video.status.in_([VideoStatus.PENDING, VideoStatus.PROCESSING])).count()
+
     videos = db.query(Video).order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
     return BaseDTO(
         success=True,
         data=[VideoDTO.model_validate(v) for v in videos],
         message="All system videos retrieved successfully",
-        metadata={"limit": limit, "offset": offset, "count": len(videos)},
+        metadata=create_pagination_metadata(
+            limit=limit,
+            offset=offset,
+            total=total,
+            count=len(videos),
+            completed=completed,
+            failed=failed,
+            processing=processing
+        ),
     )
 
 

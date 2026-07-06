@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import { UserRole } from "../types";
 import { useToast } from "../context/ToastContext";
+import { Skeleton } from "../components/Skeleton";
 
 export const ProfilePage: React.FC = () => {
   const toast = useToast();
@@ -38,18 +39,8 @@ export const ProfilePage: React.FC = () => {
         }
       })
       .catch((err) => {
-        console.warn("Offline or failed fetching profile, using local cache", err);
-        // Fallback to local storage
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          setProfile({
-            email: parsed.email,
-            role: parsed.role,
-            userId: "mock-user-id-offline",
-            isActive: true,
-          });
-        }
+        console.error("Failed fetching profile from backend API", err);
+        setProfile(null);
       })
       .finally(() => {
         setLoading(false);
@@ -63,8 +54,9 @@ export const ProfilePage: React.FC = () => {
           setVideoCount(res.data.length);
         }
       })
-      .catch(() => {
-        setVideoCount(3); // Default demo count
+      .catch((err) => {
+        console.error("Failed to load user video list count", err);
+        setVideoCount(0);
       });
   }, []);
 
@@ -100,9 +92,32 @@ export const ProfilePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-[60vh] bg-background text-on-surface">
-        <span className="material-symbols-outlined text-[48px] text-vibrant-cyan animate-spin mb-4">autorenew</span>
-        <p className="text-secondary text-sm font-semibold">Đang tải hồ sơ...</p>
+      <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto min-h-screen">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Header Skeleton */}
+          <div className="bg-white border border-outline-variant rounded-xl p-6 flex flex-col sm:flex-row items-center gap-6 shadow-sm">
+            <Skeleton className="w-16 h-16 rounded-full" />
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-5 w-48 rounded-md" />
+              <Skeleton className="h-4 w-24 rounded-md" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
+              <Skeleton className="h-5 w-32 rounded-md" />
+              <div className="space-y-3 pt-2">
+                <Skeleton.Text lines={3} />
+              </div>
+            </div>
+            <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
+              <Skeleton className="h-5 w-32 rounded-md" />
+              <div className="space-y-3 pt-2">
+                <Skeleton className="h-8 w-full rounded-md" />
+                <Skeleton className="h-8 w-full rounded-md" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Lecture Summarizer - Phân Tích Tài Nguyên & Mở Rộng</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --bg-card: rgba(17, 24, 43, 0.7);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --cyan: #06b6d4;
+            --cyan-glow: rgba(6, 182, 212, 0.15);
+            --emerald: #10b981;
+            --emerald-glow: rgba(16, 185, 129, 0.15);
+            --amber: #f59e0b;
+            --error: #ef4444;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+
+        .logo-area {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem 1.5rem;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 50px;
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 30%, var(--text-muted) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Dashboard Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        @media (min-width: 1024px) {
+            .dashboard-grid {
+                grid-template-cols: 3fr 2fr;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--cyan));
+            opacity: 0.8;
+        }
+
+        .card.card-emerald::before {
+            background: linear-gradient(90deg, var(--emerald), var(--cyan));
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: #fff;
+        }
+
+        .card-title .material-symbols-outlined {
+            color: var(--cyan);
+            font-size: 1.75rem;
+        }
+
+        /* Interactive Sawtooth Graph */
+        .graph-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+            margin-top: 1rem;
+        }
+
+        .axis-label {
+            font-size: 10px;
+            fill: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .graph-line {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: opacity 0.3s ease;
+        }
+
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { r: 4; opacity: 1; }
+            50% { r: 10; opacity: 0.4; }
+            100% { r: 4; opacity: 0; }
+        }
+
+        /* Table Design */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        th {
+            padding: 1rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-glass);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1.25rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #e5e7eb;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-low {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--emerald);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-med {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--amber);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .badge-high {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--cyan);
+        }
+
+        /* Simulator Styles */
+        .simulator-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .slider-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--cyan);
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--cyan);
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .slider-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: #fff;
+            width: 75px;
+            text-align: right;
+        }
+
+        /* Outputs of Simulator */
+        .sim-results {
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-glass);
+        }
+
+        .sim-stat {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            padding: 1rem;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sim-stat-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .sim-stat-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .sim-status-box {
+            padding: 1rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            margin-top: 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            border: 1px solid transparent;
+        }
+
+        .status-safe {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.2);
+            color: #a7f3d0;
+        }
+
+        .status-caution {
+            background: rgba(245, 158, 11, 0.08);
+            border-color: rgba(245, 158, 11, 0.2);
+            color: #fde68a;
+        }
+
+        .status-risk {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+
+        /* Distributed Scaling Visual */
+        .scaling-visual-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 2.5rem;
+            margin-top: 1rem;
+        }
+
+        .nodes-container {
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 2rem;
+            align-items: center;
+            margin-top: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .nodes-container {
+                grid-template-cols: 1.5fr 1fr 2fr;
+            }
+        }
+
+        .visual-node {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+        }
+
+        .node-icon-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .connection-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .arrow-line {
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--cyan));
+            width: 80px;
+            position: relative;
+            margin: 0.5rem 0;
+        }
+
+        .arrow-line::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -3px;
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid var(--cyan);
+            border-top: 2px solid var(--cyan);
+            transform: rotate(45deg);
+        }
+
+        .worker-subgrid {
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 1rem;
+        }
+
+        @media (min-width: 480px) {
+            .worker-subgrid {
+                grid-template-cols: 1fr 1fr;
+            }
+        }
+
+        .sub-worker-node {
+            background: rgba(16, 185, 129, 0.03);
+            border: 1px dashed rgba(16, 185, 129, 0.2);
+            padding: 1rem;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .sub-worker-node span {
+            color: var(--emerald);
+        }
+
+        .footer-info {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-glass);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-area">
+                <span class="material-symbols-outlined">analytics</span>
+                <span>Báo Cáo Tối Ưu Hóa & Tính Toán Mở Rộng</span>
+            </div>
+            <h1>Bản Đồ Xử Lý Tài Nguyên Hệ Thống</h1>
+            <p>
+                Phân tích lưu lượng CPU, RAM, VRAM và mô phỏng mức độ song song của Celery Worker dựa trên cấu hình phần cứng.
+            </p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Left Side: Table & Sawtooth Graph -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <!-- Table Card -->
+                <div class="card">
+                    <div class="card-title">
+                        <span class="material-symbols-outlined">bar_chart</span>
+                        <span>Tài Nguyên Tiêu Hao Theo Từng Giai Đoạn (60p Video)</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Giai đoạn</th>
+                                    <th>Tác vụ chính</th>
+                                    <th>CPU</th>
+                                    <th>RAM</th>
+                                    <th>GPU VRAM</th>
+                                    <th>Thời gian chạy</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="font-mono">Stage 0</td>
+                                    <td>FFmpeg Audio Extract</td>
+                                    <td><span class="badge badge-low">Thấp</span></td>
+                                    <td>~100 MB</td>
+                                    <td>0 MB</td>
+                                    <td>5 - 15 giây</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 1 & 2</td>
+                                    <td>Speech Whisper + VAD</td>
+                                    <td><span class="badge badge-med">Trung bình</span></td>
+                                    <td>~1 - 2 GB</td>
+                                    <td style="color: var(--amber)">~0.5 GB <small>(Tiny)</small></td>
+                                    <td>3 - 5 phút</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 3</td>
+                                    <td>Scene Detect Keyframe</td>
+                                    <td><span class="badge badge-high">Cao (80-100%)</span></td>
+                                    <td>~1.5 GB</td>
+                                    <td>0 MB</td>
+                                    <td>1 - 2 phút</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 4a</td>
+                                    <td>CLIP Feature Clustering</td>
+                                    <td><span class="badge badge-low">Thấp</span></td>
+                                    <td>~1 GB</td>
+                                    <td style="color: var(--cyan)">~0.8 GB <small>(Nạp/Xóa)</small></td>
+                                    <td>10 - 20 giây</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 4b</td>
+                                    <td>BLIP Image Captioning</td>
+                                    <td><span class="badge badge-low">Thấp</span></td>
+                                    <td>~1 GB</td>
+                                    <td style="color: var(--cyan); font-weight: 600;">~1.5 GB <small>(Nạp/Xóa)</small></td>
+                                    <td>30 - 60 giây</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 5</td>
+                                    <td>ChromaDB RAG Index</td>
+                                    <td><span class="badge badge-low">Thấp</span></td>
+                                    <td>~500 MB</td>
+                                    <td>~100 MB</td>
+                                    <td>5 - 15 giây</td>
+                                </tr>
+                                <tr>
+                                    <td class="font-mono">Stage 6</td>
+                                    <td>Groq API Summary</td>
+                                    <td><span class="badge badge-low">Thấp</span></td>
+                                    <td>~100 MB</td>
+                                    <td>0 MB <small>(Cloud)</small></td>
+                                    <td>10 - 25 giây</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sawtooth Graph Card -->
+                <div class="card">
+                    <div class="card-title">
+                        <span class="material-symbols-outlined">show_chart</span>
+                        <span>Biểu Đồ Răng Cưa VRAM (Mô Hình Mới vs Cũ)</span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                        Nhấp vào các nút bên dưới để so sánh mức độ sử dụng VRAM giữa cấu trúc <strong>Giải phóng tức thời</strong> mới và <strong>Tải trước lúc startup</strong> cũ.
+                    </p>
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                        <button id="btn-new-method" class="badge badge-low" style="cursor:pointer; padding: 0.5rem 1rem;">MỚI: Nạp động / Giải phóng</button>
+                        <button id="btn-old-method" class="badge badge-high" style="cursor:pointer; padding: 0.5rem 1rem; opacity: 0.4;">CŨ: Tải trước (Hằng số)</button>
+                    </div>
+                    
+                    <div class="graph-container">
+                        <svg width="100%" height="100%" viewBox="0 0 600 300" preserveAspectRatio="none">
+                            <!-- Grid Lines -->
+                            <line x1="50" y1="50" x2="580" y2="50" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                            <line x1="50" y1="130" x2="580" y2="130" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                            <line x1="50" y1="210" x2="580" y2="210" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                            <line x1="50" y1="270" x2="580" y2="270" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+                            
+                            <!-- Vertical Divider Lines -->
+                            <line x1="120" y1="30" x2="120" y2="270" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+                            <line x1="210" y1="30" x2="210" y2="270" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+                            <line x1="300" y1="30" x2="300" y2="270" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+                            <line x1="390" y1="30" x2="390" y2="270" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+                            <line x1="480" y1="30" x2="480" y2="270" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+
+                            <!-- Y-Axis Labels -->
+                            <text x="15" y="55" class="axis-label">3.0 GB (Old Peak)</text>
+                            <text x="15" y="135" class="axis-label">1.5 GB (New Peak)</text>
+                            <text x="15" y="215" class="axis-label">0.5 GB</text>
+                            <text x="15" y="275" class="axis-label">0 GB</text>
+
+                            <!-- X-Axis Labels -->
+                            <text x="70" y="290" class="axis-label">Stage 1 (Whisper)</text>
+                            <text x="175" y="290" class="axis-label">Stage 3 (Scene)</text>
+                            <text x="265" y="290" class="axis-label">Stage 4a (CLIP)</text>
+                            <text x="355" y="290" class="axis-label">Stage 4b (BLIP)</text>
+                            <text x="450" y="290" class="axis-label">Stage 5 (Fusion)</text>
+                            <text x="535" y="290" class="axis-label">Stage 6 (Groq)</text>
+
+                            <!-- Line Path: Old Preloaded Model (Solid Amber Line) -->
+                            <path id="path-old" d="M 50 130 L 120 130 L 210 130 L 300 50 L 390 50 L 480 50 L 580 50" class="graph-line" stroke="var(--error)" opacity="0.3" />
+                            
+                            <!-- Line Path: Dynamic On-Demand Sawtooth Model (Glowing Cyan Line) -->
+                            <path id="path-new" d="M 50 270 L 100 210 L 150 270 L 210 270 L 280 180 L 320 270 L 370 130 L 430 270 L 480 270 L 580 270" class="graph-line" stroke="var(--cyan)" />
+                            
+                            <!-- Interactive Tracker Dots -->
+                            <g id="dots-new">
+                                <circle cx="100" cy="210" r="4" fill="var(--cyan)" />
+                                <circle cx="280" cy="180" r="4" fill="var(--cyan)" />
+                                <circle cx="370" cy="130" r="4" fill="var(--cyan)" class="pulse-dot" />
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Concurrency Simulator -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <div class="card card-emerald">
+                    <div class="card-title">
+                        <span class="material-symbols-outlined">tune</span>
+                        <span>Mô Phỏng Cấu Hình Concurrency (Celery)</span>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                        Kéo thanh trượt để nhập dung lượng VRAM hiện tại của card đồ họa để tính toán cấu hình `--concurrency` và độ an toàn khi chạy song song.
+                    </p>
+
+                    <div class="simulator-controls">
+                        <div class="form-group">
+                            <label>Dung lượng VRAM Card đồ họa (GB)</label>
+                            <div class="slider-wrapper">
+                                <input type="range" id="vram-slider" min="2" max="24" value="6" step="2">
+                                <span class="slider-value" id="vram-val">6 GB</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Tên GPU Tham khảo tương đương</label>
+                            <p id="gpu-ref" style="font-size: 0.95rem; font-weight: 500; color: #fff;"></p>
+                        </div>
+                    </div>
+
+                    <div class="sim-results">
+                        <div class="sim-stat">
+                            <span class="sim-stat-label">Cấu hình Concurrency tối ưu</span>
+                            <span class="sim-stat-val font-mono" id="opt-concurrency">--concurrency=1</span>
+                        </div>
+                        <div class="sim-stat">
+                            <span class="sim-stat-label">Số Video xử lý cùng lúc tối đa</span>
+                            <span class="sim-stat-val" id="sim-videos" style="color: var(--emerald)">1 Video</span>
+                        </div>
+                        <div class="sim-stat">
+                            <span class="sim-stat-label">Dự kiến VRAM đỉnh điểm khi chạy</span>
+                            <span class="sim-stat-val font-mono" id="peak-vram">~1.5 GB</span>
+                        </div>
+                    </div>
+
+                    <div id="status-card" class="sim-status-box status-safe">
+                        <span class="material-symbols-outlined" id="status-icon">check_circle</span>
+                        <div>
+                            <strong id="status-title">Hoạt động An toàn</strong>
+                            <p id="status-desc" style="font-size: 0.8rem; margin-top: 0.25rem; color: var(--text-muted);">
+                                Tài nguyên dồi dào, chạy cực kỳ ổn định không lo lỗi CUDA Out Of Memory.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Celery Command Block -->
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid var(--border-glass)">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Lệnh khởi chạy Worker khuyến nghị:</span>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
+                            <code id="cmd-block" style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #a5b4fc; word-break: break-all;">celery -A ai_workers.tasks worker --loglevel=info --concurrency=1</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Distributed Scaling Architecture Visual Card -->
+        <div class="scaling-visual-card">
+            <div class="card-title">
+                <span class="material-symbols-outlined">hub</span>
+                <span>Mô Hình Mở Rộng Nhiều GPU Node (Distributed Scaling)</span>
+            </div>
+            <p style="font-size: 0.9rem; color: var(--text-muted); max-width: 800px; margin-bottom: 2rem;">
+                Hệ thống hỗ trợ mở rộng không giới hạn bằng cách cắm thêm nhiều máy chủ Worker. Server FastAPI chỉ đẩy nhiệm vụ vào Redis, các máy phụ tải (có GPU mạnh yếu khác nhau) kết nối trực tiếp vào Redis để kéo tác vụ về chạy độc lập.
+            </p>
+
+            <div class="nodes-container">
+                <!-- Node 1: Web Server -->
+                <div class="visual-node">
+                    <div class="node-icon-box">
+                        <span class="material-symbols-outlined">dns</span>
+                    </div>
+                    <strong>FastAPI Server</strong>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">Nhận video / Trả API</span>
+                </div>
+
+                <!-- Connection: Redis -->
+                <div class="connection-arrow">
+                    <span>Task Queued</span>
+                    <div class="arrow-line"></div>
+                    <span class="font-mono" style="font-size: 0.7rem; color: var(--primary);">Redis Broker</span>
+                </div>
+
+                <!-- Workers Subgrid -->
+                <div class="worker-subgrid">
+                    <div class="sub-worker-node">
+                        <span class="material-symbols-outlined">smart_toy</span>
+                        <div>
+                            <strong>GPU Node 1 (Local)</strong>
+                            <p style="font-size: 0.7rem; color: var(--text-muted);">--concurrency=1 (RTX 3060)</p>
+                        </div>
+                    </div>
+                    <div class="sub-worker-node" style="background: rgba(6, 182, 212, 0.03); border-color: rgba(6,182,212,0.2);">
+                        <span class="material-symbols-outlined" style="color: var(--cyan)">smart_toy</span>
+                        <div>
+                            <strong>GPU Node 2 (Cloud)</strong>
+                            <p style="font-size: 0.7rem; color: var(--text-muted);">--concurrency=4 (A10G)</p>
+                        </div>
+                    </div>
+                    <div class="sub-worker-node" style="background: rgba(99, 102, 241, 0.03); border-color: rgba(99,102,241,0.2);">
+                        <span class="material-symbols-outlined" style="color: var(--primary)">smart_toy</span>
+                        <div>
+                            <strong>GPU Node 3 (Lab)</strong>
+                            <p style="font-size: 0.7rem; color: var(--text-muted);">--concurrency=2 (T4 GPU)</p>
+                        </div>
+                    </div>
+                    <div class="sub-worker-node">
+                        <span class="material-symbols-outlined">smart_toy</span>
+                        <div>
+                            <strong>GPU Node 4 (Workstation)</strong>
+                            <p style="font-size: 0.7rem; color: var(--text-muted);">--concurrency=2 (RTX 4090)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-info">
+            <p>© 2026 Multimodal Lecture Summarizer Project. Công cụ mô phỏng thiết kế tài nguyên và mở rộng hạ tầng xử lý AI.</p>
+        </div>
+    </div>
+
+    <script>
+        // Graph Switch Handler
+        const btnNew = document.getElementById('btn-new-method');
+        const btnOld = document.getElementById('btn-old-method');
+        const pathNew = document.getElementById('path-new');
+        const pathOld = document.getElementById('path-old');
+        const dotsNew = document.getElementById('dots-new');
+
+        btnNew.addEventListener('click', () => {
+            btnNew.style.opacity = '1';
+            btnOld.style.opacity = '0.4';
+            pathNew.style.opacity = '1';
+            pathOld.style.opacity = '0.2';
+            dotsNew.style.display = 'block';
+        });
+
+        btnOld.addEventListener('click', () => {
+            btnNew.style.opacity = '0.4';
+            btnOld.style.opacity = '1';
+            pathNew.style.opacity = '0.1';
+            pathOld.style.opacity = '1';
+            dotsNew.style.display = 'none';
+        });
+
+        // Simulator Logic
+        const slider = document.getElementById('vram-slider');
+        const vramValStr = document.getElementById('vram-val');
+        const gpuRefText = document.getElementById('gpu-ref');
+        const optConcurrency = document.getElementById('opt-concurrency');
+        const simVideosText = document.getElementById('sim-videos');
+        const peakVramText = document.getElementById('peak-vram');
+        const statusCard = document.getElementById('status-card');
+        const statusIcon = document.getElementById('status-icon');
+        const statusTitle = document.getElementById('status-title');
+        const statusDesc = document.getElementById('status-desc');
+        const cmdBlock = document.getElementById('cmd-block');
+
+        const gpuMapping = {
+            2: "NVIDIA MX Series / GTX 1050 (Yếu, không khuyên dùng chạy local)",
+            4: "NVIDIA GTX 1650 / RTX 3050 Laptop (Cơ bản cho Whisper/CLIP)",
+            6: "NVIDIA RTX 2060 / RTX 3060 Laptop / GTX 1660 Ti",
+            8: "NVIDIA RTX 3060 / RTX 4060 / Apple M1/M2/M3 (8GB)",
+            12: "NVIDIA RTX 3060 12GB / RTX 4070 Ti / RTX 3080",
+            16: "NVIDIA Tesla T4 (Cloud) / RTX 4080 / A10G (16GB)",
+            18: "Apple Mac Studio (18GB-24GB Unified Memory)",
+            20: "NVIDIA RTX 3090 / RTX 4090 Laptop",
+            22: "NVIDIA RTX A5000 / Workstation GPU",
+            24: "NVIDIA RTX 3090 24GB / RTX 4090 24GB / A10G Cloud"
+        };
+
+        function updateSimulator(vram) {
+            vramValStr.innerText = vram + " GB";
+            
+            // Reference GPU
+            gpuRefText.innerText = gpuMapping[vram] || "Card đồ họa Custom";
+
+            let concurrency = 1;
+            let peakVram = 1.5;
+            let status = "safe";
+
+            if (vram <= 4) {
+                concurrency = 1;
+                peakVram = 1.5;
+                status = "caution";
+            } else if (vram <= 8) {
+                concurrency = 1;
+                peakVram = 1.5;
+                status = "safe";
+            } else if (vram <= 12) {
+                concurrency = 2;
+                peakVram = 3.0;
+                status = "safe";
+            } else if (vram <= 16) {
+                concurrency = 3;
+                peakVram = 4.5;
+                status = "safe";
+            } else {
+                concurrency = 4;
+                peakVram = 6.0;
+                status = "safe";
+            }
+
+            // High concurrency warning if user forces too much or if VRAM is very low
+            if (vram === 2) {
+                concurrency = 1;
+                peakVram = 1.5;
+                status = "risk";
+            }
+
+            // Update UI elements
+            optConcurrency.innerText = `--concurrency=${concurrency}`;
+            const maxPhysical = Math.max(1, Math.floor(vram / 1.5));
+            simVideosText.innerText = `${concurrency} Video (An toàn) / ${maxPhysical} Video (Tối đa vật lý)`;
+            peakVramText.innerText = `~${peakVram} GB`;
+            cmdBlock.innerText = `celery -A ai_workers.tasks worker --loglevel=info --concurrency=${concurrency}`;
+
+            // Reset status classes
+            statusCard.className = "sim-status-box";
+            if (status === "safe") {
+                statusCard.classList.add("status-safe");
+                statusIcon.innerText = "check_circle";
+                statusTitle.innerText = "Hoạt động An toàn";
+                statusDesc.innerText = "Dung lượng VRAM dồi dào. Celery xử lý ổn định, giảm thiểu tối đa nguy cơ tràn bộ nhớ.";
+                simVideosText.style.color = "var(--emerald)";
+            } else if (status === "caution") {
+                statusCard.classList.add("status-caution");
+                statusIcon.innerText = "warning";
+                statusTitle.innerText = "Cần Lưu Ý (Caution)";
+                statusDesc.innerText = "Bộ nhớ GPU ở mức tối thiểu. Chỉ chạy 1 video tại một thời điểm, hạn chế tối đa các ứng dụng nền khác.";
+                simVideosText.style.color = "var(--amber)";
+            } else {
+                statusCard.classList.add("status-risk");
+                statusIcon.innerText = "report";
+                statusTitle.innerText = "Rủi Ro Cao (OOM Danger)";
+                statusDesc.innerText = "VRAM cực kỳ yếu. Có khả năng gặp lỗi CUDA Out of Memory trong bước chạy BLIP (1.5GB peak). Khuyên dùng CPU mode hoặc Cloud GPU.";
+                simVideosText.style.color = "var(--error)";
+            }
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateSimulator(parseInt(e.target.value));
+        });
+
+        // Initialize Simulator
+        updateSimulator(6);
+    </script>
+</body>
+</html>

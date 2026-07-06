@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException, ForbiddenException
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO
+from app.schemas import BaseDTO, create_pagination_metadata
 from app.schemas.user import UserDTO
 from app.api.deps import check_admin
 from app.models.user import User
@@ -21,14 +21,23 @@ router = APIRouter(route_class=CamelCaseAPIRoute)
     description="Retrieves a list of all registered users. Requires Admin permissions.",
 )
 def list_users(
+    limit: int = 10,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(check_admin),
 ):
-    users = db.query(User).order_by(User.created_at.desc()).all()
+    total = db.query(User).count()
+    users = db.query(User).order_by(User.created_at.desc()).offset(offset).limit(limit).all()
     return BaseDTO(
         success=True,
         data=[UserDTO.model_validate(u) for u in users],
         message="Users list retrieved successfully",
+        metadata=create_pagination_metadata(
+            limit=limit,
+            offset=offset,
+            total=total,
+            count=len(users)
+        ),
     )
 
 

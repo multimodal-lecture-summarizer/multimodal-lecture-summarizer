@@ -3,26 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ thống Tóm tắt Video Đa Phương Thức - Mô tả Chi tiết</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Multimodal Lecture Summarizer - Kiến Trúc Hệ Thống</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #3b82f6;
-            --secondary-color: #60a5fa;
-            --background: #0f172a;
-            --surface: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border-color: #334155;
-            --accent: #10b981;
-            
-            /* Node Colors */
-            --c-blue: #3b82f6;
-            --c-green: #10b981;
-            --c-purple: #8b5cf6;
-            --c-amber: #f59e0b;
-            --c-rose: #f43f5e;
-            --c-teal: #14b8a6;
+            --bg-dark: #0b0f19;
+            --surface-glass: rgba(17, 25, 40, 0.75);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --cyan: #06b6d4;
+            --cyan-glow: rgba(6, 182, 212, 0.15);
+            --primary-glow: rgba(99, 102, 241, 0.15);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
         }
 
         * {
@@ -33,902 +31,1260 @@
 
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: var(--background);
+            background-color: var(--bg-dark);
             color: var(--text-main);
             line-height: 1.6;
-            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(6, 182, 212, 0.05) 0px, transparent 50%);
         }
 
-        /* HEADER */
         header {
-            background: radial-gradient(circle at top left, #1e293b, var(--background));
-            padding: 5rem 2rem;
+            padding: 2.5rem 2rem;
             text-align: center;
-            border-bottom: 1px solid var(--border-color);
-            position: relative;
-            overflow: hidden;
+            border-bottom: 1px solid var(--border-glass);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 40;
         }
 
-        header::before {
-            content: "";
-            position: absolute;
-            top: -50%; left: -50%;
-            width: 200%; height: 200%;
-            background: conic-gradient(from 180deg at 50% 50%, rgba(59, 130, 246, 0.1) 0deg, rgba(16, 185, 129, 0.1) 180deg, rgba(59, 130, 246, 0.1) 360deg);
-            animation: rotate 20s linear infinite;
-            z-index: 0;
-            opacity: 0.5;
-        }
-
-        @keyframes rotate { 100% { transform: rotate(360deg); } }
-
-        header h1 {
-            font-size: 3rem;
-            margin-bottom: 1.5rem;
-            font-weight: 800;
-            position: relative;
-            z-index: 1;
-            background: linear-gradient(to right, #60a5fa, #34d399);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        header p {
-            font-size: 1.25rem;
-            color: var(--text-muted);
-            max-width: 800px;
+        .header-container {
+            max-width: 1200px;
             margin: 0 auto;
-            position: relative;
-            z-index: 1;
-        }
-
-        .container {
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 4rem 2rem;
-        }
-
-        .section-title {
-            font-size: 2.25rem;
-            color: var(--text-main);
-            margin-bottom: 2rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .section-title::before {
-            content: "";
-            display: block;
-            width: 8px;
-            height: 32px;
-            background-color: var(--accent);
-            border-radius: 4px;
-        }
-
-        /* CARDS */
-        .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 2rem;
-            margin-bottom: 4rem;
-        }
-
-        .card {
-            background-color: var(--surface);
-            border-radius: 16px;
-            padding: 2.5rem;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
             display: flex;
             flex-direction: column;
-        }
-
-        .card::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 4px;
-            background: linear-gradient(90deg, var(--primary-color), var(--accent));
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-        }
-
-        .card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-            border-color: rgba(59, 130, 246, 0.5);
-        }
-
-        .card:hover::before { opacity: 1; }
-
-        .card h3 {
-            font-size: 1.5rem;
-            color: #f8fafc;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .card p {
-            color: var(--text-muted);
-            margin-bottom: 1.5rem;
-        }
-
-        /* CUSTOM CSS DIAGRAMS */
-        .diagram-wrapper {
-            background: rgba(15, 23, 42, 0.4);
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            border-radius: 16px;
-            padding: 3rem 2rem 2rem 2rem;
-            margin: 1.5rem 0;
-            backdrop-filter: blur(10px);
-            display: flex;
-            justify-content: center;
-            flex-grow: 1;
-        }
-
-        .css-flow {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
-            width: 100%;
-        }
-
-        .flow-node {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 12px;
-            padding: 1.25rem 1.5rem;
-            min-width: 200px;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-            position: relative;
-            flex: 1;
-            cursor: help;
-        }
-
-        .flow-node.fixed-w { flex: none; width: 100%; max-width: 350px; }
-
-        .flow-node:hover {
-            transform: translateY(-3px) scale(1.02);
-            border-color: rgba(255, 255, 255, 0.4);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            z-index: 10;
-        }
-
-        .flow-node h4 {
-            color: #e2e8f0;
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-
-        .flow-node p {
-            color: #94a3b8;
-            font-size: 0.9rem;
-            margin: 0;
-            line-height: 1.4;
-        }
-
-        /* TOOLTIP CSS */
-        .flow-node[data-tooltip]::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%) translateY(10px);
-            background: rgba(15, 23, 42, 0.95);
-            color: #e2e8f0;
-            padding: 0.85rem 1rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            width: max-content;
-            max-width: 280px;
-            text-align: left;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(59, 130, 246, 0.5);
-            z-index: 100;
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
-            line-height: 1.5;
-            font-weight: 400;
-        }
-
-        .flow-node[data-tooltip]::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%) translateY(10px);
-            border-width: 6px;
-            border-style: solid;
-            border-color: rgba(59, 130, 246, 0.5) transparent transparent transparent;
-            z-index: 101;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
-            pointer-events: none;
-        }
-
-        .flow-node[data-tooltip]:hover::after,
-        .flow-node[data-tooltip]:hover::before {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(-50%) translateY(-10px);
-        }
-
-        .node-blue { border-top: 3px solid var(--c-blue) !important; }
-        .node-green { border-top: 3px solid var(--c-green) !important; }
-        .node-purple { border-top: 3px solid var(--c-purple) !important; }
-        .node-amber { border-top: 3px solid var(--c-amber) !important; }
-        .node-rose { border-top: 3px solid var(--c-rose) !important; }
-        .node-teal { border-top: 3px solid var(--c-teal) !important; }
-
-        .flow-arrow {
-            color: rgba(148, 163, 184, 0.6);
-            font-size: 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem;
-        }
-
-        .flow-col { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; width: 100%; }
-
-        .arch-container { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 0.5rem; }
-        .arch-ai-box { border: 1px dashed rgba(139, 92, 246, 0.4); border-radius: 16px; padding: 1.5rem; width: 100%; background: rgba(139, 92, 246, 0.03); margin: 0.5rem 0; }
-        .ai-box-title { text-align: center; color: #c4b5fd; margin-bottom: 1.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-size: 0.9rem; }
-        .ai-grid { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
-        .ai-grid .flow-node { flex: 1; min-width: 250px; }
-
-        .branch-container { display: flex; gap: 1rem; justify-content: center; width: 100%; }
-        .branch-col { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; }
-
-        .tech-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; }
-        .tech-tag { display: inline-flex; align-items: center; background: rgba(59, 130, 246, 0.1); color: #93c5fd; padding: 0.4rem 1rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; border: 1px solid rgba(59, 130, 246, 0.2); transition: all 0.2s ease; }
-        .tech-tag:hover { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); color: #fff; }
-
-        /* TIMELINE CSS */
-        .timeline {
-            position: relative;
-            margin: 2rem 0 4rem 0;
-            padding-top: 1rem;
-        }
-
-        .timeline::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 22px;
-            width: 4px;
-            background: linear-gradient(to bottom, var(--primary-color), var(--accent));
-            border-radius: 4px;
-        }
-
-        .timeline-item {
-            position: relative;
-            margin-bottom: 2rem;
-            padding-left: 70px;
-        }
-
-        .timeline-marker {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 48px;
-            height: 48px;
-            background: var(--surface);
-            color: #fff;
-            font-weight: 700;
-            font-size: 0.9rem;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 3px solid var(--accent);
-            z-index: 1;
-            box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
-            text-align: center;
-            line-height: 1.1;
-        }
-
-        .timeline-content {
-            background: rgba(15, 23, 42, 0.4);
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, border-color 0.3s ease;
-        }
-
-        .timeline-content:hover {
-            transform: translateX(5px);
-            border-color: rgba(59, 130, 246, 0.5);
-        }
-
-        .timeline-content h3 {
-            color: var(--secondary-color);
-            font-size: 1.25rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .timeline-content ul {
-            margin-top: 1rem;
-            padding-left: 1.5rem;
-        }
-
-        .timeline-content li {
-            margin-bottom: 0.5rem;
-            color: var(--text-muted);
-        }
-
-        .timeline-content strong {
-            color: #e2e8f0;
-        }
-
-        /* MEMBER GRID */
-        .member-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 4rem;
-        }
-
-        .member-card {
-            background: var(--surface);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1.5rem;
-            transition: transform 0.3s ease;
-            border-top: 4px solid var(--primary-color);
-        }
-
-        .member-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(59, 130, 246, 0.5);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .member-card h3 {
-            color: #f8fafc;
-            margin-bottom: 1rem;
-            font-size: 1.25rem;
-            display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .member-card ul {
-            padding-left: 1.5rem;
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo-icon {
+            font-size: 2.5rem;
+            color: var(--cyan);
+            text-shadow: 0 0 12px var(--cyan-glow);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 30%, var(--text-muted) 70%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            max-width: 600px;
+        }
+
+        main {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 3rem;
+        }
+
+        /* Interactive Diagram Container */
+        .diagram-section {
+            background: var(--surface-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 2rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .diagram-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 1rem;
+        }
+
+        .diagram-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .diagram-instructions {
+            font-size: 0.85rem;
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            animation: pulse 2s infinite;
+        }
+
+        .svg-container {
+            width: 100%;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+            background: rgba(5, 7, 12, 0.4);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            padding: 1rem 0;
+        }
+
+        /* SVG styles for interactive elements */
+        svg {
+            min-width: 1000px;
+        }
+
+        .node-group {
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .node-group:hover .node-rect {
+            stroke: var(--cyan);
+            filter: drop-shadow(0px 0px 8px rgba(6, 182, 212, 0.5));
+            fill: rgba(17, 25, 40, 0.95);
+        }
+
+        .node-group:hover .node-text {
+            fill: #fff;
+        }
+
+        .node-rect {
+            fill: rgba(17, 25, 40, 0.8);
+            stroke: var(--border-glass);
+            stroke-width: 1.5;
+            transition: all 0.3s ease;
+        }
+
+        .node-header-rect {
+            fill: rgba(99, 102, 241, 0.1);
+            stroke-bottom: 1px solid var(--border-glass);
+        }
+
+        .node-text {
+            fill: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .node-subtext {
+            fill: var(--text-muted);
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 400;
+        }
+
+        .node-icon {
+            font-family: 'Material Symbols Outlined', sans-serif;
+            font-size: 22px;
+            fill: var(--cyan);
+        }
+
+        .connector-line {
+            stroke: var(--border-glass);
+            stroke-width: 1.5;
+            fill: none;
+            stroke-dasharray: 4 4;
+            animation: dash 30s linear infinite;
+        }
+
+        .connector-active {
+            stroke: var(--cyan);
+            stroke-width: 1.8;
+            stroke-dasharray: 5 5;
+            filter: drop-shadow(0 0 2px var(--cyan));
+            animation: dash 15s linear infinite;
+        }
+
+        .marker-arrow {
+            fill: var(--cyan);
+        }
+
+        /* Detail Drawer Pane */
+        .detail-drawer {
+            position: fixed;
+            top: 0;
+            right: -450px;
+            width: 450px;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(20px);
+            border-left: 1px solid var(--border-glass);
+            z-index: 50;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+            transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-drawer.open {
+            right: 0;
+        }
+
+        .drawer-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .drawer-title-area {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .drawer-icon {
+            color: var(--cyan);
+            font-size: 2rem;
+        }
+
+        .drawer-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .drawer-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.03);
+            transition: all 0.2s ease;
+        }
+
+        .drawer-close-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .drawer-body {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .drawer-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .drawer-section-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--cyan);
+        }
+
+        .drawer-section-content {
+            font-size: 0.925rem;
+            color: var(--text-main);
+        }
+
+        .file-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .file-item {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            color: #818cf8;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tech-tag {
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #a5b4fc;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .io-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .io-item {
+            display: flex;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .io-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .io-label {
+            font-weight: 700;
+            width: 80px;
             color: var(--text-muted);
         }
 
-        .member-card li { margin-bottom: 0.5rem; }
-
-        table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 2rem 0; background: var(--surface); border-radius: 16px; overflow: hidden; border: 1px solid var(--border-color); }
-        th, td { padding: 1.25rem 1.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
-        th { background: rgba(255, 255, 255, 0.02); color: #f8fafc; font-weight: 600; font-size: 1.1rem; }
-        td { color: var(--text-muted); font-size: 1rem; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: rgba(255, 255, 255, 0.02); }
-
-        ul.metrics-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
-        ul.metrics-list li { background: rgba(15, 23, 42, 0.5); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); transition: transform 0.2s ease, border-color 0.2s ease; }
-        ul.metrics-list li:hover { transform: translateY(-4px); border-color: rgba(16, 185, 129, 0.5); }
-        ul.metrics-list li strong { display: block; color: var(--accent); font-size: 1.25rem; margin-bottom: 0.5rem; }
-
-        /* RESPONSIVE */
-        @media (max-width: 900px) {
-            .css-flow { flex-direction: column; }
-            .css-flow > .flow-arrow { transform: rotate(90deg); margin: 0.25rem 0; }
-            .branch-container { flex-direction: column; }
+        .io-val {
+            flex: 1;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #e2e8f0;
         }
-        @media (max-width: 768px) {
-            .grid-2 { grid-template-columns: 1fr; }
-            header h1 { font-size: 2.25rem; }
-            .container { padding: 2rem 1rem; }
-            .card { padding: 1.5rem; }
-            .flow-node.fixed-w { max-width: 100%; }
+
+        /* Pipeline Stages tab area */
+        .tabs-section {
+            background: var(--surface-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 2rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .tabs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 1.25rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .tabs-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .tabs-nav {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            max-width: 100%;
+            padding-bottom: 0.25rem;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .stage-card {
+            display: grid;
+            grid-template-cols: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 768px) {
+            .stage-card {
+                grid-template-cols: 1fr 1fr;
+            }
+        }
+
+        .stage-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .stage-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stage-meta {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .meta-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .meta-pill span {
+            color: var(--cyan);
+        }
+
+        .stage-description {
+            font-size: 0.95rem;
+            color: var(--text-main);
+        }
+
+        .stage-tech-box {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .stage-tech-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .stage-tech-items {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--cyan);
+        }
+
+        .stage-flow {
+            background: rgba(5, 7, 12, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .flow-step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            position: relative;
+            padding-bottom: 1.5rem;
+        }
+
+        .flow-step-item:last-child {
+            padding-bottom: 0;
+        }
+
+        .flow-step-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 24px;
+            bottom: 0;
+            width: 2px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .flow-step-num {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.2);
+            border: 1.5px solid var(--primary);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            z-index: 10;
+        }
+
+        .flow-step-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .flow-step-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #fff;
+        }
+
+        .flow-step-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Overlay blur filter */
+        .drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(5, 7, 12, 0.4);
+            backdrop-filter: blur(4px);
+            z-index: 45;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .drawer-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            border-top: 1px solid var(--border-glass);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            background: rgba(5, 7, 12, 0.4);
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -1000;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.6;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>Kiến trúc Hệ thống Tóm tắt Video Đa Phương Thức</h1>
-        <p>Tài liệu trực quan mô tả chi tiết các thành phần, luồng xử lý dữ liệu và các công nghệ AI ứng dụng trong hệ thống phân tích video tự động.</p>
+        <div class="header-container">
+            <div class="logo-area">
+                <span class="material-symbols-outlined logo-icon">insights</span>
+                <h1>Hệ Thống Tóm Tắt Bài Giảng Đa Phương Thức</h1>
+            </div>
+            <p class="subtitle">Bản đồ kiến trúc trực quan, mô tả kỹ thuật và giải thích chi tiết các thành phần trong dự án.</p>
+        </div>
     </header>
 
-    <div class="container">
+    <main>
+        <!-- 1. Interactive Diagram Section -->
+        <section class="diagram-section">
+            <div class="diagram-header">
+                <div class="diagram-title">
+                    <span class="material-symbols-outlined text-cyan">account_tree</span>
+                    <span>Sơ đồ dòng chảy hệ thống (System Architecture Flow)</span>
+                </div>
+                <div class="diagram-instructions">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">ads_click</span>
+                    <span>Bấm vào các thành phần để xem chi tiết</span>
+                </div>
+            </div>
 
-        <!-- 1. Kiến trúc tổng thể -->
-        <h2 class="section-title">Kiến trúc Tổng thể</h2>
-        <div class="card" style="margin-bottom: 4rem;">
-            <p>Hệ thống được thiết kế theo mô hình xử lý đa tầng (multi-layer architecture), đảm bảo khả năng mở rộng và xử lý độc lập giữa các module AI. Kiến trúc này cho phép kết hợp linh hoạt kết quả từ văn bản, âm thanh và hình ảnh.</p>
+            <div class="svg-container">
+                <svg width="1000" height="520" viewBox="0 0 1000 520">
+                    <defs>
+                        <!-- Glow Filters -->
+                        <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        <!-- Arrow markers -->
+                        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" class="marker-arrow"/>
+                        </marker>
+                    </defs>
+
+                    <!-- Connections (Lines) -->
+                    <!-- FE <-> BE -->
+                    <path d="M 180 230 L 260 230" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    <path d="M 260 250 L 180 250" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- BE -> DB -->
+                    <path d="M 350 280 L 350 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- BE -> R2 -->
+                    <path d="M 280 260 L 140 260 L 140 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- BE -> Redis -->
+                    <path d="M 440 230 L 520 230" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- Redis -> Worker -->
+                    <path d="M 640 230 L 720 230" class="connector-line connector-active" marker-end="url(#arrow)"/>
+
+                    <!-- Worker -> ChromaDB -->
+                    <path d="M 780 300 L 780 340 L 620 340 L 620 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- Worker -> R2 -->
+                    <path d="M 860 300 L 860 360 L 110 360 L 110 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+                    
+                    <!-- Worker -> Groq -->
+                    <path d="M 890 300 L 890 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+
+                    <!-- Worker -> DB (relational) -->
+                    <path d="M 750 300 L 750 350 L 400 350 L 400 380" class="connector-line connector-active" marker-end="url(#arrow)"/>
+
+                    <!-- Nodes (Interactive Groups) -->
+                    
+                    <!-- Frontend Web Portal -->
+                    <g class="node-group" id="node-frontend">
+                        <rect x="20" y="170" width="160" height="110" rx="12" class="node-rect"/>
+                        <rect x="20" y="170" width="160" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="35" y="190" class="node-icon">devices</text>
+                        <text x="65" y="190" class="node-text">Web Frontend</text>
+                        <text x="35" y="225" class="node-subtext">• Upload lecture videos</text>
+                        <text x="35" y="245" class="node-subtext">• Timeline interactive play</text>
+                        <text x="35" y="265" class="node-subtext">• History & Admin panels</text>
+                    </g>
+
+                    <!-- FastAPI Backend -->
+                    <g class="node-group" id="node-backend">
+                        <rect x="280" y="170" width="160" height="110" rx="12" class="node-rect"/>
+                        <rect x="280" y="170" width="160" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="295" y="190" class="node-icon">dns</text>
+                        <text x="325" y="190" class="node-text">FastAPI Backend</text>
+                        <text x="295" y="225" class="node-subtext">• REST APIs / Auth / Jobs</text>
+                        <text x="295" y="245" class="node-subtext">• Serves static video mocks</text>
+                        <text x="295" y="265" class="node-subtext">• SQLAlchemy ORM mapping</text>
+                    </g>
+
+                    <!-- Redis Message Broker -->
+                    <g class="node-group" id="node-redis">
+                        <rect x="520" y="185" width="120" height="80" rx="12" class="node-rect"/>
+                        <rect x="520" y="185" width="120" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="535" y="205" class="node-icon">layers</text>
+                        <text x="565" y="205" class="node-text">Redis Broker</text>
+                        <text x="535" y="235" class="node-subtext">• Celery task queues</text>
+                        <text x="535" y="250" class="node-subtext">• Job distribution</text>
+                    </g>
+
+                    <!-- Celery AI Worker -->
+                    <g class="node-group" id="node-worker">
+                        <rect x="720" y="60" width="250" height="240" rx="12" class="node-rect" style="stroke-width: 2px; stroke: var(--primary);"/>
+                        <rect x="720" y="60" width="250" height="40" rx="12" class="node-rect node-header-rect" />
+                        <text x="735" y="85" class="node-icon">smart_toy</text>
+                        <text x="765" y="85" class="node-text" style="fill: #a5b4fc;">Celery AI Worker</text>
+                        
+                        <!-- Internal modules of AI Worker -->
+                        <!-- Audio -->
+                        <rect x="735" y="115" width="220" height="45" rx="8" style="fill: rgba(99, 102, 241, 0.05); stroke: rgba(255,255,255,0.05);"/>
+                        <text x="745" y="132" class="node-icon" style="font-size: 16px;">graphic_eq</text>
+                        <text x="765" y="132" class="node-text" style="font-size: 11px;">Audio: Whisper ASR + VAD</text>
+                        <text x="765" y="147" class="node-subtext" style="font-size: 9px;">Speech-to-text with timestamps</text>
+
+                        <!-- Visual -->
+                        <rect x="735" y="170" width="220" height="45" rx="8" style="fill: rgba(6, 182, 212, 0.05); stroke: rgba(255,255,255,0.05);"/>
+                        <text x="745" y="187" class="node-icon" style="font-size: 16px; fill: var(--cyan);">photo_camera</text>
+                        <text x="765" y="187" class="node-text" style="font-size: 11px;">Visual: Scene + CLIP + BLIP</text>
+                        <text x="765" y="202" class="node-subtext" style="font-size: 9px;">Keyframes + OCR + Descriptions</text>
+
+                        <!-- Fusion -->
+                        <rect x="735" y="225" width="220" height="60" rx="8" style="fill: rgba(16, 185, 129, 0.05); stroke: rgba(255,255,255,0.05);"/>
+                        <text x="745" y="242" class="node-icon" style="font-size: 16px; fill: #10b981;">merge</text>
+                        <text x="765" y="242" class="node-text" style="font-size: 11px;">Fusion: Timeline + Chapters</text>
+                        <text x="765" y="257" class="node-subtext" style="font-size: 9px;">RAG index alignment</text>
+                        <text x="765" y="272" class="node-subtext" style="font-size: 9px;">LLM grounded summarization</text>
+                    </g>
+
+                    <!-- Cloudflare R2 Storage -->
+                    <g class="node-group" id="node-r2">
+                        <rect x="20" y="380" width="180" height="80" rx="12" class="node-rect"/>
+                        <rect x="20" y="380" width="180" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="35" y="400" class="node-icon">cloud</text>
+                        <text x="65" y="400" class="node-text">Cloudflare R2</text>
+                        <text x="35" y="430" class="node-subtext">• S3-compatible Object store</text>
+                        <text x="35" y="445" class="node-subtext">• Uploaded videos & keyframes</text>
+                    </g>
+
+                    <!-- SQL Relational Database -->
+                    <g class="node-group" id="node-db">
+                        <rect x="280" y="380" width="180" height="80" rx="12" class="node-rect"/>
+                        <rect x="280" y="380" width="180" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="295" y="400" class="node-icon">database</text>
+                        <text x="325" y="400" class="node-text">Relational DB</text>
+                        <text x="295" y="430" class="node-subtext">• SQLite / PostgreSQL storage</text>
+                        <text x="295" y="445" class="node-subtext">• Users, Video tables & Job history</text>
+                    </g>
+
+                    <!-- Chroma Vector DB -->
+                    <g class="node-group" id="node-chroma">
+                        <rect x="520" y="380" width="160" height="80" rx="12" class="node-rect"/>
+                        <rect x="520" y="380" width="160" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="535" y="400" class="node-icon">hub</text>
+                        <text x="565" y="400" class="node-text">ChromaDB</text>
+                        <text x="535" y="430" class="node-subtext">• High-speed Vector DB</text>
+                        <text x="535" y="445" class="node-subtext">• Lecture chunks RAG embeddings</text>
+                    </g>
+
+                    <!-- Groq AI Summarizer API -->
+                    <g class="node-group" id="node-groq">
+                        <rect x="750" y="380" width="180" height="80" rx="12" class="node-rect"/>
+                        <rect x="750" y="380" width="180" height="30" rx="12" class="node-rect node-header-rect" />
+                        <text x="765" y="400" class="node-icon">api</text>
+                        <text x="795" y="400" class="node-text">Groq LLM API</text>
+                        <text x="765" y="430" class="node-subtext">• Llama 3 high-speed inference</text>
+                        <text x="765" y="445" class="node-subtext">• Grounded outline & summary</text>
+                    </g>
+                </svg>
+            </div>
+        </section>
+
+        <!-- 2. Detailed Tabbed Stages Section -->
+        <section class="tabs-section">
+            <div class="tabs-header">
+                <div class="tabs-title">
+                    <span class="material-symbols-outlined text-cyan">timeline</span>
+                    <span>Quy Trình Xử Lý Video (Pipeline Stages)</span>
+                </div>
+                <div class="tabs-nav">
+                    <button class="tab-btn active" onclick="switchTab(0)">Stage 0: Preprocess</button>
+                    <button class="tab-btn" onclick="switchTab(1)">Stage 1-2: Audio</button>
+                    <button class="tab-btn" onclick="switchTab(2)">Stage 3-4: Visual</button>
+                    <button class="tab-btn" onclick="switchTab(3)">Stage 5: Fusion</button>
+                    <button class="tab-btn" onclick="switchTab(4)">Stage 6: Text</button>
+                </div>
+            </div>
+
+            <!-- Tab Content 0: Preprocess -->
+            <div class="tab-content active" id="tab-0">
+                <div class="stage-card">
+                    <div class="stage-info">
+                        <h3 class="stage-title">Stage 0 — Tiền Xử Lý Video</h3>
+                        <div class="stage-meta">
+                            <div class="meta-pill"><span class="material-symbols-outlined">schedule</span> 5-15 giây</div>
+                            <div class="meta-pill"><span class="material-symbols-outlined">cpu</span> FFmpeg</div>
+                        </div>
+                        <p class="stage-description">
+                            Bước chuẩn bị quan trọng để tăng tốc cho toàn bộ các bước phía sau. Video bài giảng gốc được xử lý để trích xuất kênh âm thanh và chuẩn hóa thông số chất lượng, tránh việc worker giải mã video nhiều lần.
+                        </p>
+                        <div class="stage-tech-box">
+                            <div class="stage-tech-title">Công cụ & Thư viện sử dụng</div>
+                            <div class="stage-tech-items">FFmpeg (pcm_s16le, 16kHz, mono)</div>
+                        </div>
+                    </div>
+                    <div class="stage-flow">
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">1</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Nhận Video đầu vào</span>
+                                <span class="flow-step-desc">Đọc tệp video tải lên hoặc tải từ link YouTube thông qua yt-dlp.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">2</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Tách file âm thanh WAV</span>
+                                <span class="flow-step-desc">Trích xuất kênh audio ở tần số 16kHz mono (tiêu chuẩn đầu vào cho các mô hình ASR).</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">3</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Đọc siêu dữ liệu (Metadata)</span>
+                                <span class="flow-step-desc">Trích xuất độ dài (duration), tốc độ khung hình (fps) để tính toán đồng bộ.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content 1: Audio -->
+            <div class="tab-content" id="tab-1">
+                <div class="stage-card">
+                    <div class="stage-info">
+                        <h3 class="stage-title">Stage 1 & 2 — Nhận Dạng Lời Nói & Người Nói</h3>
+                        <div class="stage-meta">
+                            <div class="meta-pill"><span class="material-symbols-outlined">schedule</span> ~0.1x độ dài video</div>
+                            <div class="meta-pill"><span class="material-symbols-outlined">graphic_eq</span> Whisper + Silero VAD</div>
+                        </div>
+                        <p class="stage-description">
+                            Chuyển giọng nói của giảng viên trong audio thành văn bản chi tiết kèm nhãn thời gian ở cấp độ từ và gán nhãn định danh người nói (diarization).
+                        </p>
+                        <div class="stage-tech-box">
+                            <div class="stage-tech-title">Mô hình AI sử dụng</div>
+                            <div class="stage-tech-items">openai/whisper-tiny / large-v3, snakers4/silero-vad, pyannote/speaker-diarization-3.1</div>
+                        </div>
+                    </div>
+                    <div class="stage-flow">
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">1</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Lọc im lặng với Silero VAD</span>
+                                <span class="flow-step-desc">Nhận diện các phân đoạn im lặng hoặc nhạc nền để bỏ qua, tối ưu tài nguyên GPU.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">2</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Chạy Whisper ASR</span>
+                                <span class="flow-step-desc">Batch xử lý audio theo các đoạn 30 giây để trích văn bản và mốc thời gian (timestamps).</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">3</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Phân đoạn người nói (Diarization)</span>
+                                <span class="flow-step-desc">Phân tích đặc trưng giọng nói để phân biệt giảng viên và sinh viên, gán nhãn chính xác.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content 2: Visual -->
+            <div class="tab-content" id="tab-2">
+                <div class="stage-card">
+                    <div class="stage-info">
+                        <h3 class="stage-title">Stage 3 & 4 — Nhận Diện Chuyển Cảnh & Xử Lý Slide</h3>
+                        <div class="stage-meta">
+                            <div class="meta-pill"><span class="material-symbols-outlined">schedule</span> ~0.05x độ dài video</div>
+                            <div class="meta-pill"><span class="material-symbols-outlined">photo_camera</span> CLIP + BLIP + PaddleOCR</div>
+                        </div>
+                        <p class="stage-description">
+                            Phát hiện những thời điểm thay đổi slide bài giảng, chụp lại keyframe đại diện, lọc trùng lặp thông tin hình ảnh và trích xuất chữ viết (OCR) kết hợp mô tả ngữ nghĩa (VLM) cho từng slide.
+                        </p>
+                        <div class="stage-tech-box">
+                            <div class="stage-tech-title">Mô hình AI sử dụng</div>
+                            <div class="stage-tech-items">openai/clip-vit-base-patch32, Salesforce/blip-image-captioning-base, PaddleOCR vi+en</div>
+                        </div>
+                    </div>
+                    <div class="stage-flow">
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">1</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Scene boundary detection</span>
+                                <span class="flow-step-desc">Sử dụng thuật toán so sánh cường độ thay đổi pixel (PySceneDetect) để phát hiện lúc đổi slide.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">2</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Lọc trùng ngữ nghĩa với CLIP</span>
+                                <span class="flow-step-desc">Trích xuất embeddings các keyframe và áp dụng thuật toán gom cụm K-Means để loại bỏ các frame trùng lặp hoặc glitch.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">3</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Trích OCR & Captioning (BLIP)</span>
+                                <span class="flow-step-desc">Chạy mô hình OCR để đọc toàn bộ chữ trên slide, kết hợp BLIP để tự động viết mô tả hình ảnh trong slide đó.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content 3: Fusion -->
+            <div class="tab-content" id="tab-3">
+                <div class="stage-card">
+                    <div class="stage-info">
+                        <h3 class="stage-title">Stage 5 — Hợp Nhất Đa Phương Thức & Định Tuyến RAG</h3>
+                        <div class="stage-meta">
+                            <div class="meta-pill"><span class="material-symbols-outlined">schedule</span> ~5-15 giây</div>
+                            <div class="meta-pill"><span class="material-symbols-outlined">merge</span> Cross-modal alignment</div>
+                        </div>
+                        <p class="stage-description">
+                            Bước kết hợp đa phương thức quan trọng nhất: kết nối mốc thời gian lời nói (Audio) với các slide bài giảng (Visual), phân vùng chương bài giảng theo sự dịch chuyển chủ đề (Topic Shift) và đẩy dữ liệu vào Vector DB.
+                        </p>
+                        <div class="stage-tech-box">
+                            <div class="stage-tech-title">Mô hình AI sử dụng</div>
+                            <div class="stage-tech-items">CLIP similarity + Cosine Distance Clustering + ChromaDB Indexing</div>
+                        </div>
+                    </div>
+                    <div class="stage-flow">
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">1</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Cross-modal alignment</span>
+                                <span class="flow-step-desc">So khớp độ tương đồng ngữ nghĩa giữa phân đoạn transcript và chữ viết/ảnh slide để gắn chính xác slide nào được giảng ở phút nào.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">2</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Phân đoạn chương (Topic Shift)</span>
+                                <span class="flow-step-desc">Phát hiện sự thay đổi chủ đề bài học lớn khi độ tương đồng cosine giữa các câu giảm sâu, tạo các chương phân mảnh khoa học.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">3</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Đẩy dữ liệu vào Vector Database</span>
+                                <span class="flow-step-desc">Cắt phân đoạn nhỏ (chunks) chứa cả lời nói + chữ slide, tạo vector hóa đưa vào ChromaDB phục vụ tính năng Hỏi-Đáp (RAG).</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content 4: Text -->
+            <div class="tab-content" id="tab-4">
+                <div class="stage-card">
+                    <div class="stage-info">
+                        <h3 class="stage-title">Stage 6 — Tóm Tắt & Tham Chiếu Nguồn</h3>
+                        <div class="stage-meta">
+                            <div class="meta-pill"><span class="material-symbols-outlined">schedule</span> ~10-30 giây</div>
+                            <div class="meta-pill"><span class="material-symbols-outlined">api</span> Groq API LLM</div>
+                        </div>
+                        <p class="stage-description">
+                            Sử dụng các mô hình ngôn ngữ lớn tiên tiến nhất để tạo đề cương bài giảng có phân đoạn hợp lý. Bản tóm tắt bắt buộc phải chèn trích dẫn mốc thời gian `[phút:giây]` và slide tương ứng `[Slide N]` để chống lỗi ảo tưởng (hallucination).
+                        </p>
+                        <div class="stage-tech-box">
+                            <div class="stage-tech-title">Mô hình AI sử dụng</div>
+                            <div class="stage-tech-items">llama3-70b-8192, mixtral-8x7b-32768, gpt-4o-mini (fallback)</div>
+                        </div>
+                    </div>
+                    <div class="stage-flow">
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">1</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Xây dựng Đề cương kế hoạch</span>
+                                <span class="flow-step-desc">LLM đọc danh sách chương và slide để phác thảo các mục tóm tắt chính.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">2</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Tóm tắt có dẫn chứng nguồn</span>
+                                <span class="flow-step-desc">Tự động chèn các link tham chiếu nguồn trực tiếp (anchor links) vào tiêu đề hoặc đoạn văn của bản tóm tắt.</span>
+                            </div>
+                        </div>
+                        <div class="flow-step-item">
+                            <div class="flow-step-num">3</div>
+                            <div class="flow-step-detail">
+                                <span class="flow-step-title">Lưu trữ kết quả</span>
+                                <span class="flow-step-desc">Lưu trữ file JSON kết quả, cập nhật trạng thái cơ sở dữ liệu và gửi thông báo hoàn tất tới frontend.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Side Detail Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="detail-drawer" id="detail-drawer">
+        <div class="drawer-header">
+            <div class="drawer-title-area">
+                <span class="material-symbols-outlined drawer-icon" id="drawer-icon">devices</span>
+                <span class="drawer-title" id="drawer-title">Component Name</span>
+            </div>
+            <button class="drawer-close-btn" onclick="closeDrawer()">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-section">
+                <span class="drawer-section-label">Mô tả chức năng</span>
+                <span class="drawer-section-content" id="drawer-desc">Description of component</span>
+            </div>
             
-            <div class="diagram-wrapper">
-                <div class="arch-container">
-                    <div class="flow-node fixed-w node-blue" data-tooltip="Cho phép tiếp nhận video đầu vào qua file upload, YouTube URL hoặc local path. Hỗ trợ đa dạng các định dạng như mp4, avi, mkv.">
-                        <h4>1. Input Layer</h4>
-                        <p>Upload Video / YouTube URL / Local File</p>
-                    </div>
-                    
-                    <div class="flow-arrow">↓</div>
-                    
-                    <div class="flow-node fixed-w node-teal" data-tooltip="Sử dụng FFmpeg để bóc tách video thành luồng âm thanh rời (audio.wav), trích xuất khung hình (frames) với tần số 1 fps, và lưu trữ metadata (độ phân giải, fps).">
-                        <h4>2. Preprocessing Layer</h4>
-                        <p>Tách Audio, Frame, Metadata (FFmpeg)</p>
-                    </div>
-                    
-                    <div class="flow-arrow">↓</div>
-                    
-                    <div class="arch-ai-box">
-                        <h4 class="ai-box-title">3. AI Processing Layer</h4>
-                        <div class="ai-grid">
-                            <div class="flow-node node-purple" data-tooltip="Phân tích âm thanh: Dùng mô hình Whisper/WhisperX để nhận dạng giọng nói (ASR) và pyannote.audio để xác định danh tính người nói (Speaker Diarization).">
-                                <h4>Audio Module</h4>
-                                <p>ASR, Speaker Diarization</p>
-                            </div>
-                            <div class="flow-node node-rose" data-tooltip="Phân tích hình ảnh: Dùng PySceneDetect để tìm điểm chuyển cảnh, CLIP để chọn khung hình đại diện (Keyframe) và BLIP/LLaVA để sinh mô tả nội dung.">
-                                <h4>Visual Module</h4>
-                                <p>Scene Detect, Keyframes, Captioning</p>
-                            </div>
-                            <div class="flow-node node-amber" data-tooltip="Đồng bộ hóa mốc thời gian giữa văn bản và hình ảnh, sau đó đưa vào LLM (GPT/Claude) để sinh bản tóm tắt, chia chương và hỗ trợ hỏi đáp RAG.">
-                                <h4>Fusion & Summarization</h4>
-                                <p>Alignment, LLM Summary, RAG Q&A</p>
-                            </div>
-                        </div>
-                    </div>
+            <div class="drawer-section">
+                <span class="drawer-section-label">Công nghệ cốt lõi</span>
+                <div class="tag-list" id="drawer-tech">
+                    <span class="tech-tag">React</span>
+                </div>
+            </div>
 
-                    <div class="flow-arrow">↓</div>
-                    
-                    <div class="flow-node fixed-w node-green" data-tooltip="Lưu trữ cấu trúc hóa dữ liệu (Transcript JSON, Keyframes JSON, Embeddings trong ChromaDB) để phục vụ cho giao diện và truy vấn RAG.">
-                        <h4>4. Storage Layer</h4>
-                        <p>Lưu Transcript, Embeddings, Summaries</p>
+            <div class="drawer-section">
+                <span class="drawer-section-label">Đầu vào & Đầu ra (I/O)</span>
+                <div class="io-card">
+                    <div class="io-item">
+                        <span class="io-label">Input</span>
+                        <span class="io-val" id="drawer-input">Data input</span>
                     </div>
-
-                    <div class="flow-arrow">↓</div>
-                    
-                    <div class="flow-node fixed-w node-blue" data-tooltip="Giao diện tương tác người dùng được xây dựng bằng Streamlit hoặc Gradio, giao tiếp thông qua backend API viết bằng FastAPI.">
-                        <h4>5. Application Layer</h4>
-                        <p>Streamlit / Gradio UI, FastAPI</p>
+                    <div class="io-item">
+                        <span class="io-label">Output</span>
+                        <span class="io-val" id="drawer-output">Data output</span>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- 2. Chi tiết các thành phần & Luồng xử lý -->
-        <h2 class="section-title">Phân tích Chi tiết Từng Module</h2>
-        
-        <div class="grid-2">
-            
-            <!-- Preprocessing -->
-            <div class="card">
-                <h3>⚙️ Module Tiền xử lý (Preprocessing)</h3>
-                <p>Nhiệm vụ chuẩn hóa đầu vào. Trích xuất âm thanh chuẩn cho mô hình nhận dạng giọng nói và trích xuất chuỗi hình ảnh phục vụ phân tích thị giác máy tính.</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="flow-node node-blue" data-tooltip="File video đầu vào từ người dùng hoặc hệ thống, hỗ trợ các định dạng phổ biến.">
-                            <h4>Video Input</h4>
-                            <p>mp4, avi, url</p>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-col">
-                            <div class="flow-node node-teal" data-tooltip="Được chuyển đổi về định dạng Mono và Sample Rate 16kHz - thông số tối ưu nhất cho các mô hình nhận dạng giọng nói.">
-                                <h4>audio.wav</h4>
-                                <p>16kHz Mono</p>
-                            </div>
-                            <div class="flow-node node-teal" data-tooltip="Cắt lấy 1 khung hình trên mỗi giây (1 FPS) để giảm thiểu tài nguyên xử lý mà vẫn giữ được thông tin ảnh quan trọng.">
-                                <h4>frames/</h4>
-                                <p>1 FPS</p>
-                            </div>
-                            <div class="flow-node node-teal" data-tooltip="Lưu thông tin nền tảng của video như thời lượng (duration), độ phân giải, framerate gốc.">
-                                <h4>metadata.json</h4>
-                                <p>Video Info</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">FFmpeg</span>
-                    <span class="tech-tag">Python Subprocess</span>
-                </div>
-            </div>
-
-            <!-- Audio Intelligence -->
-            <div class="card">
-                <h3>🎙️ Audio Intelligence</h3>
-                <p>Khôi phục và nhận dạng thông tin âm thanh. Trả lời các câu hỏi: Nói gì? Nói khi nào? Ai là người đang nói?</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="flow-col">
-                            <div class="flow-node node-blue" data-tooltip="File âm thanh đầu vào đã được chuẩn hóa (16kHz, mono) từ module Preprocessing.">
-                                <h4>audio.wav</h4>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="branch-container">
-                                <div class="flow-node node-purple" data-tooltip="Sử dụng Whisper hoặc WhisperX để chuyển đổi giọng nói thành văn bản, kèm theo mốc thời gian chi tiết đến từng từ (word-level timestamp).">
-                                    <h4>Speech-to-Text</h4>
-                                    <p>Whisper</p>
-                                </div>
-                                <div class="flow-node node-purple" data-tooltip="Mô hình nhận diện danh tính người nói (speaker diarization) giúp phân biệt 'Ai đang nói vào thời điểm nào'.">
-                                    <h4>Diarization</h4>
-                                    <p>pyannote</p>
-                                </div>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-amber" data-tooltip="Thuật toán ghép nối (alignment) để gán nhãn người nói vào từng câu văn bản tương ứng dựa trên mức độ trùng khớp thời gian (overlap).">
-                                <h4>Transcript Merge</h4>
-                                <p>Align speaker with text</p>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-green" data-tooltip="Kết quả đầu ra: File JSON chứa văn bản, thời gian bắt đầu/kết thúc và định danh người nói.">
-                                <h4>transcript_with_speaker.json</h4>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">OpenAI Whisper</span>
-                    <span class="tech-tag">WhisperX</span>
-                    <span class="tech-tag">pyannote.audio</span>
-                </div>
-            </div>
-
-            <!-- Visual Intelligence -->
-            <div class="card">
-                <h3>👁️ Visual Intelligence</h3>
-                <p>Đảm nhận việc xử lý hình ảnh, phát hiện sự thay đổi bối cảnh (scene) và chọn lọc ra các khung hình (keyframes) có ý nghĩa nhất.</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="flow-node node-blue" data-tooltip="Tập hợp các khung hình đã được trích xuất từ video ở tầng Preprocessing.">
-                            <h4>Video Frames</h4>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-rose" data-tooltip="Phát hiện điểm thay đổi cảnh quay đáng kể dựa trên sự khác biệt về pixel, giúp phân tách video thành các cảnh nhỏ (scenes).">
-                            <h4>Scene Boundaries</h4>
-                            <p>PySceneDetect</p>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-rose" data-tooltip="Sử dụng CLIP embedding và K-means clustering để gom nhóm và chọn ra các khung hình có ý nghĩa và khác biệt nhất (semantic diversity).">
-                            <h4>Keyframes Extraction</h4>
-                            <p>CLIP / K-Means</p>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-green" data-tooltip="Kết quả đầu ra: Chứa đường dẫn ảnh, mốc thời gian và điểm đánh giá độ quan trọng (importance score).">
-                            <h4>keyframes.json</h4>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">PySceneDetect</span>
-                    <span class="tech-tag">CLIP Embedding</span>
-                    <span class="tech-tag">K-means Clustering</span>
-                </div>
-            </div>
-
-            <!-- Multimodal Fusion -->
-            <div class="card">
-                <h3>🔗 Multimodal Fusion</h3>
-                <p>Bộ kết nối các dạng dữ liệu. Thực hiện ánh xạ mốc thời gian để ghép nối chính xác nội dung transcript và hình ảnh tương ứng.</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="branch-col">
-                            <div class="flow-node node-blue" data-tooltip="Kết quả phân tích giọng nói từ Module Audio.">
-                                <h4>Transcript</h4>
-                            </div>
-                            <div class="flow-node node-blue" data-tooltip="Kết quả phân tích hình ảnh từ Module Visual.">
-                                <h4>Keyframes</h4>
-                            </div>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-col" style="flex: 2">
-                            <div class="flow-node node-amber" data-tooltip="Đồng bộ hóa dữ liệu. Với mỗi keyframe tại thời điểm t, lấy đoạn transcript trong cửa sổ thời gian [t - 30s, t + 30s] để ghép nối.">
-                                <h4>Temporal Alignment</h4>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-amber" data-tooltip="Xây dựng một Context Block có cấu trúc chuẩn hóa, kết hợp text và mô tả hình ảnh theo đúng trình tự thời gian.">
-                                <h4>Context Assembly</h4>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-green" data-tooltip="Khối dữ liệu ngữ cảnh phong phú chứa đầy đủ text, hình ảnh và metadata, sẵn sàng làm đầu vào cho LLM.">
-                                <h4>aligned_context.json</h4>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">Temporal Alignment</span>
-                    <span class="tech-tag">JSON Schema Mapping</span>
-                </div>
-            </div>
-
-            <!-- Summarization -->
-            <div class="card">
-                <h3>📝 Summarization (Tóm tắt)</h3>
-                <p>Nhận Context đa phương thức đã cấu trúc, sử dụng LLM để sinh bản tóm tắt, tự động chia chapters và trích xuất ý chính.</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="flow-node node-blue" data-tooltip="Dữ liệu ngữ cảnh đã được kết hợp từ âm thanh và hình ảnh theo dòng thời gian.">
-                            <h4>Aligned Context</h4>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-amber" data-tooltip="Bộ Prompt được thiết kế chặt chẽ, ràng buộc LLM không được 'bịa' thông tin (hallucination) và phải giữ nguyên cấu trúc timestamp.">
-                            <h4>Prompt Engineering</h4>
-                            <p>LLM Prompt</p>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-amber" data-tooltip="Mô hình ngôn ngữ lớn xử lý ngữ cảnh và sinh ra văn bản tóm tắt, bao gồm cả tóm tắt ngắn và tóm tắt chi tiết.">
-                            <h4>LLM Generation</h4>
-                        </div>
-                        <div class="flow-arrow">➔</div>
-                        <div class="flow-node node-green" data-tooltip="Output cuối cùng: Chứa tiêu đề bài giảng, các chương (chapters) chia theo thời gian, điểm nhấn hình ảnh và các câu hỏi gợi ý.">
-                            <h4>final_summary.json</h4>
-                            <p>Title, Chapters, Points</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">LLMs (GPT/Claude/Gemini)</span>
-                    <span class="tech-tag">Prompt Engineering</span>
-                </div>
-            </div>
-
-            <!-- Q&A (RAG) -->
-            <div class="card">
-                <h3>💬 Hệ thống RAG Q&A</h3>
-                <p>Vector hoá Transcript thành Cơ sở dữ liệu Vector để cho phép truy vấn và hỏi đáp chính xác theo từng mốc thời gian của video.</p>
-                
-                <div class="diagram-wrapper">
-                    <div class="css-flow">
-                        <div class="flow-col">
-                            <div class="branch-container">
-                                <div class="flow-col">
-                                    <div class="flow-node node-blue" data-tooltip="Đoạn văn bản tóm tắt được cắt nhỏ thành các chunk (30-60 giây) để đảm bảo không bị vượt quá giới hạn token.">
-                                        <h4>Transcript Chunks</h4>
-                                    </div>
-                                    <div class="flow-arrow">↓</div>
-                                    <div class="flow-node node-purple" data-tooltip="ChromaDB hoặc FAISS được sử dụng để lưu trữ và lập chỉ mục (index) các vector đặc trưng của văn bản.">
-                                        <h4>Vector DB</h4>
-                                        <p>ChromaDB</p>
-                                    </div>
-                                </div>
-                                <div class="flow-col">
-                                    <div class="flow-node node-blue" data-tooltip="Câu hỏi của người dùng nhập vào giao diện (VD: 'Phần nào nói về Convolution?').">
-                                        <h4>User Query</h4>
-                                    </div>
-                                    <div class="flow-arrow">↓</div>
-                                    <div class="flow-node node-purple" data-tooltip="Mô hình Embedding biến câu hỏi của người dùng thành vector số học.">
-                                        <h4>Text Embeddings</h4>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-amber" data-tooltip="Truy vấn tìm kiếm K đoạn văn bản có độ tương đồng ngữ nghĩa cao nhất với câu hỏi.">
-                                <h4>Retrieval Top-K</h4>
-                            </div>
-                            <div class="flow-arrow">↓</div>
-                            <div class="flow-node node-green" data-tooltip="LLM tổng hợp thông tin từ các đoạn văn bản truy xuất được để trả lời người dùng, kèm theo trích dẫn mốc thời gian.">
-                                <h4>LLM Answer</h4>
-                                <p>With precise Timestamps</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tech-tags">
-                    <span class="tech-tag">RAG Pipeline</span>
-                    <span class="tech-tag">ChromaDB / FAISS</span>
-                    <span class="tech-tag">Text Embeddings</span>
-                </div>
-            </div>
-
-        </div>
-
-        <!-- NEW SECTION: TIMELINE & TEAM -->
-        <h2 class="section-title">Quy trình & Kế hoạch Triển khai (6 Tuần)</h2>
-        <div class="timeline">
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>1</div>
-                <div class="timeline-content">
-                    <h3>Nghiên cứu, Setup & Chốt phạm vi</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Thống nhất loại video thử nghiệm và cấu trúc (schema) JSON đầu vào/đầu ra.</li>
-                        <li><strong>Thực hiện:</strong> Setup môi trường, chạy thử thuật toán độc lập (Whisper, FFmpeg, LLM Prompt).</li>
-                        <li><strong>Đầu ra:</strong> Có quy trình xử lý cơ bản, định nghĩa xong JSON Schema chung.</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>2</div>
-                <div class="timeline-content">
-                    <h3>Xây dựng Core Baseline (End-to-End)</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Tạo phiên bản kết nối hoàn chỉnh đầu tiên.</li>
-                        <li><strong>Thực hiện:</strong> Ghép nối chuỗi xử lý Video ➔ Transcript ➔ Keyframes ➔ Summary.</li>
-                        <li><strong>Đầu ra:</strong> Hệ thống có thể tiếp nhận và tóm tắt thành công một video ngắn (dưới 5 phút).</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>3</div>
-                <div class="timeline-content">
-                    <h3>Nâng cấp AI (Deep Dive)</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Tích hợp các công nghệ AI chuyên sâu để tối ưu chất lượng.</li>
-                        <li><strong>Thực hiện:</strong> Bổ sung Speaker Diarization, dùng thuật toán CLIP lọc Keyframe đa dạng và thêm tính năng Hỏi-đáp RAG.</li>
-                        <li><strong>Đầu ra:</strong> Hệ thống phân biệt được giọng người nói, hình ảnh đại diện không trùng lặp và có khả năng trả lời câu hỏi tự động.</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>4</div>
-                <div class="timeline-content">
-                    <h3>Đánh giá và Thực nghiệm (Evaluation)</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Biến sản phẩm phần mềm thành dự án mang tính nghiên cứu có đo lường.</li>
-                        <li><strong>Thực hiện:</strong> Chạy thử nghiệm và đo lường WER (Audio), DER (Diarization), F-score (Keyframe) và ROUGE (Summary).</li>
-                        <li><strong>Đầu ra:</strong> Các bảng báo cáo số liệu và Ablation Study chứng minh tính hiệu quả của từng module.</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>5</div>
-                <div class="timeline-content">
-                    <h3>Tích hợp và Hoàn thiện Ứng dụng (Demo App)</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Xây dựng giao diện người dùng hoàn thiện, trực quan.</li>
-                        <li><strong>Thực hiện:</strong> Viết giao diện bằng Streamlit hoặc Gradio, hiển thị dòng thời gian, Keyframe Gallery và khung Chat Q&A. Xử lý ngoại lệ.</li>
-                        <li><strong>Đầu ra:</strong> Ứng dụng chạy mượt mà trên đa dạng video test, UI/UX thân thiện.</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="timeline-item">
-                <div class="timeline-marker">Tuần<br/>6</div>
-                <div class="timeline-content">
-                    <h3>Báo cáo, Đóng gói & Luyện tập bảo vệ</h3>
-                    <ul>
-                        <li><strong>Mục tiêu:</strong> Sẵn sàng cho hội đồng đánh giá.</li>
-                        <li><strong>Thực hiện:</strong> Viết sách báo cáo (6 chương), làm Slide, chuẩn bị kịch bản Live Demo và Cached Demo (video phòng hờ).</li>
-                        <li><strong>Đầu ra:</strong> Dự án hoàn thành tốt và sẵn sàng bảo vệ.</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- TEAM DISTRIBUTION -->
-        <h2 class="section-title">Phân công Công việc (Team 3 người)</h2>
-        <div class="member-grid">
-            <div class="member-card">
-                <h3>🧑‍💻 Thành viên 1</h3>
-                <p style="color: var(--c-purple); font-weight: 500; margin-bottom: 0.5rem;">Audio Intelligence Module</p>
-                <ul>
-                    <li>Xử lý tách Audio, áp dụng mô hình ASR (Whisper).</li>
-                    <li>Phân tách và nhận dạng người nói (Speaker Diarization).</li>
-                    <li>Chịu trách nhiệm thực nghiệm và đo lường chỉ số <strong>WER, DER</strong>.</li>
-                </ul>
-            </div>
-            <div class="member-card">
-                <h3>🧑‍💻 Thành viên 2</h3>
-                <p style="color: var(--c-rose); font-weight: 500; margin-bottom: 0.5rem;">Visual Intelligence Module</p>
-                <ul>
-                    <li>Xử lý trích xuất Frames, phát hiện cảnh (Scene Detection).</li>
-                    <li>Sử dụng CLIP Embedding để lọc Keyframe thông minh.</li>
-                    <li>Chịu trách nhiệm thực nghiệm và đo lường <strong>Human Score, F-score</strong> cho hình ảnh.</li>
-                </ul>
-            </div>
-            <div class="member-card">
-                <h3>🧑‍💻 Thành viên 3</h3>
-                <p style="color: var(--c-amber); font-weight: 500; margin-bottom: 0.5rem;">Fusion, Summary & App</p>
-                <ul>
-                    <li>Viết code đồng bộ hoá Context (Fusion), thiết kế Prompt LLM, cấu hình RAG Q&A.</li>
-                    <li>Xây dựng UI Demo bằng Streamlit / FastAPI.</li>
-                    <li>Chịu trách nhiệm đo lường <strong>ROUGE/BERTScore</strong> và System Latency.</li>
+            <div class="drawer-section">
+                <span class="drawer-section-label">Các tệp tin liên quan (Source Files)</span>
+                <ul class="file-list" id="drawer-files">
+                    <li class="file-item"><span class="material-symbols-outlined" style="font-size: 14px;">description</span> file_path.py</li>
                 </ul>
             </div>
         </div>
-
-
-        <!-- 3. Công nghệ và Kỹ thuật Tổng hợp -->
-        <h2 class="section-title">Công nghệ & Kỹ thuật Áp dụng</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Modality / Nhiệm vụ</th>
-                    <th>Nội dung trích xuất</th>
-                    <th>Công nghệ Khuyến nghị</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Audio & Speech</strong></td>
-                    <td>Nhận dạng text, mốc thời gian</td>
-                    <td>Whisper, WhisperX, Forced Alignment</td>
-                </tr>
-                <tr>
-                    <td><strong>Speaker Analysis</strong></td>
-                    <td>Phân biệt giọng nói (Diarization)</td>
-                    <td>pyannote.audio</td>
-                </tr>
-                <tr>
-                    <td><strong>Video Context</strong></td>
-                    <td>Chuyển cảnh, Ảnh đại diện</td>
-                    <td>PySceneDetect, CLIP Embeddings, Clustering</td>
-                </tr>
-                <tr>
-                    <td><strong>Semantic Vision</strong></td>
-                    <td>Chuyển ảnh thành text (Captioning)</td>
-                    <td>BLIP, LLaVA, OCR</td>
-                </tr>
-                <tr>
-                    <td><strong>Synthesis & NLP</strong></td>
-                    <td>Tóm tắt, cấu trúc hóa dữ liệu</td>
-                    <td>LLMs, Semantic Chunking, RAG</td>
-                </tr>
-                <tr>
-                    <td><strong>Storage & UI</strong></td>
-                    <td>Giao diện thao tác, lưu trữ</td>
-                    <td>FastAPI, Streamlit, Gradio, ChromaDB</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <!-- 4. Tiêu chí Đánh giá -->
-        <h2 class="section-title" style="margin-top: 4rem;">Tiêu chuẩn Đánh giá (Metrics)</h2>
-        <ul class="metrics-list">
-            <li>
-                <strong>WER (Word Error Rate)</strong>
-                Đánh giá chất lượng của mô hình ASR. Đo lường tỷ lệ lỗi nhận diện sai từ ngữ so với ground truth.
-            </li>
-            <li>
-                <strong>DER (Diarization Error Rate)</strong>
-                Đánh giá mức độ chính xác của hệ thống khi xác định sai người nói (nhầm giọng, gán nhầm đoạn hội thoại).
-            </li>
-            <li>
-                <strong>Keyframe Quality</strong>
-                Đánh giá dựa trên Human Score và F-Score để xem frame được trích xuất có đại diện đúng nội dung hay không.
-            </li>
-            <li>
-                <strong>ROUGE-L & BERTScore</strong>
-                Sử dụng để đo lường độ tương đồng ngữ nghĩa của bản tóm tắt tự động so với bản tóm tắt tiêu chuẩn (Human Summary).
-            </li>
-            <li>
-                <strong>Recall@K cho RAG</strong>
-                Đo lường độ truy xuất chính xác các chunk văn bản chứa câu trả lời cho truy vấn của người dùng.
-            </li>
-            <li>
-                <strong>System Latency</strong>
-                Thời gian xử lý toàn trình (end-to-end) từ lúc upload video tới lúc ra bản tóm tắt hoàn chỉnh.
-            </li>
-        </ul>
-
     </div>
 
+    <footer>
+        <p>© 2026 Multimodal Lecture Summarizer Project. Đã tối ưu hóa cơ chế nạp động và giải phóng mô hình AI tức thì để tiết kiệm bộ nhớ.</p>
+    </footer>
+
+    <script>
+        // Data for Interactive Nodes
+        const nodesData = {
+            "frontend": {
+                title: "Web Frontend Portal",
+                icon: "devices",
+                desc: "Giao diện web hiện đại cho phép người dùng đăng nhập, tải lên video bài giảng hoặc dán đường dẫn YouTube, theo dõi tiến độ xử lý tác vụ dưới dạng phần trăm và giai đoạn thời gian thực. Giao diện cũng cung cấp một trình chơi video đồng bộ với slide bài giảng, hiển thị bản tóm tắt thông tin bài giảng có nhấp chọn mốc thời gian để nhảy nhanh video và thanh hỏi đáp RAG tương tác trực tiếp với video bài giảng.",
+                tech: ["React 18", "Vite", "TypeScript", "Tailwind CSS", "Axios", "Material Symbols"],
+                input: "User actions, video upload file, YouTube URL",
+                output: "REST API requests, interactive timeline rendering, summaries",
+                files: [
+                    "frontend/src/pages/HistoryPage.tsx",
+                    "frontend/src/pages/UploadPage.tsx",
+                    "frontend/src/pages/ResultsPage.tsx",
+                    "frontend/src/pages/AdminPage.tsx",
+                    "frontend/src/services/api.ts"
+                ]
+            },
+            "backend": {
+                title: "FastAPI Backend API Server",
+                icon: "dns",
+                desc: "Bộ xử lý trung tâm cung cấp các REST API cho frontend. Quản lý xác thực người dùng, lưu trữ video metadata, lên kế hoạch cho các jobs xử lý video ngầm và chuyển giao tác vụ sang hàng đợi của Redis. Tích hợp các bộ lọc và phân trang dữ liệu theo tiêu chuẩn DTO CamelCase.",
+                tech: ["FastAPI", "Pydantic", "SQLAlchemy", "Uvicorn", "JWT Auth"],
+                input: "HTTP requests, REST payloads, files",
+                output: "JSON responses (CamelCase DTO), file streams, Celery tasks",
+                files: [
+                    "backend/app/main.py",
+                    "backend/app/api/v1/videos.py",
+                    "backend/app/api/v1/jobs.py",
+                    "backend/app/api/v1/users.py",
+                    "backend/app/schemas/base.py"
+                ]
+            },
+            "redis": {
+                title: "Redis Message Broker",
+                icon: "layers",
+                desc: "Cơ sở dữ liệu lưu trữ tạm thời trong RAM đóng vai trò làm Broker truyền tin cho Celery. Giúp backend FastAPI gửi tác vụ xử lý video phi tuần tự sang cho AI Worker mà không cần chờ đợi phản hồi đồng bộ, đảm bảo tính ổn định và khả năng phục hồi của hệ thống.",
+                tech: ["Redis (v5+)", "Celery Queue Protocol"],
+                input: "Trigger task messages from backend API",
+                output: "Task delivery to Celery AI Worker processes",
+                files: [
+                    "backend/app/core/celery_app.py",
+                    "ai_workers/core/celery_app.py"
+                ]
+            },
+            "worker": {
+                title: "Celery AI Worker Service",
+                icon: "smart_toy",
+                desc: "Thành phần cốt lõi thực thi các thuật toán AI phức tạp. Chạy ngầm độc lập với server web, thực hiện nạp mô hình AI (Whisper, VAD, CLIP, BLIP) động đúng lúc khi cần ở từng tác vụ, và giải phóng vùng nhớ (RAM/VRAM/GPU cache) lập tức ngay sau khi hoàn thành vai trò của mô hình đó để tiết kiệm bộ nhớ cho mô hình kế tiếp.",
+                tech: ["Celery", "PyTorch", "Hugging Face Transformers", "OpenCV", "yt-dlp"],
+                input: "Job ID, local video path or remote video URL",
+                output: "Structured LectureArtifacts JSON, vector indexes, keyframe images",
+                files: [
+                    "ai_workers/tasks.py",
+                    "ai_workers/modules/audio/transcriber.py",
+                    "ai_workers/modules/visual/semantic.py",
+                    "ai_workers/modules/fusion/timeline.py",
+                    "ai_workers/modules/fusion/summarizer.py"
+                ]
+            },
+            "r2": {
+                title: "Cloudflare R2 Object Storage",
+                icon: "cloud",
+                desc: "Dịch vụ lưu trữ đám mây tương thích S3 dùng để lưu trữ các file video tải lên của người dùng và các ảnh keyframe được cắt ra từ mỗi scene bài giảng. Có cơ chế fallback tự động về thư mục lưu trữ cục bộ (mock storage) nếu chưa cấu hình thông số đám mây.",
+                tech: ["Cloudflare R2", "Amazon S3 SDK (boto3)", "Local mock directory storage"],
+                input: "Raw MP4 video upload, extracted PNG keyframe slides",
+                output: "Public secure image/video URLs",
+                files: [
+                    "backend/app/services/r2.py",
+                    "ai_workers/core/config.py"
+                ]
+            },
+            "db": {
+                title: "Relational Database",
+                icon: "database",
+                desc: "Lưu trữ cấu trúc thông tin của hệ thống: thông tin tài khoản người dùng, metadata thông số video, lịch sử các jobs chạy ngầm Celery kèm trạng thái tiến độ, lưu trữ nhật ký hỏi đáp (QA Logs) của người dùng.",
+                tech: ["SQLite (Local development)", "PostgreSQL (Production ready)", "SQLAlchemy ORM"],
+                input: "User schema updates, job status writes, video records",
+                output: "Relational queries, user profiles, video metadata lists",
+                files: [
+                    "backend/app/core/database.py",
+                    "backend/app/models/user.py",
+                    "backend/app/models/video.py",
+                    "backend/app/models/job.py"
+                ]
+            },
+            "chroma": {
+                title: "ChromaDB Vector Database",
+                icon: "hub",
+                desc: "Vector Database lưu trữ các embeddings của các phân đoạn bài giảng (gộp cả lời thoại giảng viên và nội dung text viết trên slide). Sử dụng thuật toán tìm kiếm cosine similarity phục vụ tính năng RAG hỏi đáp chuyên sâu trực tiếp trên nội dung video bài giảng.",
+                tech: ["ChromaDB", "Sentence-Transformers Embeddings"],
+                input: "Aligned segment text chunk embeddings",
+                output: "Semantic similarity search query results for RAG",
+                files: [
+                    "backend/app/services/chromadb.py",
+                    "ai_workers/modules/fusion/timeline.py"
+                ]
+            },
+            "groq": {
+                title: "Groq LLM Inference API",
+                icon: "api",
+                desc: "Dịch vụ API bên ngoài cung cấp khả năng chạy mô hình ngôn ngữ lớn (LLM) với tốc độ siêu nhanh (nhờ LPU). Dùng để phân tích đề cương chương (chapters) của bài giảng và sinh bản tóm tắt có tham chiếu mốc thời gian và số trang slide.",
+                tech: ["Groq SDK", "Llama 3 70B/8B", "Mixtral 8x7B"],
+                input: "Prompt prompt text, chapter structures, transcripts",
+                output: "Grounded outline chapters, bulleted summaries with citations",
+                files: [
+                    "ai_workers/modules/fusion/summarizer.py"
+                ]
+            }
+        };
+
+        // Open Drawer on Node Click
+        document.querySelectorAll('.node-group').forEach(node => {
+            node.addEventListener('click', () => {
+                const nodeId = node.getAttribute('id').replace('node-', '');
+                const data = nodesData[nodeId];
+                if (data) {
+                    showDrawer(data);
+                }
+            });
+        });
+
+        function showDrawer(data) {
+            document.getElementById('drawer-icon').innerText = data.icon;
+            document.getElementById('drawer-title').innerText = data.title;
+            document.getElementById('drawer-desc').innerText = data.desc;
+            
+            // Tech tags
+            const techContainer = document.getElementById('drawer-tech');
+            techContainer.innerHTML = '';
+            data.tech.forEach(t => {
+                const span = document.createElement('span');
+                span.className = 'tech-tag';
+                span.innerText = t;
+                techContainer.appendChild(span);
+            });
+
+            // I/O details
+            document.getElementById('drawer-input').innerText = data.input;
+            document.getElementById('drawer-output').innerText = data.output;
+
+            // Related files
+            const filesContainer = document.getElementById('drawer-files');
+            filesContainer.innerHTML = '';
+            data.files.forEach(f => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'material-symbols-outlined';
+                iconSpan.style.fontSize = '14px';
+                iconSpan.innerText = 'description';
+                
+                const pathText = document.createTextNode(' ' + f);
+                
+                li.appendChild(iconSpan);
+                li.appendChild(pathText);
+                filesContainer.appendChild(li);
+            });
+
+            // Toggle classes
+            document.getElementById('detail-drawer').classList.add('open');
+            document.getElementById('drawer-overlay').classList.add('active');
+        }
+
+        function closeDrawer() {
+            document.getElementById('detail-drawer').classList.remove('open');
+            document.getElementById('drawer-overlay').classList.remove('active');
+        }
+
+        document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+
+        // Switch Stage Tabs
+        function switchTab(index) {
+            // Remove active class from buttons and contents
+            document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+                if (idx === index) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach((content, idx) => {
+                if (idx === index) content.classList.add('active');
+                else content.classList.remove('active');
+            });
+        }
+    </script>
 </body>
 </html>

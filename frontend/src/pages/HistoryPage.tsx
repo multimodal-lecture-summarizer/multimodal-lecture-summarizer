@@ -4,21 +4,30 @@ import type { HistoryItem } from '../types';
 import { VideoStatus } from '../types';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { Skeleton } from '../components/Skeleton';
 
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
 
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const limit = 9;
+
   useEffect(() => {
-    api.getVideos()
+    setLoading(true);
+    const statusParam = selectedStatus === 'All' ? undefined : selectedStatus;
+    api.getVideos(statusParam, limit, (currentPage - 1) * limit)
       .then(res => {
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && res.data) {
+          setTotalItems(res.metadata?.totalResults || res.metadata?.total || res.data.length);
           const items = res.data.map((video: any) => {
             const durationSec = video.duration || 0;
             const hours = Math.floor(durationSec / 3600);
@@ -30,7 +39,7 @@ export const HistoryPage: React.FC = () => {
               : `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
             const uploadDate = new Date(video.uploadedAt);
-            const dateStr = uploadDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const dateStr = uploadDate.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' });
 
             return {
               id: video.videoId,
@@ -38,15 +47,24 @@ export const HistoryPage: React.FC = () => {
               duration: durationStr,
               date: dateStr,
               status: video.status as VideoStatus,
+              progress: video.progress,
+              stage: video.stage,
+              logs: video.logs,
+              jobId: video.jobId,
+              thumbnailUrl: video.scenes && video.scenes.length > 0 ? video.scenes[0].keyframeUrl : undefined,
             };
           });
           setHistoryItems(items);
         }
       })
       .catch(err => {
-        console.warn("Failed to fetch real history from backend, showing mock data.", err);
+        console.error("Failed to fetch real history from backend API:", err);
+        toast.error("Không thể tải danh sách lịch sử video.", "Lỗi kết nối");
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, []);
+  }, [currentPage, selectedStatus]);
 
   const handleDelete = (id: string) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa video này khỏi lịch sử?")) {
@@ -55,63 +73,71 @@ export const HistoryPage: React.FC = () => {
     }
   };
 
-  // Helper to assign mock subjects, images, and accuracy scores
-  const getCardDetails = (title: string | undefined, index: number) => {
-    const lowerTitle = (title || "").toLowerCase();
-    if (lowerTitle.includes('quantum') || lowerTitle.includes('duality')) {
-      return {
-        subject: 'Quantum Physics',
-        bgImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBOgev44yFeRiOsw4c7SmUkCik71FMKLVFPmKyFMlIecVA_MX6oicypP5d-qtIoqq_HTw_xZVxaq6cDKqHxj3RSGcRFC-V7lGfYeVRyh1nw-wBLYSptMS5cR-GrgOCx0gOHp2RnYcE6P8e3wGuoDsU_-lNYcoQTPLeJDh8wrHedAVF4rE4aAAFepFhv0ZHUwJBpxR0UuBDWEb97soNoOunFeAxE6HC3p4ZEg0Rs9jU3JMiVQsenpRfl',
-        accuracy: 98
-      };
-    } else if (lowerTitle.includes('neuro') || lowerTitle.includes('plasticity') || lowerTitle.includes('cognitive') || lowerTitle.includes('learning')) {
-      return {
-        subject: 'Neuroscience',
-        bgImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC6UZ4SQLSuBfiHk0wnEjZh1yQTQayOgdlHWV2kwLhVruVaDj3D6SAbHtbFtnYo2Ts1wXEHMmExJuyFpGaEHAPkRaEU6LdArBiZ__zZdOMQaNy2WDdPKpWDocdJ6Cl80Wz_yMqPwbHL4KNPNIEqQG3-V4N1ZPviDvoIO2VsGweI8MDP4jmQ_6aDTuQsA2gMfIswi_duiMOaThlaoW6jfMKfNwhvd4WPijkOQTqvIYUQMI1QzJ1dJ7Nu',
-        accuracy: 94
-      };
-    } else if (lowerTitle.includes('renewable') || lowerTitle.includes('energy') || lowerTitle.includes('economics') || lowerTitle.includes('policy')) {
-      return {
-        subject: 'Environmental Policy',
-        bgImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB5WjqdYmKjA32gYcPClvTv8qoYHGg9QMTLM6BYAQyUqtXHz5OyPjQoQNbNVUQ2jHmhfvgVxF4SVNVXB81S3waTC9r3TJQt__OSvtzWEPVxB3QK4strC1cAJ424Ubp33OacveKVxOaPUiikN7ATWwX2Q-zSiw8YuhHXWZqDHkpKgWbDN2JLAfWsgLFyu0Cg24uIng0ebWhbKfRz1UHyeJczr88PlhEnN75IMdQra69rUyueTZcRBhmj',
-        accuracy: 82
-      };
-    } else if (lowerTitle.includes('crispr') || lowerTitle.includes('cas9') || lowerTitle.includes('ethics') || lowerTitle.includes('biochemistry')) {
-      return {
-        subject: 'Biochemistry',
-        bgImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDDrCT8ujApHRuFt3J3XYRbiY4KfDv0QbXjY1bmsUbhXdfz7yKPweu7MVzv95nZO8ZQqlzmKjgt228emNbvLu0tBu85lSN_lDT-A0dIHqDdpV0uaZFTE-u6Z9noGhg8EkVFcMgtxNADDuquWOBui-VojlWUCVElWEYwZ3QRa6M9iDroBzDHkVXUh7Hl5Kxis8rIVlMJAi_4gK2XwFeEbdikhXjPJPCjsAIIyMGdvX9Xr5MyTmbNI_6F',
-        accuracy: 99
-      };
-    } else if (lowerTitle.includes('urban') || lowerTitle.includes('mobility') || lowerTitle.includes('city') || lowerTitle.includes('design')) {
-      return {
-        subject: 'Urban Design',
-        bgImage: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDLlUKF6B4yFHqlfO3vUAdNgkfpQBxAYwiYU-JVnklFgXneLFDpdaz5mXxbC4meRPeAPPViBFvVkW7KCnbX3K-svYjHSPO9pfNLfbZ_eO0HJHY99-GGbkkYdoijSME5CGNM032a6STRwNRB9iQa8kcDRtg6bblN2kXxSH4fvVsWG76FvOCRLi4jVzmwL0CMkFYKaSe0UuwNJssVTzSs7WhohoU6AW3ovjkTHy3-SeNxEUYsko9nWS1e',
-        accuracy: 96
-      };
-    } else {
-      const fallbacks = [
-        {
-          subject: 'General Science',
-          bgImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60',
-          accuracy: 90
-        },
-        {
-          subject: 'Artificial Intelligence',
-          bgImage: 'https://images.unsplash.com/photo-1677442136019-21780efad99a?w=800&auto=format&fit=crop&q=60',
-          accuracy: 95
+  const handleCancelJob = async (jobId: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn dừng tác vụ đang chạy này không?")) {
+      try {
+        await api.cancelJob(jobId);
+        toast.success("Đã yêu cầu dừng tác vụ thành công!", "Thành công");
+        // Reload list
+        const statusParam = selectedStatus === 'All' ? undefined : selectedStatus;
+        const res = await api.getVideos(statusParam, limit, (currentPage - 1) * limit);
+        if (res.success && res.data) {
+          setTotalItems(res.metadata?.totalResults || res.metadata?.total || res.data.length);
+          const items = res.data.map((video: any) => {
+            const durationSec = video.duration || 0;
+            const hours = Math.floor(durationSec / 3600);
+            const minutes = Math.floor((durationSec % 3600) / 60);
+            const seconds = Math.floor(durationSec % 60);
+            
+            const durationStr = hours > 0 
+              ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+              : `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            const uploadDate = new Date(video.uploadedAt);
+            const dateStr = uploadDate.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' });
+
+            return {
+              id: video.videoId,
+              title: video.title || (video.originalUrl ? 'YouTube Video' : (video.r2Url ? (video.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (video.filePath && !video.filePath.includes('/stream') ? (video.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video bài giảng'))),
+              duration: durationStr,
+              date: dateStr,
+              status: video.status as VideoStatus,
+              progress: video.progress,
+              stage: video.stage,
+              logs: video.logs,
+              jobId: video.jobId,
+              thumbnailUrl: video.scenes && video.scenes.length > 0 ? video.scenes[0].keyframeUrl : undefined,
+            };
+          });
+          setHistoryItems(items);
         }
-      ];
-      return fallbacks[index % fallbacks.length];
+      } catch (err: any) {
+        toast.error(`Lỗi dừng tác vụ: ${err.message}`, "Lỗi");
+      }
     }
+  };
+
+  // Helper to assign card details
+  const getCardDetails = (_title: string | undefined, index: number) => {
+    const gradients = [
+      'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+      'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
+      'linear-gradient(135deg, #581c87 0%, #8b5cf6 100%)',
+      'linear-gradient(135deg, #7c2d12 0%, #f97316 100%)',
+      'linear-gradient(135deg, #0f172a 0%, #475569 100%)',
+    ];
+    return {
+      subject: 'Bài giảng',
+      bgGradient: gradients[index % gradients.length],
+      accuracy: 100
+    };
   };
 
   // Filter & Sort
   const filteredItems = historyItems
     .filter(item => {
       const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const details = getCardDetails(item.title, 0);
-      const matchesSubject = selectedSubject === 'All' || details.subject === selectedSubject;
-      return matchesSearch && matchesSubject;
+      return matchesSearch;
     })
     .sort((_a, _b) => {
       if (sortBy === 'newest') return 1;
@@ -154,7 +180,7 @@ export const HistoryPage: React.FC = () => {
           </div>
 
           {/* Bento-style Filter Bar */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2 relative">
               <input 
                 className="w-full pl-10 pr-4 py-3 bg-white border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all font-body-sm text-sm shadow-sm" 
@@ -169,57 +195,148 @@ export const HistoryPage: React.FC = () => {
             <select 
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white border border-outline-variant rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer"
+              className="bg-white border border-slate-200 hover:border-slate-300 text-deep-navy font-semibold rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer shadow-sm hover:shadow transition-all duration-200"
             >
               <option value="newest">Sắp xếp: Mới nhất</option>
               <option value="oldest">Sắp xếp: Cũ nhất</option>
             </select>
 
             <select 
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              className="bg-white border border-outline-variant rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer"
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 hover:border-slate-300 text-deep-navy font-semibold rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer shadow-sm hover:shadow transition-all duration-200"
             >
-              <option value="All">Tất cả chủ đề</option>
-              <option value="Quantum Physics">Quantum Physics</option>
-              <option value="Neuroscience">Neuroscience</option>
-              <option value="Environmental Policy">Environmental Policy</option>
-              <option value="Biochemistry">Biochemistry</option>
-              <option value="Urban Design">Urban Design</option>
+              <option value="All">Tất cả trạng thái</option>
+              <option value="pending">Chờ xử lý</option>
+              <option value="processing">Đang xử lý</option>
+              <option value="done">Hoàn tất</option>
+              <option value="failed">Thất bại</option>
             </select>
-
-            <button className="bg-white border border-outline-variant rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 hover:bg-surface-container-low transition-colors font-medium">
-              <span className="material-symbols-outlined text-secondary text-lg">tune</span>
-              Bộ lọc nâng cao
-            </button>
           </div>
         </header>
 
         {/* Analysis Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-gutter-desktop">
-          {filteredItems.map((item, index) => {
+          {loading ? (
+            Array.from({ length: 5 }).map((_, idx) => (
+              <Skeleton.Card key={idx} />
+            ))
+          ) : (
+            filteredItems.map((item, index) => {
             const details = getCardDetails(item.title, index);
+            const isProcessing = item.status === VideoStatus.PROCESSING || item.status === VideoStatus.PENDING;
+            const isFailed = item.status === VideoStatus.FAILED;
+
             return (
-              <div key={item.id} className="group bg-white border border-outline-variant rounded-xl overflow-hidden hover:border-vibrant-cyan transition-all flex flex-col">
-                <div className="relative h-48 w-full overflow-hidden">
+              <div 
+                key={item.id} 
+                className={`group bg-white border rounded-xl overflow-hidden transition-all duration-300 flex flex-col hover:shadow-md ${
+                  isFailed 
+                    ? 'border-error/25 hover:border-error bg-error/[0.01]' 
+                    : isProcessing 
+                      ? 'border-blue-100 hover:border-blue-400 bg-blue-50/[0.01]' 
+                      : 'border-outline-variant hover:border-vibrant-cyan'
+                }`}
+              >
+                <div className="relative h-48 w-full overflow-hidden bg-slate-950 shrink-0">
                   <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors z-10"></div>
-                  <img 
-                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" 
-                    alt={item.title}
-                    src={details.bgImage}
-                  />
+                  
+                  {/* Real-time Status Badges */}
+                  {item.status === VideoStatus.DONE && (
+                    <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-status-success/15 text-status-success border border-status-success/30 flex items-center gap-1 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-status-success"></span>
+                      Hoàn tất
+                    </span>
+                  )}
+                  {item.status === VideoStatus.PROCESSING && (
+                    <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-blue-50 text-blue-600 border border-blue-200/50 flex items-center gap-1 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
+                      Đang xử lý
+                    </span>
+                  )}
+                  {item.status === VideoStatus.PENDING && (
+                    <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-status-warning/15 text-status-warning border border-status-warning/30 flex items-center gap-1 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-status-warning"></span>
+                      Chờ xử lý
+                    </span>
+                  )}
+                  {item.status === VideoStatus.FAILED && (
+                    <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-error/15 text-error border border-error/30 flex items-center gap-1 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
+                      Thất bại
+                    </span>
+                  )}
+
+                  {item.status === VideoStatus.DONE && item.thumbnailUrl ? (
+                    <img 
+                      src={item.thumbnailUrl}
+                      alt={item.title}
+                      className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : isProcessing ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white bg-slate-900 relative">
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/10 to-transparent animate-pulse"></div>
+                      <div className="relative flex flex-col items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div>
+                        <span className="text-[10px] font-mono tracking-widest text-blue-400 uppercase">
+                          {item.stage || 'ANALYZING'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : isFailed ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white bg-error/[0.04] relative">
+                      <span className="material-symbols-outlined text-4xl text-error">error</span>
+                      <span className="text-[10px] font-mono tracking-widest text-error mt-2 uppercase">Xử lý lỗi</span>
+                    </div>
+                  ) : (
+                    <div 
+                      className="w-full h-full transform group-hover:scale-105 transition-transform duration-500 flex items-center justify-center text-white font-bold text-lg"
+                      style={{ background: details.bgGradient }}
+                    >
+                      <span className="material-symbols-outlined text-4xl opacity-80">
+                        sync
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-5 flex-1 flex flex-col">
                   <div className="mb-4">
-                    <h3 className="font-headline-md text-headline-md text-deep-navy mb-1 leading-tight group-hover:text-vibrant-cyan transition-colors line-clamp-2" title={item.title}>
+                    <h3 className="font-headline-md text-headline-md text-deep-navy mb-1 leading-tight group-hover:text-vibrant-cyan transition-colors line-clamp-2 font-bold" title={item.title}>
                       {item.title}
                     </h3>
-                    <p className="text-secondary font-body-sm text-body-sm flex items-center gap-2">
+                    <p className="text-secondary font-body-sm text-body-sm flex items-center gap-2 mb-2">
                       <span className="material-symbols-outlined text-sm">calendar_today</span> {item.date}
                       <span className="text-outline-variant">•</span>
-                      <span className="material-symbols-outlined text-sm">schedule</span> {item.duration} duration
+                      <span className="material-symbols-outlined text-sm">schedule</span> {item.duration}
                     </p>
+
+                    {/* Progress Bar overlay for processing stages */}
+                    {item.status === VideoStatus.PROCESSING && item.progress !== undefined && (
+                      <div className="mt-3 bg-blue-50/50 p-2 rounded-lg border border-blue-100/50">
+                        <div className="flex justify-between text-[10px] font-mono text-blue-600 mb-1 font-bold">
+                          <span className="truncate max-w-[70%]">{item.stage || 'Đang phân tích...'}</span>
+                          <span>{item.progress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1 mb-2">
+                          <div 
+                            className="bg-blue-500 h-1 rounded-full transition-all duration-300 animate-pulse" 
+                            style={{ width: `${item.progress}%` }}
+                          ></div>
+                        </div>
+                        {/* Rolling logs view */}
+                        {item.logs && item.logs.length > 0 && (
+                          <div className="mt-2 p-2 bg-slate-900 border border-slate-800 rounded font-mono text-[9px] text-slate-300 flex flex-col gap-0.5 max-h-[90px] overflow-y-auto shadow-inner select-text">
+                            {item.logs.map((logLine, idx) => (
+                              <div key={idx} className="truncate" title={logLine}>{logLine}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-outline-variant/30">
@@ -228,17 +345,26 @@ export const HistoryPage: React.FC = () => {
                         <Link 
                           to={`/results?videoId=${item.id}`}
                           className="w-9 h-9 flex items-center justify-center text-secondary hover:text-vibrant-cyan hover:bg-surface-container-low border border-outline-variant/30 rounded-lg transition-all" 
-                          title="View Analysis"
+                          title="Xem kết quả"
                         >
                           <span className="material-symbols-outlined text-[20px]">play_circle</span>
                         </Link>
+                      ) : isProcessing ? (
+                        <button 
+                          onClick={() => item.jobId && handleCancelJob(item.jobId)}
+                          className="w-9 h-9 flex items-center justify-center text-error hover:text-white bg-error/10 hover:bg-error border border-error/20 rounded-lg transition-all" 
+                          title="Dừng tác vụ"
+                          disabled={!item.jobId}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">stop_circle</span>
+                        </button>
                       ) : (
                         <button 
                           disabled
-                          className="w-9 h-9 flex items-center justify-center text-slate-400 bg-slate-100 border border-outline-variant/30 rounded-lg cursor-not-allowed" 
-                          title="Đang phân tích..."
+                          className="w-9 h-9 flex items-center justify-center text-error/60 bg-error/5 border border-error/20 rounded-lg cursor-not-allowed" 
+                          title="Xử lý thất bại"
                         >
-                          <span className="material-symbols-outlined text-[20px] animate-spin">autorenew</span>
+                          <span className="material-symbols-outlined text-[20px] text-error">error_outline</span>
                         </button>
                       )}
                       
@@ -258,8 +384,8 @@ export const HistoryPage: React.FC = () => {
                               .catch(err => toast.error(`Lỗi tải PDF: ${err.message}`, "Thất bại"));
                           }
                         }}
-                        className="w-9 h-9 flex items-center justify-center text-secondary hover:text-vibrant-cyan hover:bg-surface-container-low border border-outline-variant/30 rounded-lg transition-all" 
-                        title="Download PDF"
+                        className="w-9 h-9 flex items-center justify-center text-secondary hover:text-vibrant-cyan hover:bg-surface-container-low border border-outline-variant/30 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed" 
+                        title="Tải báo cáo PDF"
                         disabled={item.status !== VideoStatus.DONE}
                       >
                         <span className="material-symbols-outlined text-[20px]">download</span>
@@ -269,7 +395,7 @@ export const HistoryPage: React.FC = () => {
                     <button 
                       onClick={() => handleDelete(item.id)}
                       className="w-9 h-9 flex items-center justify-center hover:text-error hover:bg-error-container/30 border border-outline-variant/30 rounded-lg transition-all text-error" 
-                      title="Delete"
+                      title="Xóa"
                     >
                       <span className="material-symbols-outlined text-[20px]">delete</span>
                     </button>
@@ -277,7 +403,7 @@ export const HistoryPage: React.FC = () => {
                 </div>
               </div>
             );
-          })}
+          }))}
 
           {/* Empty State Suggestion Card */}
           <div 
@@ -294,19 +420,62 @@ export const HistoryPage: React.FC = () => {
         </div>
 
         {/* Pagination */}
-        <div className="mt-12 flex items-center justify-center gap-2">
-          <button className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all disabled:opacity-30 active:scale-95" disabled>
-            <span className="material-symbols-outlined text-xl">chevron_left</span>
-          </button>
-          <button className="w-10 h-10 flex items-center justify-center bg-deep-navy text-white rounded-lg font-bold text-xs active:scale-95 shadow-sm">1</button>
-          <button className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all font-bold text-xs active:scale-95">2</button>
-          <button className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all font-bold text-xs active:scale-95">3</button>
-          <span className="px-2 text-outline-variant">...</span>
-          <button className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all font-bold text-xs active:scale-95">12</button>
-          <button className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all active:scale-95">
-            <span className="material-symbols-outlined text-xl">chevron_right</span>
-          </button>
-        </div>
+        {(() => {
+          const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+          if (totalPages <= 1) return null;
+
+          const pageNumbers: (number | string)[] = [];
+          const addPage = (p: number) => pageNumbers.push(p);
+          addPage(1);
+          if (currentPage > 3) pageNumbers.push('...');
+          for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+            addPage(i);
+          }
+          if (currentPage < totalPages - 2) pageNumbers.push('...');
+          if (totalPages > 1) addPage(totalPages);
+          const uniquePages = pageNumbers.filter((v, i, a) => a.indexOf(v) === i);
+
+          return (
+            <div className="mt-12 flex items-center justify-center gap-2">
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all disabled:opacity-30 active:scale-95 disabled:cursor-not-allowed disabled:hover:text-secondary disabled:hover:bg-transparent"
+              >
+                <span className="material-symbols-outlined text-xl">chevron_left</span>
+              </button>
+              {uniquePages.map((page, idx) => {
+                if (page === '...') {
+                  return (
+                    <span key={`dots-${idx}`} className="px-2 text-outline-variant">
+                      ...
+                    </span>
+                  );
+                }
+                return (
+                  <button
+                    key={`page-${page}`}
+                    onClick={() => setCurrentPage(page as number)}
+                    className={`w-10 h-10 flex items-center justify-center rounded-lg font-bold text-xs active:scale-95 transition-all ${
+                      currentPage === page
+                        ? 'bg-deep-navy text-white shadow-sm'
+                        : 'border border-outline-variant text-secondary hover:text-primary hover:bg-white'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="w-10 h-10 flex items-center justify-center border border-outline-variant rounded-lg text-secondary hover:text-primary hover:bg-white transition-all disabled:opacity-30 active:scale-95 disabled:cursor-not-allowed disabled:hover:text-secondary disabled:hover:bg-transparent"
+              >
+                <span className="material-symbols-outlined text-xl">chevron_right</span>
+              </button>
+            </div>
+          );
+        })()}
       </main>
       
       {/* Footer Shell */}

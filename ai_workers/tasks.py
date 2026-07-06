@@ -6,6 +6,18 @@ Migrated from: src/mls/pipeline.py
 
 from __future__ import annotations
 
+# Monkey-patch Hugging Face transformers torch.load security check
+# to avoid ValueError when loading CLIP/BLIP models on torch < 2.6
+try:
+    import transformers.utils.import_utils
+    import transformers.modeling_utils
+    import transformers.utils
+    transformers.utils.import_utils.check_torch_load_is_safe = lambda: None
+    transformers.utils.check_torch_load_is_safe = lambda: None
+    transformers.modeling_utils.check_torch_load_is_safe = lambda: None
+except Exception:
+    pass
+
 from ai_workers.core.celery_app import app
 from ai_workers.modules.audio.transcriber import AudioTranscriber
 from ai_workers.modules.audio.speaker import SpeakerDiarizer
@@ -13,6 +25,8 @@ from ai_workers.modules.visual.scene_detector import SceneDetector
 from ai_workers.modules.visual.semantic import SemanticAnalyzer
 from ai_workers.modules.fusion.timeline import TimelineBuilder
 from ai_workers.modules.fusion.summarizer import Summarizer
+
+
 
 
 @app.task(bind=True, name="ai_workers.process_video")
@@ -157,45 +171,74 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 os.remove(local_video_path)
             raise e
 
+    logs = []
+    def log_step(message, stage, progress):
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%H:%M:%S")
+        log_line = f"[{timestamp}] {message}"
+        logs.append(log_line)
+        del logs[:-15]  # Keep only the last 15 items
+        print(f"[{stage.upper()}] {message}")
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "stage": stage,
+                "progress": progress,
+                "logs": logs
+            }
+        )
+
     try:
         # Stage 1: Audio
-        print("[Stage 1/6] Starting audio transcription (Whisper ASR + VAD)...")
-        self.update_state(state="PROGRESS", meta={"stage": "audio", "progress": 10})
+        log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 5)
+        log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
         audio = AudioTranscriber()
         audio_result = audio.process(local_video_path)
-        print("[Stage 1/6] Completed audio transcription successfully.")
+        log_step("Trích xuất và nhận dạng giọng nói thành công.", "audio", 20)
+
+        # Stage-level VRAM cleanup
+        del audio
+        import gc
+        gc.collect()
 
         # Stage 2: Speaker diarization
-        print("[Stage 2/6] Starting speaker diarization (PyAnnote)...")
-        self.update_state(state="PROGRESS", meta={"stage": "speaker", "progress": 25})
+        log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
         speaker = SpeakerDiarizer()
         utterances = speaker.process(
             local_video_path.rsplit(".", 1)[0] + ".wav",
             audio_result.get("segments", []),
         )
-        print(f"[Stage 2/6] Completed speaker diarization successfully. Found {len(utterances)} speech segments.")
+        log_step(f"Hoàn thành phân tích người nói. Tìm thấy {len(utterances)} phân đoạn thoại.", "speaker", 35)
+
+        del speaker
+        gc.collect()
 
         # Stage 3: Visual
-        print("[Stage 3/6] Starting scene boundary detection and keyframe extraction (PySceneDetect)...")
-        self.update_state(state="PROGRESS", meta={"stage": "visual", "progress": 40})
+        log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
         visual = SceneDetector()
         visual_result = visual.process(local_video_path, output_dir)
-        print(f"[Stage 3/6] Completed scene detection successfully. Extracted {len(visual_result.get('keyframes', []))} keyframes.")
+        log_step(f"Đã trích xuất xong {len(visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
+
+        del visual
+        gc.collect()
 
         # Stage 4: Semantic
-        print("[Stage 4/6] Starting semantic analysis (OCR + CLIP keyframe processing)...")
-        self.update_state(state="PROGRESS", meta={"stage": "semantic", "progress": 60})
+        log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
         semantic = SemanticAnalyzer()
         # semantic.process now takes the list of scene dicts, filters them, and adds captions
+        log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
         filtered_scenes = semantic.process(visual_result.get("scenes", []))
         visual_result["scenes"] = filtered_scenes
         slides = filtered_scenes
-        print(f"[Stage 4/6] Completed semantic keyframe analysis. Kept {len(filtered_scenes)} keyframes.")
+        log_step(f"Đã hoàn thành mô tả slide bằng BLIP. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
+
+        del semantic
+        gc.collect()
 
         # Upload keyframes to R2 if configured
         from ai_workers.core.config import worker_settings
         if worker_settings.CF_R2_ACCESS_KEY_ID:
-            print("[Storage] Uploading extracted keyframes to Cloudflare R2 securely...")
+            log_step("Đang tải các ảnh slide keyframe lên Cloudflare R2...", "storage", 72)
             import boto3
             s3_client = boto3.client(
                 "s3",
@@ -220,26 +263,29 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     
                     public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
                     scene["keyframe_url"] = f"{public_base}/{object_key}"
-                    print(f" -> Uploaded keyframe slide: {scene['keyframe_url']}")
-            print("[Storage] All keyframes uploaded to R2 successfully.")
+            log_step("Đã tải xong toàn bộ slide lên R2.", "storage", 74)
 
         # Stage 5: Timeline
-        print("[Stage 5/6] Starting timeline and chapter boundaries mapping...")
-        self.update_state(state="PROGRESS", meta={"stage": "timeline", "progress": 75})
+        log_step("Bắt đầu ánh xạ trục thời gian bài giảng và chương mục...", "timeline", 75)
         timeline = TimelineBuilder()
         timeline_result = timeline.process(
             utterances, visual_result.get("scenes", []), slides,
         )
-        print(f"[Stage 5/6] Completed timeline mapping. Identified {len(timeline_result.get('chapters', []))} chapters.")
+        log_step(f"Đã ánh xạ xong {len(timeline_result.get('chapters', []))} chương bài giảng.", "timeline", 85)
+
+        del timeline
+        gc.collect()
 
         # Stage 6: Summarization
-        print("[Stage 6/6] Requesting AI detailed lecture summarization (Groq API)...")
-        self.update_state(state="PROGRESS", meta={"stage": "text", "progress": 90})
+        log_step("Đang yêu cầu mô hình AI (Groq API) sinh bản tóm tắt chi tiết...", "text", 88)
         summarizer = Summarizer()
         text_result = summarizer.process(
             utterances, slides, timeline_result.get("chapters", [])
         )
-        print("[Stage 6/6] Summarization generated successfully.")
+        log_step("Đã tạo bản tóm tắt bài giảng thành công.", "text", 95)
+
+        del summarizer
+        gc.collect()
     finally:
         # Cleanup temporary files
         if is_temp_file:

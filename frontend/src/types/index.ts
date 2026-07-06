@@ -65,4 +65,8 @@ export interface HistoryItem {
   status: VideoStatus;
   thumbnailUrl?: string;
   youtubeUrl?: string;
+  progress?: number;
+  stage?: string;
+  logs?: string[];
+  jobId?: string;
 }

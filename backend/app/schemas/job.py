@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import Field
 from app.schemas.base import CamelModel
 from app.core.constants import JobType, JobStatus
@@ -32,4 +32,7 @@ class JobDTO(JobBase):
     )
     stage: Optional[str] = Field(
         None, description="The current execution stage name"
+    )
+    logs: Optional[List[str]] = Field(
+        None, description="The latest rolling log messages of the job execution"
     )

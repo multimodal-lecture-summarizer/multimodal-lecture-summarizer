@@ -162,12 +162,6 @@ export const LandingPage: React.FC = () => {
               Phân tích Video Ngay
               <span className="material-symbols-outlined">arrow_forward</span>
             </Link>
-            <Link 
-              to="/results" 
-              className="px-8 py-4 border border-outline text-deep-navy font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-surface-container-low transition-all bg-surface/50 backdrop-blur-sm"
-            >
-              Xem Demo Kết Quả
-            </Link>
           </div>
         </div>
         {/* Scroll Indicator */}

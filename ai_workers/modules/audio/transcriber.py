@@ -75,124 +75,141 @@ class AudioTranscriber:
             audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
             sr = 16000
             
-        # 2. Try loading Silero VAD
         vad_model = None
         get_speech_timestamps = None
+        asr_pipeline = None
+
         try:
-            print("Loading Silero VAD for voice activity check...")
-            # Set torch hub dir inside cache to avoid write permission issues
-            torch.hub.set_dir(os.path.join(os.getcwd(), "cache", "torch_hub"))
-            vad_model, vad_utils = torch.hub.load(
-                repo_or_dir='snakers4/silero-vad',
-                model='silero_vad',
-                trust_repo=True,
-                force_reload=False
-            )
-            get_speech_timestamps = vad_utils[0]
-        except Exception as e:
-            print(f"[Warning] Silero VAD initialization skipped or failed: {e}. Processing raw chunks directly.")
-            
-        # 3. Load HuggingFace ASR pipeline
-        print("Loading Whisper ASR pipeline...")
-        asr_pipeline = pipeline(
-            task="automatic-speech-recognition",
-            model=self.model_name,
-            device=self.device
-        )
-        
-        # 4. Transcribe in 30-second chunks
-        chunk_sec = 30
-        chunk_samples = chunk_sec * sr
-        
-        segments = []
-        full_text_list = []
-        
-        for i in range(0, len(audio_data), chunk_samples):
-            chunk = audio_data[i:i+chunk_samples]
-            if len(chunk) < 0.5 * sr:
-                continue
+            # 2. Try loading Silero VAD
+            try:
+                print("Loading Silero VAD for voice activity check...")
+                # Set torch hub dir inside cache to avoid write permission issues
+                torch.hub.set_dir(os.path.join(os.getcwd(), "cache", "torch_hub"))
+                vad_model, vad_utils = torch.hub.load(
+                    repo_or_dir='snakers4/silero-vad',
+                    model='silero_vad',
+                    trust_repo=True,
+                    force_reload=False
+                )
+                get_speech_timestamps = vad_utils[0]
+            except Exception as e:
+                print(f"[Warning] Silero VAD initialization skipped or failed: {e}. Processing raw chunks directly.")
                 
-            t_start = i / sr
-            t_end = min(len(audio_data), i + chunk_samples) / sr
-            print(f"-> Processing chunk {t_start:.1f}s - {t_end:.1f}s (Progress: {i / len(audio_data) * 100:.1f}%)...")
+            # 3. Load HuggingFace ASR pipeline
+            print("Loading Whisper ASR pipeline...")
+            asr_pipeline = pipeline(
+                task="automatic-speech-recognition",
+                model=self.model_name,
+                device=self.device
+            )
             
-            # VAD check
-            is_silent = False
-            if vad_model is not None and get_speech_timestamps is not None:
+            # 4. Transcribe in 30-second chunks
+            chunk_sec = 30
+            chunk_samples = chunk_sec * sr
+            
+            segments = []
+            full_text_list = []
+            
+            for i in range(0, len(audio_data), chunk_samples):
+                chunk = audio_data[i:i+chunk_samples]
+                if len(chunk) < 0.5 * sr:
+                    continue
+                    
+                t_start = i / sr
+                t_end = min(len(audio_data), i + chunk_samples) / sr
+                print(f"-> Processing chunk {t_start:.1f}s - {t_end:.1f}s (Progress: {i / len(audio_data) * 100:.1f}%)...")
+                
+                # VAD check
+                is_silent = False
+                if vad_model is not None and get_speech_timestamps is not None:
+                    try:
+                        chunk_tensor = torch.from_numpy(chunk).float()
+                        speech_ts = get_speech_timestamps(chunk_tensor, vad_model, sampling_rate=16000)
+                        if not speech_ts:
+                            is_silent = True
+                    except Exception as vad_err:
+                        print(f"[Warning] VAD check failed on chunk {t_start:.1f}s-{t_end:.1f}s: {vad_err}")
+                
+                if is_silent:
+                    segments.append({
+                        "start": t_start,
+                        "end": t_end,
+                        "text": "[Nhạc nền / Im lặng]",
+                        "words": []
+                    })
+                    continue
+                
+                # Run transcription
                 try:
-                    chunk_tensor = torch.from_numpy(chunk).float()
-                    speech_ts = get_speech_timestamps(chunk_tensor, vad_model, sampling_rate=16000)
-                    if not speech_ts:
-                        is_silent = True
-                except Exception as vad_err:
-                    print(f"[Warning] VAD check failed on chunk {t_start:.1f}s-{t_end:.1f}s: {vad_err}")
-            
-            if is_silent:
+                    res = asr_pipeline(
+                        {"array": chunk, "sampling_rate": sr},
+                        return_timestamps="word",
+                        generate_kwargs={"task": "transcribe"}
+                    )
+                except Exception as asr_err:
+                    print(f"[Error] Failed to transcribe chunk {t_start:.1f}s-{t_end:.1f}s: {asr_err}")
+                    continue
+                    
+                chunk_text = res.get("text", "").strip()
+                if not chunk_text:
+                    chunk_text = "[Nhạc nền / Im lặng]"
+                    
+                if chunk_text != "[Nhạc nền / Im lặng]":
+                    full_text_list.append(chunk_text)
+                
+                # Format word timestamps
+                words = []
+                if chunk_text != "[Nhạc nền / Im lặng]":
+                    for c in res.get("chunks", []):
+                        w_text = c.get("text", "").strip()
+                        ts = c.get("timestamp")
+                        if w_text and ts and len(ts) == 2:
+                            words.append({
+                                "word": w_text,
+                                "start": t_start + ts[0],
+                                "end": t_start + ts[1]
+                            })
+                    
+                    # If Hugging Face returns words without individual timestamps, interpolate them
+                    if chunk_text and not words:
+                        words_list = chunk_text.split()
+                        w_dur = (t_end - t_start) / len(words_list)
+                        for idx, w in enumerate(words_list):
+                            words.append({
+                                "word": w,
+                                "start": t_start + idx * w_dur,
+                                "end": t_start + (idx + 1) * w_dur
+                            })
+                
                 segments.append({
                     "start": t_start,
                     "end": t_end,
-                    "text": "[Nhạc nền / Im lặng]",
-                    "words": []
+                    "text": chunk_text,
+                    "words": words
                 })
-                continue
-            
-            # Run transcription
-            try:
-                res = asr_pipeline(
-                    {"array": chunk, "sampling_rate": sr},
-                    return_timestamps="word",
-                    generate_kwargs={"task": "transcribe"}
-                )
-            except Exception as asr_err:
-                print(f"[Error] Failed to transcribe chunk {t_start:.1f}s-{t_end:.1f}s: {asr_err}")
-                continue
                 
-            chunk_text = res.get("text", "").strip()
-            if not chunk_text:
-                chunk_text = "[Nhạc nền / Im lặng]"
-                
-            if chunk_text != "[Nhạc nền / Im lặng]":
-                full_text_list.append(chunk_text)
+            full_text = " ".join(full_text_list)
+            print(f"[OK] Completed transcription. Text length: {len(full_text)} characters.")
             
-            # Format word timestamps
-            words = []
-            if chunk_text != "[Nhạc nền / Im lặng]":
-                for c in res.get("chunks", []):
-                    w_text = c.get("text", "").strip()
-                    ts = c.get("timestamp")
-                    if w_text and ts and len(ts) == 2:
-                        words.append({
-                            "word": w_text,
-                            "start": t_start + ts[0],
-                            "end": t_start + ts[1]
-                        })
-                
-                # If Hugging Face returns words without individual timestamps, interpolate them
-                if chunk_text and not words:
-                    words_list = chunk_text.split()
-                    w_dur = (t_end - t_start) / len(words_list)
-                    for idx, w in enumerate(words_list):
-                        words.append({
-                            "word": w,
-                            "start": t_start + idx * w_dur,
-                            "end": t_start + (idx + 1) * w_dur
-                        })
+            return {
+                "text": full_text,
+                "segments": segments,
+                "language": "auto"
+            }
+        finally:
+            print("Releasing Silero VAD and Whisper ASR models from memory...")
+            if asr_pipeline is not None:
+                del asr_pipeline
+            if vad_model is not None:
+                del vad_model
+            if get_speech_timestamps is not None:
+                del get_speech_timestamps
             
-            segments.append({
-                "start": t_start,
-                "end": t_end,
-                "text": chunk_text,
-                "words": words
-            })
-            
-        full_text = " ".join(full_text_list)
-        print(f"[OK] Completed transcription. Text length: {len(full_text)} characters.")
-        
-        return {
-            "text": full_text,
-            "segments": segments,
-            "language": "auto"
-        }
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print("[OK] Models released successfully.")
 
     def process(self, video_path: str) -> dict[str, Any]:
         """Full audio pipeline: extract → transcribe."""

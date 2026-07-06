@@ -3,9 +3,9 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ForbiddenException, ValidationException
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, JobDTO
+from app.schemas import BaseDTO, JobDTO, create_pagination_metadata
 from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
 from app.models.job import Job
@@ -20,6 +20,7 @@ def sync_job_status(job: Job, db: Session):
     import datetime as dt
     
     # Initialize default attributes
+    job.logs = []
     if job.status == JobStatus.COMPLETED:
         job.progress = 100
         job.stage = "completed"
@@ -42,6 +43,7 @@ def sync_job_status(job: Job, db: Session):
             meta = async_res.info or {}
             job.stage = meta.get("stage", "processing")
             job.progress = meta.get("progress", 0)
+            job.logs = meta.get("logs", [])
         elif async_res.state == "SUCCESS":
             job.stage = "completed"
             job.progress = 100
@@ -221,9 +223,81 @@ def list_all_jobs(
     current_user: User = Depends(check_admin),
 ):
     """Lists all processing jobs. Requires Admin role."""
-    jobs = db.query(Job).order_by(Job.job_id).offset(offset).limit(limit).all()
+    total = db.query(Job).count()
+    from app.core.constants import JobStatus
+    completed = db.query(Job).filter(Job.status == JobStatus.COMPLETED).count()
+    failed = db.query(Job).filter(Job.status == JobStatus.FAILED).count()
+    processing = db.query(Job).filter(Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])).count()
+    
+    jobs = db.query(Job).order_by(Job.created_at.desc() if hasattr(Job, 'created_at') else Job.job_id.desc()).offset(offset).limit(limit).all()
+    for j in jobs:
+        sync_job_status(j, db)
+        
     return BaseDTO(
         success=True,
         data=[JobDTO.model_validate(j) for j in jobs],
         message="All background jobs retrieved successfully",
+        metadata=create_pagination_metadata(
+            limit=limit,
+            offset=offset,
+            total=total,
+            count=len(jobs),
+            completed=completed,
+            failed=failed,
+            processing=processing
+        ),
     )
+
+
+@router.post(
+    "/{job_id}/cancel",
+    response_model=BaseDTO[JobDTO],
+    summary="Cancel / Stop a running Celery job",
+    description="Revokes the Celery task, terminates the worker thread processing it, and updates the database state.",
+)
+def cancel_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Cancels/revokes a Celery task."""
+    job = db.query(Job).filter(Job.job_id == job_id).first()
+    if not job:
+        raise NotFoundException(message=f"Job with ID {job_id} not found")
+
+    # Verify ownership of the video linked to job (or check if admin)
+    from app.core.constants import UserRole
+    video = db.query(Video).filter(Video.video_id == job.video_id).first()
+    if not video:
+        raise NotFoundException(message=f"Video associated with job {job_id} not found")
+        
+    if video.user_id != current_user.user_id and current_user.role != UserRole.ADMIN:
+        raise ForbiddenException(message="You do not have permission to cancel this job")
+
+    from app.core.constants import JobStatus, VideoStatus
+    import datetime as dt
+
+    # Revoke task in Celery
+    try:
+        from app.core.celery_app import celery_app
+        celery_app.control.revoke(str(job.job_id), terminate=True, signal="SIGKILL")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to revoke task {job.job_id} directly: {e}")
+
+    # Update job and video statuses
+    job.status = JobStatus.FAILED
+    job.error_log = "Tác vụ đã bị dừng bởi người dùng."
+    job.completed_at = dt.datetime.utcnow()
+    
+    video.status = VideoStatus.FAILED
+    
+    db.commit()
+    db.refresh(job)
+    
+    return BaseDTO(
+        success=True,
+        data=JobDTO.model_validate(job),
+        message="Tác vụ đã được dừng thành công",
+    )
+

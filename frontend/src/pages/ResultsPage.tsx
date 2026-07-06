@@ -4,6 +4,7 @@ import type { TranscriptLine, Chapter } from '../types';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { useToast } from '../context/ToastContext';
+import { Skeleton } from '../components/Skeleton';
 
 interface ChapterDTO {
   title: string;
@@ -356,9 +357,47 @@ export const ResultsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-[60vh] bg-background text-on-surface">
-        <span className="material-symbols-outlined text-[48px] text-vibrant-cyan animate-spin mb-4">autorenew</span>
-        <p className="text-secondary text-sm font-semibold">Đang tải kết quả tóm tắt từ Database...</p>
+      <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
+        {/* Top actions bar skeleton */}
+        <div className="flex justify-between items-center py-4 border-b border-slate-200 animate-pulse">
+          <div className="flex gap-2">
+            <div className="h-8 w-24 bg-slate-200 rounded-lg" />
+            <div className="h-8 w-24 bg-slate-200 rounded-lg" />
+          </div>
+          <div className="h-8 w-32 bg-slate-200 rounded-lg" />
+        </div>
+
+        {/* Two-column layout skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Video player skeleton */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="aspect-video bg-slate-200 animate-pulse rounded-2xl w-full" />
+            <div className="space-y-3">
+              <div className="h-6 w-3/4 bg-slate-200 animate-pulse rounded-md" />
+              <div className="h-4 w-1/3 bg-slate-200 animate-pulse rounded-md" />
+            </div>
+            <div className="bg-white border border-slate-100 rounded-xl p-4 space-y-2">
+              <div className="h-4 w-1/4 bg-slate-200 animate-pulse rounded-md" />
+              <div className="h-4 w-full bg-slate-200 animate-pulse rounded-md" />
+              <div className="h-4 w-5/6 bg-slate-200 animate-pulse rounded-md" />
+            </div>
+          </div>
+
+          {/* Right Column: Summarization panels skeleton */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-6">
+              {/* Tab selectors skeleton */}
+              <div className="flex border-b border-slate-100 pb-3 gap-4">
+                <div className="h-6 w-20 bg-slate-200 animate-pulse rounded-md" />
+                <div className="h-6 w-20 bg-slate-200 animate-pulse rounded-md" />
+                <div className="h-6 w-20 bg-slate-200 animate-pulse rounded-md" />
+              </div>
+              
+              {/* Summary text skeleton */}
+              <Skeleton.Text lines={8} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

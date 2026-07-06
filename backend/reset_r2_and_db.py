@@ -102,9 +102,27 @@ def clear_storage():
         print("Storage folder does not exist, skipping.")
 
 
+def reset_redis():
+    print("Resetting Redis (Celery broker)...")
+    try:
+        from redis import Redis
+        from app.core.config import settings
+        
+        # Connect to Redis using CELERY_BROKER_URL
+        redis_client = Redis.from_url(settings.CELERY_BROKER_URL)
+        redis_client.ping()
+        
+        # Flush the active database to clear all queues, tasks, and state records
+        redis_client.flushdb()
+        print("Successfully flushed Redis database and cleared all Celery task/queue records.")
+    except Exception as e:
+        print(f"Error resetting Redis: {e}")
+
+
 if __name__ == "__main__":
     reset_db_keep_users()
     clear_cloudflare_r2()
     reset_chromadb()
     clear_storage()
-    print("All databases and Cloudflare R2 file storage reset successfully (login accounts preserved)!")
+    reset_redis()
+    print("All databases, Redis broker, and Cloudflare R2 file storage reset successfully (login accounts preserved)!")
