@@ -6,6 +6,10 @@ Migrated from: src/mls/pipeline.py
 
 from __future__ import annotations
 
+# Suppress python warnings (deprecation, user warnings from PyTorch/Transformers)
+import warnings
+warnings.filterwarnings("ignore")
+
 # Monkey-patch Hugging Face transformers torch.load security check
 # to avoid ValueError when loading CLIP/BLIP models on torch < 2.6
 try:
@@ -48,6 +52,18 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     output_dir = f"./outputs/{job_id}"
 
     self.update_state(state="PROGRESS", meta={"stage": "download", "progress": 2})
+    
+    def check_revoked():
+        if not hasattr(self, "request") or not self.request or not self.request.id:
+            return
+        from celery.result import AsyncResult
+        try:
+            state = AsyncResult(self.request.id, app=app).state
+            if state == 'REVOKED':
+                raise Exception("Tác vụ bị hủy bởi người dùng.")
+        except Exception as e:
+            if "Tác vụ bị hủy" in str(e):
+                raise e
     import os
     import requests
     import yt_dlp
@@ -190,6 +206,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
     try:
         # Stage 1: Audio
+        check_revoked()
         log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 5)
         log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
         audio = AudioTranscriber()
@@ -202,6 +219,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         gc.collect()
 
         # Stage 2: Speaker diarization
+        check_revoked()
         log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
         speaker = SpeakerDiarizer()
         utterances = speaker.process(
@@ -214,6 +232,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         gc.collect()
 
         # Stage 3: Visual
+        check_revoked()
         log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
         visual = SceneDetector()
         visual_result = visual.process(local_video_path, output_dir)
@@ -223,6 +242,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         gc.collect()
 
         # Stage 4: Semantic
+        check_revoked()
         log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
         semantic = SemanticAnalyzer()
         # semantic.process now takes the list of scene dicts, filters them, and adds captions
@@ -266,6 +286,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             log_step("Đã tải xong toàn bộ slide lên R2.", "storage", 74)
 
         # Stage 5: Timeline
+        check_revoked()
         log_step("Bắt đầu ánh xạ trục thời gian bài giảng và chương mục...", "timeline", 75)
         timeline = TimelineBuilder()
         timeline_result = timeline.process(
@@ -277,6 +298,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         gc.collect()
 
         # Stage 6: Summarization
+        check_revoked()
         log_step("Đang yêu cầu mô hình AI (Groq API) sinh bản tóm tắt chi tiết...", "text", 88)
         summarizer = Summarizer()
         text_result = summarizer.process(
@@ -309,20 +331,34 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     if utterances:
         duration = utterances[-1]["end"]
 
-    # Align transcript utterances with visual scenes to populate "script" and update keyframe description
+    # Align transcript utterances with visual scenes to populate "script"
     scenes = visual_result.get("scenes", [])
-    for scene in scenes:
-        scene_start = scene["start_seconds"]
-        scene_end = scene["end_seconds"]
+    scene_utterance_lists = {id(scene): [] for scene in scenes}
+    
+    for utt in utterances:
+        u_start = utt.get("start", 0.0)
+        u_end = utt.get("end", 0.0)
         
-        # Find overlapping utterances
-        scene_utterances = []
-        for utt in utterances:
-            if utt["start"] < scene_end and utt["end"] > scene_start:
-                scene_utterances.append(utt["text"])
+        best_scene = None
+        max_overlap = 0.0
+        
+        for scene in scenes:
+            scene_start = scene.get("start_seconds", 0.0)
+            scene_end = scene.get("end_seconds", 0.0)
+            
+            overlap_start = max(u_start, scene_start)
+            overlap_end = min(u_end, scene_end)
+            overlap = overlap_end - overlap_start
+            
+            if overlap > max_overlap:
+                max_overlap = overlap
+                best_scene = scene
                 
-        combined_script = " ".join(scene_utterances).strip()
-        scene["script"] = combined_script
+        if best_scene is not None and max_overlap > 0:
+            scene_utterance_lists[id(best_scene)].append(utt.get("text", ""))
+            
+    for scene in scenes:
+        scene["script"] = " ".join(scene_utterance_lists[id(scene)]).strip()
 
     # Construct keyframes from visual scenes for FE gallery compatibility
     keyframes = []

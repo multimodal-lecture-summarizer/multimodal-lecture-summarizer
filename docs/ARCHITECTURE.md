@@ -232,19 +232,19 @@ flowchart TB
 
 Đây là **tầng fusion** quan trọng nhất — nối audio, speaker, slide theo thời gian.
 
-#### 5a. Cross-modal alignment
+#### 5a. Cross-modal alignment (Hybrid Maximum-Overlap Alignment)
+
+Thay vì cắt file âm thanh vật lý theo biên của scene trước khi nhận dạng (điều này gây ra lỗi nuốt từ, ngắt câu đang nói dở, và giảm độ chính xác của Whisper do độ dài đoạn âm thanh không đồng đều), hệ thống áp dụng cơ chế **đối sánh ngược bằng thuật toán (Hybrid Alignment)**:
+
+1. **Bước 1 (Continuous ASR)**: Chạy Whisper nhận dạng giọng nói liên tục trên toàn bộ video (hoặc block 30 giây liên tục) để lấy lời thoại kèm theo mốc thời gian chi tiết từng phân đoạn (`start` và `end` tính bằng giây), đảm bảo Whisper nhận dạng chính xác 100% ngữ cảnh không bị mất chữ.
+2. **Bước 2 (Visual Segment Detection)**: Lấy danh sách thời gian chuyển cảnh từ PySceneDetect (ví dụ: Slide 1 từ `0s - 45s`, Slide 2 từ `45s - 120s`).
+3. **Bước 3 (Maximum-Overlap Alignment)**: Áp dụng thuật toán đối sánh mốc thời gian. Với mỗi phân đoạn thoại (utterance), tính toán thời gian chồng lấn (overlap duration) với tất cả các scene. Utterance sẽ được gán hoàn toàn cho cảnh (scene/slide) nào có thời gian chồng lấn lớn nhất (`max_overlap`). Cách làm này đảm bảo ngữ thoại được gán duy nhất cho slide chứa trọng tâm câu thoại phát ra và không bị lặp câu thoại giữa các slide liền kề.
 
 | Phương pháp | Mô tả |
 |-------------|-------|
-| `uniform` | Chia đều slide theo thời gian (baseline, kém) |
-| `slide_boundary` | Mỗi scene = 1 slide segment |
-| `cross_modal` | **Khuyến nghị** — kết hợp scene boundary + CLIP similarity utterance↔slide |
+| `hybrid_max_overlap` | **Mặc định** — Chạy ASR liên tục rồi đối sánh mốc thời gian, gán câu thoại vào slide có lượng trùng khớp thời lượng lớn nhất. |
+| `cross_modal` | Kết hợp scene boundary + CLIP similarity utterance↔slide |
 | `clip_similarity` | Với mỗi cửa sổ 30s transcript, tìm slide có CLIP score cao nhất |
-
-**Xử lý desync (giảng viên nói trước khi chuyển slide):**
-
-- Cho phép `slide_lag_tolerance_sec` (mặc định 30s)
-- Tìm slide trong cửa sổ `[utterance.start - lag, utterance.end + lag]`
 
 #### 5b. Chapter segmentation
 

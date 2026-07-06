@@ -113,7 +113,7 @@ class Summarizer:
         Analyze the following audio transcript AND visual keyframe descriptions to:
         1. Create a detailed video summary in plain text format (do NOT use markdown syntax like #, ##, **, -, *, etc. Use standard paragraphs and clear spacing, around 300-500 words).
         2. Automatically generate a concise, descriptive title for this video (video_title - a short string of 5-10 words, in the same language as the content).
-        3. Automatically divide the video into logical chapters according to timestamps. Each chapter must contain:
+        3. Automatically divide the video into logical chapters. The chapters MUST be segmented based on slide changes (Visual Context keyframe timestamps) and semantic topic transitions in the speech. Do NOT segment chapters by fixed time intervals (e.g., every 5 minutes). Each chapter must contain:
            - Chapter title (title)
            - Start time (startTime - in seconds, as float/int)
            - End time (endTime - in seconds, as float/int)
@@ -123,7 +123,7 @@ class Summarizer:
         - The total duration of this video is {duration} seconds ({formatted_duration}).
         - You MUST NOT generate any chapters with an endTime greater than {duration}.
         - The last chapter's endTime MUST be exactly {duration}.
-        - Base your chapters strictly on the timestamps provided in the transcript and visual context. Do not invent non-existent topics for silent parts (e.g. [Nhạc nền / Im lặng]).
+        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts (e.g. [Nhạc nền / Im lặng]).
 
         Audio Transcript (with timestamps):
         {transcript if transcript.strip() else "[No speech detected]"}
