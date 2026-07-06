@@ -121,11 +121,18 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 print(f"Downloading R2 video securely using boto3 from: {video_path}")
                 import boto3
                 bucket_name = worker_settings.CF_R2_BUCKET_NAME
-                parts = video_path.split(f"/{bucket_name}/")
-                if len(parts) > 1:
-                    object_key = parts[1]
+                
+                # Robustly extract object key by stripping the public URL prefix
+                public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
+                if video_path.startswith(public_base):
+                    object_key = video_path[len(public_base):].lstrip("/")
                 else:
-                    object_key = "/".join(video_path.split("/")[4:])
+                    # Fallback for old S3 URL formats
+                    parts = video_path.split(f"/{bucket_name}/")
+                    if len(parts) > 1:
+                        object_key = parts[1]
+                    else:
+                        object_key = "/".join(video_path.split("/")[3:])
                 
                 s3_client = boto3.client(
                     "s3",
@@ -179,8 +186,11 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         print("[Stage 4/6] Starting semantic analysis (OCR + CLIP keyframe processing)...")
         self.update_state(state="PROGRESS", meta={"stage": "semantic", "progress": 60})
         semantic = SemanticAnalyzer()
-        slides = semantic.process(visual_result.get("keyframes", []))
-        print("[Stage 4/6] Completed semantic keyframe analysis successfully.")
+        # semantic.process now takes the list of scene dicts, filters them, and adds captions
+        filtered_scenes = semantic.process(visual_result.get("scenes", []))
+        visual_result["scenes"] = filtered_scenes
+        slides = filtered_scenes
+        print(f"[Stage 4/6] Completed semantic keyframe analysis. Kept {len(filtered_scenes)} keyframes.")
 
         # Upload keyframes to R2 if configured
         from ai_workers.core.config import worker_settings
@@ -267,8 +277,6 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 
         combined_script = " ".join(scene_utterances).strip()
         scene["script"] = combined_script
-        if combined_script:
-            scene["caption"] = combined_script
 
     # Construct keyframes from visual scenes for FE gallery compatibility
     keyframes = []
@@ -277,7 +285,8 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             "timestamp": scene["start_seconds"],
             "imageUrl": scene["keyframe_url"],
             "description": scene.get("caption", f"Slide at {scene['start_timecode']}"),
-            "importanceScore": 0.8
+            "transcript": scene.get("script", ""),
+            "importanceScore": scene.get("importanceScore", 0.8)
         })
 
     return {

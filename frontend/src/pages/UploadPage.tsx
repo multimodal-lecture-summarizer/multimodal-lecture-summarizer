@@ -110,6 +110,8 @@ export const UploadPage: React.FC = () => {
     setCurrentStage('queued');
     
     pollIntervalRef.current = setInterval(async () => {
+      // Prevent overlapping updates if already marked as completed
+      if (pollIntervalRef.current === null) return;
       try {
         const res = await api.getJobStatus(videoId);
         if (res.success && res.data && res.data.length > 0) {
@@ -127,14 +129,17 @@ export const UploadPage: React.FC = () => {
 
             const jobStatusUpper = (job.status || "").toUpperCase();
             if (jobStatusUpper === 'COMPLETED' || jobStatusUpper === 'SUCCESS' || jobStatusUpper === 'DONE') {
-              toast.success('Xử lý video hoàn tất! Đang chuyển hướng...', 'Thành công');
-              clearInterval(pollIntervalRef.current);
-              setCurrentStep(5);
-              setProgressPercent(100);
-              setCurrentStage('completed');
-              setTimeout(() => {
-                navigate(`/results?videoId=${videoId}`);
-              }, 1000);
+              if (pollIntervalRef.current !== null) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+                toast.success('Xử lý video hoàn tất! Đang chuyển hướng...', 'Thành công');
+                setCurrentStep(5);
+                setProgressPercent(100);
+                setCurrentStage('completed');
+                setTimeout(() => {
+                  navigate(`/results?videoId=${videoId}`);
+                }, 1000);
+              }
             } else if (jobStatusUpper === 'FAILED') {
               clearInterval(pollIntervalRef.current);
               setIsProcessing(false);

@@ -16,6 +16,7 @@ interface KeyframeDTO {
   timestamp: number;
   imageUrl: string;
   description: string;
+  transcript?: string;
   importanceScore: number;
 }
 
@@ -645,7 +646,7 @@ export const ResultsPage: React.FC = () => {
                 >
                   <div className="relative aspect-video w-full bg-black overflow-hidden shrink-0">
                     <img 
-                      src={`${CONFIG.API_BASE_URL.replace('/api/v1', '')}${imgUrl}`} 
+                      src={imgUrl.startsWith('http') ? imgUrl : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${imgUrl}`} 
                       alt={kf.description}
                       className="absolute inset-0 w-full h-full object-contain transform group-hover:scale-105 transition-transform duration-500"
                     />
@@ -655,10 +656,19 @@ export const ResultsPage: React.FC = () => {
                   </div>
                   
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-                    <p className="text-xs text-deep-navy leading-normal line-clamp-3">
-                      {kf.description}
-                    </p>
-                    <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30 text-[10px] text-secondary">
+                    <div>
+                      <p className="text-xs text-deep-navy font-semibold leading-normal line-clamp-2" title={kf.description}>
+                        <span className="material-symbols-outlined text-[14px] align-text-bottom mr-1 text-vibrant-cyan">image</span>
+                        {kf.description}
+                      </p>
+                      {kf.transcript && (
+                        <p className="text-[10px] text-secondary italic leading-tight line-clamp-2 mt-2" title={kf.transcript}>
+                          <span className="material-symbols-outlined text-[12px] align-text-bottom mr-1 text-outline">record_voice_over</span>
+                          "{kf.transcript}"
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30 text-[10px] text-secondary mt-2">
                       <span className="font-bold text-vibrant-cyan">Độ quan trọng</span>
                       <span className="font-mono-data font-bold bg-surface-container-high px-1.5 py-0.5 rounded text-deep-navy">
                         {Math.round(importance * 100)}%

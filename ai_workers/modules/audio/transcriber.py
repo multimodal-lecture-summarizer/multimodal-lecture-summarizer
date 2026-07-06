@@ -90,7 +90,7 @@ class AudioTranscriber:
             )
             get_speech_timestamps = vad_utils[0]
         except Exception as e:
-            print(f"⚠️ Silero VAD initialization skipped or failed: {e}. Processing raw chunks directly.")
+            print(f"[Warning] Silero VAD initialization skipped or failed: {e}. Processing raw chunks directly.")
             
         # 3. Load HuggingFace ASR pipeline
         print("Loading Whisper ASR pipeline...")
@@ -125,7 +125,7 @@ class AudioTranscriber:
                     if not speech_ts:
                         is_silent = True
                 except Exception as vad_err:
-                    print(f"⚠️ VAD check failed on chunk {t_start:.1f}s-{t_end:.1f}s: {vad_err}")
+                    print(f"[Warning] VAD check failed on chunk {t_start:.1f}s-{t_end:.1f}s: {vad_err}")
             
             if is_silent:
                 segments.append({
@@ -144,7 +144,7 @@ class AudioTranscriber:
                     generate_kwargs={"task": "transcribe"}
                 )
             except Exception as asr_err:
-                print(f"❌ Failed to transcribe chunk {t_start:.1f}s-{t_end:.1f}s: {asr_err}")
+                print(f"[Error] Failed to transcribe chunk {t_start:.1f}s-{t_end:.1f}s: {asr_err}")
                 continue
                 
             chunk_text = res.get("text", "").strip()
