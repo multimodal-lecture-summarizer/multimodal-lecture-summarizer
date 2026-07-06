@@ -53,6 +53,7 @@ class Summarizer:
         transcript = " ".join([u.get("text", "") for u in utterances])
         if not transcript.strip():
             return {
+                "video_title": "Video bài giảng không có nội dung thoại",
                 "summary": "No lecture content to summarize.",
                 "chapters": []
             }
@@ -61,6 +62,7 @@ class Summarizer:
         if not self.api_key:
             duration = utterances[-1]["end"] if utterances else 10.0
             return {
+                "video_title": "Bài giảng chưa đặt tên (Chưa cấu hình API Key)",
                 "summary": "Lecture Summary\n\nLecture transcribed successfully. Please configure GROQ_API_KEY in the .env file to generate a detailed AI summary.",
                 "chapters": [
                     {
@@ -83,7 +85,8 @@ class Summarizer:
         You are a professional AI assistant tasked with summarizing lecture videos.
         Analyze the following transcript to:
         1. Create a detailed lecture summary in plain text format (do NOT use markdown syntax like #, ##, **, -, *, etc. Use standard paragraphs and clear spacing, around 300-500 words).
-        2. Automatically divide the lecture into logical chapters according to timestamps. Each chapter must contain:
+        2. Automatically generate a concise, academic title for this lecture video (video_title - a short string of 5-10 words, in the same language as the transcript).
+        3. Automatically divide the lecture into logical chapters according to timestamps. Each chapter must contain:
            - Chapter title (title)
            - Start time (startTime - in seconds, as float/int)
            - End time (endTime - in seconds, as float/int)
@@ -94,6 +97,7 @@ class Summarizer:
 
         Please return the result in the following STRICT JSON format (with no other explanations outside the JSON):
         {{
+            "video_title": "Concise Academic Lecture Title Here",
             "summary": "Plain text summary content here...",
             "chapters": [
                 {{
@@ -127,6 +131,7 @@ class Summarizer:
                 data = json.loads(response_text)
                 print(f"[OK] Successfully generated summary with model: {model}")
                 return {
+                    "video_title": data.get("video_title") or data.get("title") or "Bài giảng chưa đặt tên",
                     "summary": data.get("summary", "Tóm tắt bài giảng."),
                     "chapters": data.get("chapters", []),
                     "model_used": f"Groq ({model})"
@@ -139,6 +144,7 @@ class Summarizer:
         print("❌ All Groq models failed. Using offline fallback summary.")
         duration = utterances[-1]["end"] if utterances else 10.0
         return {
+            "video_title": "Bài giảng chưa đặt tên (Lỗi AI)",
             "summary": f"### Tóm tắt bài giảng\n\nNội dung bài giảng đã dịch thành công. (Gặp lỗi khi tạo tóm tắt bằng AI: {last_error})",
             "chapters": [
                 {

@@ -27,3 +27,9 @@ class JobDTO(JobBase):
     error_log: Optional[str] = Field(
         None, description="The detailed error log if the job failed"
     )
+    progress: Optional[int] = Field(
+        None, description="The execution progress percentage (0-100)"
+    )
+    stage: Optional[str] = Field(
+        None, description="The current execution stage name"
+    )

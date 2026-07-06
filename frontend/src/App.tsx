@@ -11,6 +11,7 @@ import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DocsPage } from './pages/DocsPage';
 import { api } from './services/api';
+import { ToastProvider } from './context/ToastContext';
 import './App.css';
 
 interface UserState {
@@ -61,46 +62,48 @@ function App() {
   };
 
   return (
-    <Router>
-      <div className="app-container">
-        <Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />
-        <main className="app-main-content">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route 
-              path="/upload" 
-              element={isLoggedIn ? <UploadPage /> : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/results" 
-              element={isLoggedIn ? <ResultsPage /> : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/qa" 
-              element={isLoggedIn ? <QaPage /> : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/admin/*" 
-              element={isLoggedIn ? (user?.role === 'admin' ? <AdminPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/history" 
-              element={isLoggedIn ? <HistoryPage /> : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/profile" 
-              element={isLoggedIn ? <ProfilePage /> : <Navigate to="/auth" />} 
-            />
-            <Route 
-              path="/auth" 
-              element={<AuthPage onLogin={handleLogin} />} 
-            />
-            <Route path="/docs" element={<DocsPage />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    <ToastProvider>
+      <Router>
+        <div className="app-container">
+          <Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />
+          <main className="app-main-content">
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route 
+                path="/upload" 
+                element={isLoggedIn ? <UploadPage /> : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/results" 
+                element={isLoggedIn ? <ResultsPage /> : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/qa" 
+                element={isLoggedIn ? <QaPage /> : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/admin/*" 
+                element={isLoggedIn ? (user?.role === 'admin' ? <AdminPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/history" 
+                element={isLoggedIn ? <HistoryPage /> : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/profile" 
+                element={isLoggedIn ? <ProfilePage /> : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/auth" 
+                element={<AuthPage onLogin={handleLogin} />} 
+              />
+              <Route path="/docs" element={<DocsPage />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </ToastProvider>
   );
 }
 

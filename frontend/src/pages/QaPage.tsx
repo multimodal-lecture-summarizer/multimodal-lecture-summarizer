@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
+import { useToast } from '../context/ToastContext';
 
 interface Message {
   sender: 'user' | 'bot';
@@ -12,6 +13,7 @@ interface Message {
 }
 
 export const QaPage: React.FC = () => {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const videoId = searchParams.get('videoId') || searchParams.get('id') || '';
 
@@ -174,6 +176,7 @@ export const QaPage: React.FC = () => {
           text: `Có lỗi xảy ra khi truy vấn ChromaDB: ${err.message || 'Lỗi kết nối'}`,
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }]);
+        toast.error(`Có lỗi xảy ra khi truy vấn: ${err.message || 'Lỗi kết nối'}`, "Lỗi truy vấn");
         setIsTyping(false);
       });
   };
@@ -193,6 +196,7 @@ export const QaPage: React.FC = () => {
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
+    toast.success('Lịch sử trò chuyện đã được xóa.', 'Đã xóa');
   };
 
   return (

@@ -25,8 +25,12 @@ app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,  # 1 task at a time per worker for GPU tasks
-    broker_pool_limit=2,
-    redis_max_connections=5,
+    broker_pool_limit=1,
+    redis_max_connections=2,
+    worker_gossip=False,
+    worker_mingle=False,
+    worker_send_task_events=False,
+    task_send_sent_event=False,
 )
 
 # Auto-discover tasks in ai_workers package

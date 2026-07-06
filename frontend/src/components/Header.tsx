@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
+import { useToast } from '../context/ToastContext';
 
 interface HeaderProps {
   isLoggedIn?: boolean;
@@ -7,6 +8,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) => {
+  const toast = useToast();
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith('/admin');
 
@@ -130,7 +132,10 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
 
             {/* Logout Button */}
             <button 
-              onClick={onLogout} 
+              onClick={() => {
+                if (onLogout) onLogout();
+                toast.success("Đăng xuất thành công!", "Thành công");
+              }} 
               className="text-secondary hover:text-error p-1.5 transition-colors"
               title="Đăng xuất"
             >

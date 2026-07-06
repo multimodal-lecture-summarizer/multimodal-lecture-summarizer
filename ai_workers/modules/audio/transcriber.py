@@ -196,7 +196,7 @@ class AudioTranscriber:
 
     def process(self, video_path: str) -> dict[str, Any]:
         """Full audio pipeline: extract → transcribe."""
-        audio_path = video_path.replace(".mp4", ".wav")
+        audio_path = video_path.rsplit(".", 1)[0] + ".wav"
         self.extract_audio(video_path, audio_path)
         result = self.transcribe(audio_path)
         return result

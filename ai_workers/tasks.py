@@ -33,6 +33,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     start_time = time.time()
     output_dir = f"./outputs/{job_id}"
 
+    self.update_state(state="PROGRESS", meta={"stage": "download", "progress": 2})
     import os
     import requests
     import yt_dlp
@@ -40,8 +41,12 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
     local_video_path = video_path
     is_temp_file = False
+    video_file_url = None
 
     if video_path.startswith("http://") or video_path.startswith("https://"):
+        if "youtube.com" not in video_path and "youtu.be" not in video_path:
+            video_file_url = video_path
+
         temp_dir = "./storage/temp"
         os.makedirs(temp_dir, exist_ok=True)
         local_video_path = os.path.abspath(os.path.join(temp_dir, f"temp_{uuid.uuid4()}.mp4"))
@@ -59,7 +64,59 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([video_path])
+                
+                # yt-dlp might merge formats to a different extension (e.g. .mkv, .webm)
+                import glob
+                base_without_ext = local_video_path.rsplit(".", 1)[0]
+                matching_files = glob.glob(base_without_ext + ".*")
+                if matching_files:
+                    local_video_path = matching_files[0]
                 print(f"Successfully downloaded YouTube video to: {local_video_path}")
+
+                # Get actual extension
+                actual_ext = local_video_path.rsplit(".", 1)[-1]
+                # Save downloaded video to Cloudflare R2 (or local mock folder)
+                video_filename = f"youtube_{job_id}.{actual_ext}"
+                object_key = f"videos/{video_filename}"
+                
+                # Default mock URL
+                video_file_url = f"/static/mock_r2/{object_key}"
+                
+                # Copy to local mock directory
+                mock_dir = os.path.abspath(os.path.join(os.getcwd(), "storage", "mock_r2_bucket", "videos"))
+                os.makedirs(mock_dir, exist_ok=True)
+                mock_filepath = os.path.join(mock_dir, video_filename)
+                
+                import shutil
+                shutil.copy2(local_video_path, mock_filepath)
+                print(f"Stored local copy of YouTube video in mock storage at: {mock_filepath}")
+                
+                # If R2 is enabled, upload to R2 and update url
+                if worker_settings.CF_R2_ACCESS_KEY_ID:
+                    try:
+                        print(f"Uploading downloaded YouTube video to R2 under key: {object_key}...")
+                        import boto3
+                        s3_client = boto3.client(
+                            "s3",
+                            endpoint_url=f"https://{worker_settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+                            aws_access_key_id=worker_settings.CF_R2_ACCESS_KEY_ID,
+                            aws_secret_access_key=worker_settings.CF_R2_SECRET_ACCESS_KEY,
+                        )
+                        s3_client.upload_file(
+                            mock_filepath,
+                            worker_settings.CF_R2_BUCKET_NAME,
+                            object_key,
+                            ExtraArgs={"ContentType": "video/mp4"}
+                        )
+                        public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
+                        video_file_url = f"{public_base}/{object_key}"
+                        print(f"Successfully uploaded YouTube video to R2: {video_file_url}")
+                        
+                        # Cleanup local mock file since it's uploaded to R2
+                        if os.path.exists(mock_filepath):
+                            os.remove(mock_filepath)
+                    except Exception as upload_err:
+                        print(f"Failed to upload YouTube video to R2: {upload_err}. Falling back to mock URL.")
             elif ("r2" in video_path or "cloudflarestorage" in video_path) and worker_settings.CF_R2_ACCESS_KEY_ID:
                 print(f"Downloading R2 video securely using boto3 from: {video_path}")
                 import boto3
@@ -106,7 +163,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         self.update_state(state="PROGRESS", meta={"stage": "speaker", "progress": 25})
         speaker = SpeakerDiarizer()
         utterances = speaker.process(
-            local_video_path.replace(".mp4", ".wav"),
+            local_video_path.rsplit(".", 1)[0] + ".wav",
             audio_result.get("segments", []),
         )
         print(f"[Stage 2/6] Completed speaker diarization successfully. Found {len(utterances)} speech segments.")
@@ -176,14 +233,20 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     finally:
         # Cleanup temporary files
         if is_temp_file:
-            for ext in [".mp4", ".wav"]:
-                path_to_clean = local_video_path.replace(".mp4", ext)
-                if os.path.exists(path_to_clean):
-                    try:
-                        os.remove(path_to_clean)
-                        print(f"Cleaned up temporary file: {path_to_clean}")
-                    except Exception as err:
-                        print(f"Failed to clean up temporary file {path_to_clean}: {err}")
+            if os.path.exists(local_video_path):
+                try:
+                    os.remove(local_video_path)
+                    print(f"Cleaned up temporary video file: {local_video_path}")
+                except Exception as err:
+                    print(f"Failed to clean up temporary video file {local_video_path}: {err}")
+            
+            wav_path = local_video_path.rsplit(".", 1)[0] + ".wav"
+            if os.path.exists(wav_path):
+                try:
+                    os.remove(wav_path)
+                    print(f"Cleaned up temporary audio file: {wav_path}")
+                except Exception as err:
+                    print(f"Failed to clean up temporary audio file {wav_path}: {err}")
 
     elapsed_time = time.time() - start_time
     duration = 0.0
@@ -220,6 +283,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     return {
         "job_id": job_id,
         "status": "done",
+        "video_title": text_result.get("video_title", "Untitled Lecture Video"),
         "summary": text_result.get("summary", ""),
         "chapters": text_result.get("chapters", []),
         "keyframes": keyframes,
@@ -228,7 +292,8 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         "scenes": visual_result.get("scenes", []),
         "duration": duration,
         "model_used": text_result.get("model_used", "Groq"),
-        "processing_time": elapsed_time
+        "processing_time": elapsed_time,
+        "video_file_path": video_file_url
     }
 
 

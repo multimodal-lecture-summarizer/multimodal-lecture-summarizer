@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../services/api";
 import { UserRole } from "../types";
+import { useToast } from "../context/ToastContext";
 
 export const ProfilePage: React.FC = () => {
+  const toast = useToast();
   const [profile, setProfile] = useState<{
     email: string;
     role: string;
@@ -73,6 +75,7 @@ export const ProfilePage: React.FC = () => {
         type: "error",
         text: "Mật khẩu xác nhận không khớp!",
       });
+      toast.error("Mật khẩu xác nhận không khớp!", "Lỗi");
       return;
     }
     if (newPassword.length < 6) {
@@ -80,6 +83,7 @@ export const ProfilePage: React.FC = () => {
         type: "error",
         text: "Mật khẩu mới phải từ 6 ký tự trở lên!",
       });
+      toast.error("Mật khẩu mới phải từ 6 ký tự trở lên!", "Lỗi");
       return;
     }
 
@@ -88,6 +92,7 @@ export const ProfilePage: React.FC = () => {
       type: "success",
       text: "Đổi mật khẩu thành công (Môi trường phát triển)!",
     });
+    toast.success("Đổi mật khẩu thành công (Môi trường phát triển)!", "Thành công");
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");

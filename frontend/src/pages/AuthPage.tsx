@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 interface AuthPageProps {
   onLogin?: (userData: { email: string; role: string }) => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
+  const toast = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -163,6 +165,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             role: profileResult.data.role.toLowerCase(), // admin or user
           };
           if (onLogin) onLogin(userData);
+          toast.success(isLogin ? "Đăng nhập thành công!" : "Đăng ký thành công!", "Thành công");
           
           if (userData.role === 'admin') {
             navigate('/admin');
@@ -184,6 +187,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     };
     
     if (onLogin) onLogin(userData);
+    toast.success(isLogin ? "Đăng nhập thành công! (Môi trường giả lập)" : "Đăng ký thành công! (Môi trường giả lập)", "Thành công");
     
     if (role === 'admin') {
       navigate('/admin');
@@ -298,6 +302,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
                   const userData = { email: email || 'google_researcher@gmail.com', role: role };
                   if (onLogin) onLogin(userData); 
+                  toast.success("Đăng nhập bằng Google thành công!", "Thành công");
                   if (role === 'admin') {
                     navigate('/admin');
                   } else {
@@ -321,6 +326,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
                   const userData = { email: email || 'github_researcher@gmail.com', role: role };
                   if (onLogin) onLogin(userData); 
+                  toast.success("Đăng nhập bằng GitHub thành công!", "Thành công");
                   if (role === 'admin') {
                     navigate('/admin');
                   } else {

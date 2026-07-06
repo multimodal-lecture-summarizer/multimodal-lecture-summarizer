@@ -33,6 +33,9 @@ class Video(Base):
     status: Mapped[VideoStatus] = mapped_column(
         Enum(VideoStatus), default=VideoStatus.PENDING, nullable=False
     )
+    title: Mapped[Optional[str]] = mapped_column(
+        String(256), nullable=True
+    )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

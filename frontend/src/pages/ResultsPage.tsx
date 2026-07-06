@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import type { TranscriptLine, Chapter } from '../types';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
+import { useToast } from '../context/ToastContext';
 
 interface ChapterDTO {
   title: string;
@@ -63,6 +64,7 @@ const parseTimeText = (timeStr: string) => {
 export const ResultsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const videoId = searchParams.get('videoId') || searchParams.get('id');
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,7 +341,7 @@ export const ResultsPage: React.FC = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(`Xuất thất bại: ${err.message}`);
+      toast.error(`Xuất thất bại: ${err.message}`, "Thất bại");
     }
   };
 
@@ -349,17 +351,7 @@ export const ResultsPage: React.FC = () => {
     background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${progressPercent}%, rgba(255,255,255,0.3) ${progressPercent}%, rgba(255,255,255,0.3) 100%)`
   };
 
-  const isYouTube = !!(videoData?.originalUrl && (videoData.originalUrl.includes('youtube.com') || videoData.originalUrl.includes('youtu.be')));
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    let yid = '';
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    if (match && match[2].length === 11) {
-      yid = match[2];
-    }
-    return yid ? `https://www.youtube-nocookie.com/embed/${yid}?enablejsapi=1&autoplay=1` : '';
-  };
 
   if (loading) {
     return (

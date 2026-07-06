@@ -13,6 +13,10 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    broker_pool_limit=2,
-    redis_max_connections=5,
+    broker_pool_limit=1,
+    redis_max_connections=2,
+    worker_gossip=False,
+    worker_mingle=False,
+    worker_send_task_events=False,
+    task_send_sent_event=False,
 )

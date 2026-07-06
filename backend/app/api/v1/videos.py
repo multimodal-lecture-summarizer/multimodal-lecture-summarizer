@@ -33,12 +33,15 @@ router = APIRouter(route_class=CamelCaseAPIRoute)
 def upload_video(
     background_tasks: BackgroundTasks,
     original_url: Optional[str] = Form(None),
+    originalUrl: Optional[str] = Form(None),
     language: str = Form("en"),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Processes upload request, validates standards, stores metadata, runs background AI tasks."""
+    url = original_url or originalUrl
+
     # 1. Fetch current validation standards
     standard = db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
     if not standard:
@@ -53,7 +56,7 @@ def upload_video(
         db.refresh(standard)
 
     # 2. Check input (either file or original_url must be provided)
-    if not file and not original_url:
+    if not file and not url:
         raise ValidationException(
             message="Either a video file or a YouTube URL must be provided."
         )
@@ -125,11 +128,23 @@ def upload_video(
             os.remove(temp_file_path)
     else:
         # YouTube URL scenario
-        if "youtube.com" not in original_url and "youtu.be" not in original_url:
+        if "youtube.com" not in url and "youtu.be" not in url:
             raise ValidationException(
                 message="Only YouTube URLs are supported for remote video inputs."
             )
         duration = 0.0  # Will be updated by Celery worker
+
+    # 2b. Check if video with same original_url already exists and has a file_path
+    if url:
+        existing_video = db.query(Video).filter(
+            Video.original_url == url,
+            Video.file_path != None,
+            Video.file_path != ""
+        ).first()
+        if existing_video:
+            file_path = existing_video.file_path
+            if existing_video.duration:
+                duration = existing_video.duration
 
     if duration > 0.0 and duration > standard.max_duration:
         raise ValidationException(
@@ -139,11 +154,12 @@ def upload_video(
     # 3. Create Video metadata record
     db_video = Video(
         user_id=current_user.user_id,
-        original_url=original_url,
+        original_url=url,
         file_path=file_path,
         duration=duration,
         language=language,
         status=VideoStatus.PENDING,
+        title="Đang phân tích tên bài giảng...",
     )
     db.add(db_video)
     db.commit()
@@ -169,8 +185,8 @@ def upload_video(
             physical_video_path = os.path.abspath(os.path.join(os.getcwd(), "storage", "mock_r2_bucket", relative_path))
         else:
             physical_video_path = file_path
-    elif original_url:
-        physical_video_path = original_url
+    elif url:
+        physical_video_path = url
 
     try:
         from app.core.celery_app import celery_app
@@ -224,6 +240,13 @@ def list_videos(
         query = query.filter(Video.status == status)
 
     videos = query.order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
+
+    # Sync active job statuses to update progress/status of processing videos
+    from app.api.v1.jobs import sync_job_status
+    for v in videos:
+        if v.status in [VideoStatus.PENDING, VideoStatus.PROCESSING]:
+            for job in v.jobs:
+                sync_job_status(job, db)
 
     return BaseDTO(
         success=True,

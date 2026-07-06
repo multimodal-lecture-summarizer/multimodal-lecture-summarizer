@@ -4,11 +4,57 @@ import Chart from 'chart.js/auto';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
+import { useToast } from '../context/ToastContext';
 
 const formatTime = (secs: number) => {
   const m = Math.floor(secs / 60).toString().padStart(2, '0');
   const s = Math.floor(secs % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+};
+
+const getSystemLogs = (job: any) => {
+  const startStr = job.startedAt ? new Date(job.startedAt).toISOString() : new Date().toISOString();
+  let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...`;
+  
+  const isCompleted = job.status === 'completed' || job.status === 'done' || job.status === 'SUCCESS';
+  const isFailed = job.status === 'failed' || job.status === 'FAILED';
+  
+  if (isCompleted) {
+    const endStr = job.completedAt ? new Date(job.completedAt).toISOString() : new Date().toISOString();
+    return logs + `\n[INFO] Hoàn thành chuyển đổi giọng nói (Speech-to-Text).` +
+                  `\n[INFO] Khởi chạy trích xuất Keyframes bằng CLIP...` +
+                  `\n[INFO] Đọc dữ liệu ảnh và xếp hạng độ quan trọng slide...` +
+                  `\n[INFO] Gửi văn bản sang Gemini 1.5 để tạo tóm tắt chương...` +
+                  `\n[INFO] Lưu trữ vector embeddings thành công vào ChromaDB.` +
+                  `\n[INFO] ${endStr} - Tác vụ hoàn thành thành công.`;
+  }
+  
+  if (isFailed) {
+    return logs + `\n[ERROR] Tiến trình gặp sự cố khi xử lý video.\n[ERROR] Chi tiết lỗi: ${job.errorLog || 'Không xác định'}`;
+  }
+  
+  if (job.startedAt) {
+    const elapsed = (Date.now() - new Date(job.startedAt).getTime()) / 1000;
+    if (elapsed > 2) {
+      logs += `\n[INFO] Đang chuyển đổi giọng nói sang văn bản (Speech-to-Text)...`;
+    }
+    if (elapsed > 6) {
+      logs += `\n[INFO] Hoàn thành bóc băng lời thoại. Bắt đầu trích xuất Keyframes bằng CLIP...`;
+    }
+    if (elapsed > 12) {
+      logs += `\n[INFO] Đang phân tích mức độ quan trọng các khung hình slide...`;
+    }
+    if (elapsed > 18) {
+      logs += `\n[INFO] Gửi văn bản và hình ảnh sang Gemini để tạo tóm tắt thông minh...`;
+    }
+    if (elapsed > 24) {
+      logs += `\n[INFO] Tiến trình RAG: Lưu trữ vector embeddings vào ChromaDB...`;
+    }
+  } else {
+    logs += `\n[INFO] Đang chạy tác vụ WhisperX và CLIP...`;
+  }
+  
+  return logs;
 };
 
 interface UserItem {
@@ -21,6 +67,7 @@ interface UserItem {
 
 export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'stats' | 'metrics' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
+  const toast = useToast();
 
   // Chart refs
   const barChartRef = useRef<HTMLCanvasElement>(null);
@@ -198,41 +245,47 @@ export const AdminPage: React.FC = () => {
   // Fetch dynamic stats counts and videos list for General Dashboard
   useEffect(() => {
     if (activeTab === 'stats') {
-      setStatsLoading(true);
-      Promise.all([api.getUsers(), api.getAllVideosAdmin(10)])
-        .then(([usersRes, videosRes]) => {
-          const emailMap: Record<string, string> = {};
-          if (usersRes.success && usersRes.data) {
-            const mappedUsers = usersRes.data.map((u: any) => ({
-              id: u.userId,
-              email: u.email,
-              role: u.role.toUpperCase(),
-              active: u.isActive,
-              joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
-            }));
-            setUsers(mappedUsers);
-            
-            usersRes.data.forEach((u: any) => {
-              emailMap[u.userId] = u.email;
-            });
-          }
+      const fetchStats = () => {
+        Promise.all([api.getUsers(), api.getAllVideosAdmin(10)])
+          .then(([usersRes, videosRes]) => {
+            const emailMap: Record<string, string> = {};
+            if (usersRes.success && usersRes.data) {
+              const mappedUsers = usersRes.data.map((u: any) => ({
+                id: u.userId,
+                email: u.email,
+                role: u.role.toUpperCase(),
+                active: u.isActive,
+                joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
+              }));
+              setUsers(mappedUsers);
+              
+              usersRes.data.forEach((u: any) => {
+                emailMap[u.userId] = u.email;
+              });
+            }
 
-          if (videosRes.success && videosRes.data) {
-            setAllVideos(videosRes.data);
-            const mappedVideos = videosRes.data.map((v: any) => ({
-              ...v,
-              email: emailMap[v.userId] || "Unknown User",
-              title: v.filePath ? (v.filePath.split('?')[0].split('/').pop() || "Video File") : (v.originalUrl ? "YouTube Video" : "Uploaded Video"),
-            }));
-            setStatsVideos(mappedVideos);
-          }
-        })
-        .catch(err => {
-          console.warn("Failed to load dashboard recent tasks", err);
-        })
-        .finally(() => {
-          setStatsLoading(false);
-        });
+            if (videosRes.success && videosRes.data) {
+              setAllVideos(videosRes.data);
+              const mappedVideos = videosRes.data.map((v: any) => ({
+                ...v,
+                email: emailMap[v.userId] || "Unknown User",
+                title: v.title || (v.originalUrl ? "YouTube Video" : (v.r2Url ? (v.r2Url.split('?')[0].split('/').pop() || "Video File") : (v.filePath && !v.filePath.includes('/stream') ? (v.filePath.split('?')[0].split('/').pop() || "Video File") : "Uploaded Video"))),
+              }));
+              setStatsVideos(mappedVideos);
+            }
+          })
+          .catch(err => {
+            console.warn("Failed to load dashboard recent tasks", err);
+          })
+          .finally(() => {
+            setStatsLoading(false);
+          });
+      };
+
+      setStatsLoading(true);
+      fetchStats();
+      const interval = setInterval(fetchStats, 5000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -262,81 +315,150 @@ export const AdminPage: React.FC = () => {
   // Fetch Celery Jobs/Videos list when entering Queue tab
   useEffect(() => {
     if (activeTab === 'celery') {
+      const fetchQueue = () => {
+        api.getVideos()
+          .then(res => {
+            if (res.success && res.data) {
+              setQueueJobs(res.data);
+            }
+          })
+          .catch(err => {
+            console.warn("Failed to load queue videos, using fallback mock jobs.", err);
+          })
+          .finally(() => {
+            setQueueLoading(false);
+          });
+      };
+
       setQueueLoading(true);
-      api.getVideos()
-        .then(res => {
-          if (res.success && res.data) {
-            setQueueJobs(res.data);
-          }
-        })
-        .catch(err => {
-          console.warn("Failed to load queue videos, using fallback mock jobs.", err);
-        })
-        .finally(() => {
-          setQueueLoading(false);
-        });
+      fetchQueue();
+      const interval = setInterval(fetchQueue, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
   // Fetch registered users list from API
   useEffect(() => {
     if (activeTab === 'users') {
-      api.getUsers()
-        .then(res => {
-          if (res.success && res.data) {
-            const mappedUsers = res.data.map((u: any) => ({
-              id: u.userId,
-              email: u.email,
-              role: u.role.toUpperCase(),
-              active: u.isActive,
-              joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
-            }));
-            setUsers(mappedUsers);
-          }
-        })
-        .catch(err => {
-          console.warn("Failed to fetch real users from backend, using default mock list.", err);
-        });
+      const fetchUsersList = () => {
+        api.getUsers()
+          .then(res => {
+            if (res.success && res.data) {
+              const mappedUsers = res.data.map((u: any) => ({
+                id: u.userId,
+                email: u.email,
+                role: u.role.toUpperCase(),
+                active: u.isActive,
+                joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
+              }));
+              setUsers(mappedUsers);
+            }
+          })
+          .catch(err => {
+            console.warn("Failed to fetch real users from backend, using default mock list.", err);
+          });
+      };
+
+      fetchUsersList();
+      const interval = setInterval(fetchUsersList, 6000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
   // Fetch all system videos (Admin only)
   useEffect(() => {
     if (activeTab === 'system-videos') {
+      const fetchSystemVideosList = () => {
+        api.getAllVideosAdmin()
+          .then(res => {
+            if (res.success && res.data) {
+              setAllVideos(res.data);
+            }
+          })
+          .catch(err => {
+            console.warn("Failed to load system videos from API, using empty list fallback.", err);
+          })
+          .finally(() => {
+            setVideoLoading(false);
+          });
+      };
+
       setVideoLoading(true);
-      api.getAllVideosAdmin()
-        .then(res => {
-          if (res.success && res.data) {
-            setAllVideos(res.data);
-          }
-        })
-        .catch(err => {
-          console.warn("Failed to load system videos from API, using empty list fallback.", err);
-        })
-        .finally(() => {
-          setVideoLoading(false);
-        });
+      fetchSystemVideosList();
+      const interval = setInterval(fetchSystemVideosList, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
   // Fetch all system jobs (Admin only)
   useEffect(() => {
     if (activeTab === 'system-jobs') {
+      const fetchSystemJobsList = () => {
+        api.getAllJobsAdmin()
+          .then(res => {
+            if (res.success && res.data) {
+              setAllJobs(res.data);
+            }
+          })
+          .catch(err => {
+            console.warn("Failed to load system jobs from API, using empty list fallback.", err);
+          })
+          .finally(() => {
+            setJobsLoading(false);
+          });
+      };
+
       setJobsLoading(true);
-      api.getAllJobsAdmin()
-        .then(res => {
-          if (res.success && res.data) {
-            setAllJobs(res.data);
-          }
-        })
-        .catch(err => {
-          console.warn("Failed to load system jobs from API, using empty list fallback.", err);
-        })
-        .finally(() => {
-          setJobsLoading(false);
-        });
+      fetchSystemJobsList();
+      const interval = setInterval(fetchSystemJobsList, 4000);
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
+  
+  // Continuous Polling for Job details when Job Modal is open
+  useEffect(() => {
+    if (!jobModalOpen || !selectedJob || !selectedJob.videoId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.getJobStatus(selectedJob.videoId);
+        if (res.success && res.data) {
+          let updatedJob = null;
+          if (Array.isArray(res.data)) {
+            updatedJob = res.data.find((j: any) => {
+              const type = (j.jobType || j.job_type || "").toUpperCase();
+              return type === 'SUMMARIZE';
+            }) || res.data[0];
+          } else {
+            updatedJob = res.data;
+          }
+
+          if (updatedJob) {
+            setSelectedJob(updatedJob);
+
+            // Update local tables
+            setAllJobs(prev => prev.map(j => j.jobId === updatedJob.jobId ? updatedJob : j));
+
+            const isCompleted = updatedJob.status === 'completed' || updatedJob.status === 'done' || updatedJob.status === 'SUCCESS';
+            const isFailed = updatedJob.status === 'failed' || updatedJob.status === 'FAILED';
+            const mappedVideoStatus = isCompleted ? 'done' : isFailed ? 'failed' : 'processing';
+
+            setQueueJobs(prev => prev.map(job => 
+              job.videoId === selectedJob.videoId ? { ...job, status: mappedVideoStatus } : job
+            ));
+
+            setAllVideos(prev => prev.map(v => 
+              v.videoId === selectedJob.videoId ? { ...v, status: mappedVideoStatus } : v
+            ));
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to poll active job status in AdminPage", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [jobModalOpen, selectedJob?.videoId]);
 
   // Video deletion action
   const handleDeleteVideo = (videoId: string) => {
@@ -345,10 +467,11 @@ export const AdminPage: React.FC = () => {
         .then(res => {
           if (res.success) {
             setAllVideos(prev => prev.filter(v => v.videoId !== videoId));
+            toast.success("Xóa video thành công!", "Thành công");
           }
         })
         .catch(err => {
-          alert(err.message || "Xóa video thất bại!");
+          toast.error(err.message || "Xóa video thất bại!", "Thất bại");
         });
     }
   };
@@ -359,10 +482,11 @@ export const AdminPage: React.FC = () => {
       .then(res => {
         if (res.success && res.data) {
           setUsers(prev => prev.map(u => u.id === id ? { ...u, active: res.data.isActive } : u));
+          toast.success("Đã thay đổi trạng thái hoạt động người dùng!", "Thành công");
         }
       })
       .catch(err => {
-        alert(err.message || "Không thể thay đổi trạng thái hoạt động!");
+        toast.error(err.message || "Không thể thay đổi trạng thái hoạt động!", "Thất bại");
       });
   };
 
@@ -375,10 +499,11 @@ export const AdminPage: React.FC = () => {
       .then(res => {
         if (res.success && res.data) {
           setUsers(prev => prev.map(u => u.id === id ? { ...u, role: res.data.role.toUpperCase() } : u));
+          toast.success("Đã thay đổi vai trò người dùng!", "Thành công");
         }
       })
       .catch(err => {
-        alert(err.message || "Không thể thay đổi vai trò người dùng!");
+        toast.error(err.message || "Không thể thay đổi vai trò người dùng!", "Thất bại");
       });
   };
 
@@ -399,6 +524,7 @@ export const AdminPage: React.FC = () => {
           type: 'success',
           text: 'Cấu hình giới hạn video đã được lưu vào cơ sở dữ liệu thành công!'
         });
+        toast.success('Cấu hình giới hạn video đã được lưu thành công!', 'Thành công');
       }
     })
     .catch(err => {
@@ -406,6 +532,7 @@ export const AdminPage: React.FC = () => {
         type: 'error',
         text: err.message || 'Cập nhật cấu hình thất bại!'
       });
+      toast.error(err.message || 'Cập nhật cấu hình thất bại!', 'Thất bại');
     })
     .finally(() => {
       setStandardsLoading(false);
@@ -884,8 +1011,8 @@ export const AdminPage: React.FC = () => {
                         {queueJobs.map(job => (
                           <tr key={job.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
                             <td className="p-3 font-mono-data text-[10px]">#{job.videoId.substring(0, 8)}...</td>
-                            <td className="p-3 truncate max-w-[200px]" title={job.originalUrl || job.filePath}>
-                              {job.filePath ? (job.filePath.split('?')[0].split('/').pop() || 'video.mp4') : (job.originalUrl ? 'YouTube Video' : 'Video File')}
+                            <td className="p-3 truncate max-w-[200px]" title={job.title || job.originalUrl || (job.r2Url ? job.r2Url : (job.filePath && !job.filePath.includes('/stream') ? job.filePath : 'Video File'))}>
+                              {job.title || (job.originalUrl ? 'YouTube Video' : (job.r2Url ? (job.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (job.filePath && !job.filePath.includes('/stream') ? (job.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video File')))}
                             </td>
                             <td className="p-3 font-semibold">{job.language.toUpperCase()}</td>
                             <td className="p-3">
@@ -937,7 +1064,7 @@ export const AdminPage: React.FC = () => {
                         <tr className="bg-surface-container-low border-b border-outline-variant text-deep-navy font-bold">
                           <th className="p-3">Video ID</th>
                           <th className="p-3">User ID</th>
-                          <th className="p-3">Nguồn Video / Tên File</th>
+                          <th className="p-3">Nguồn / File</th>
                           <th className="p-3">Độ dài (Giây)</th>
                           <th className="p-3">Ngôn ngữ</th>
                           <th className="p-3">Trạng thái</th>
@@ -950,8 +1077,10 @@ export const AdminPage: React.FC = () => {
                           <tr key={v.videoId} className="border-b border-outline-variant/50 hover:bg-surface-container-low/50">
                             <td className="p-3 font-mono-data text-[10px]" title={v.videoId}>#{v.videoId.substring(0, 8)}...</td>
                             <td className="p-3 font-mono-data text-[10px]" title={v.userId}>#{v.userId.substring(0, 8)}...</td>
-                            <td className="p-3 truncate max-w-[200px]" title={v.originalUrl || v.r2Url || v.filePath}>
-                              {v.originalUrl ? (
+                            <td className="p-3 truncate max-w-[200px]" title={v.title || v.originalUrl || (v.r2Url ? v.r2Url : (v.filePath && !v.filePath.includes('/stream') ? v.filePath : 'Video File'))}>
+                              {v.title ? (
+                                <span className="font-semibold text-deep-navy">{v.title}</span>
+                              ) : v.originalUrl ? (
                                 <a 
                                   href={v.originalUrl} 
                                   target="_blank" 
@@ -970,7 +1099,7 @@ export const AdminPage: React.FC = () => {
                                   title="Bấm để tải về hoặc xem trực tiếp từ R2"
                                 >
                                   <span className="material-symbols-outlined text-sm">download</span>
-                                  {((v.r2Url || v.filePath).split('?')[0].split('/').pop()) || 'Video File'}
+                                  {((v.r2Url || (v.filePath && !v.filePath.includes('/stream') ? v.filePath : '')).split('?')[0].split('/').pop()) || 'Video File'}
                                 </a>
                               )}
                             </td>
@@ -1223,7 +1352,14 @@ export const AdminPage: React.FC = () => {
         <div onClick={() => setJobModalOpen(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-xl bg-white border border-outline-variant rounded-2xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden text-xs">
             <div className="flex justify-between items-center p-4 border-b border-outline-variant shrink-0 bg-surface">
-              <h2 className="text-sm font-bold text-deep-navy">Chi Tiết Tác Vụ Celery</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-deep-navy">Chi Tiết Tác Vụ Celery</h2>
+                {!(selectedJob.status === 'done' || selectedJob.status === 'completed' || selectedJob.status === 'failed') && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-vibrant-cyan/15 text-vibrant-cyan animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-vibrant-cyan"></span> Live Logs
+                  </span>
+                )}
+              </div>
               <button onClick={() => setJobModalOpen(false)} className="text-secondary hover:text-primary text-xl font-bold leading-none shrink-0">&times;</button>
             </div>
             
@@ -1278,18 +1414,7 @@ export const AdminPage: React.FC = () => {
                 <div className="pt-4 border-t border-outline-variant space-y-2">
                   <h3 className="text-status-success font-bold text-xs">Nhật ký tiến trình (System Log)</h3>
                   <pre className="bg-surface-container-low border border-outline-variant/60 p-4 rounded-xl text-[10px] font-mono-data overflow-x-auto whitespace-pre-wrap leading-relaxed text-secondary">
-                    [INFO] {selectedJob.startedAt ? new Date(selectedJob.startedAt).toISOString() : new Date().toISOString()} - Khởi chạy pipeline phân tích đa phương tiện cho Video {selectedJob.videoId || 'N/A'}.
-                    {"\n"}[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...
-                    {selectedJob.completedAt && (
-                      <>
-                        {"\n"}[INFO] Hoàn thành chuyển đổi giọng nói (Speech-to-Text).
-                        {"\n"}[INFO] Khởi chạy trích xuất Keyframes bằng CLIP...
-                        {"\n"}[INFO] Đọc dữ liệu ảnh và xếp hạng độ quan trọng slide...
-                        {"\n"}[INFO] Gửi văn bản sang Gemini 1.5 để tạo tóm tắt chương...
-                        {"\n"}[INFO] Lưu trữ vector embeddings thành công vào ChromaDB.
-                        {"\n"}[INFO] {new Date(selectedJob.completedAt).toISOString()} - Tác vụ hoàn thành thành công.
-                      </>
-                    )}
+                    {getSystemLogs(selectedJob)}
                   </pre>
                 </div>
               )}

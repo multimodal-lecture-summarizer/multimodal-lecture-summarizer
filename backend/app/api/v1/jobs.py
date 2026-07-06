@@ -19,6 +19,17 @@ def sync_job_status(job: Job, db: Session):
     from app.models.video import Video
     import datetime as dt
     
+    # Initialize default attributes
+    if job.status == JobStatus.COMPLETED:
+        job.progress = 100
+        job.stage = "completed"
+    elif job.status == JobStatus.FAILED:
+        job.progress = 100
+        job.stage = "failed"
+    else:
+        job.progress = 0
+        job.stage = "queued"
+
     if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
         return
         
@@ -27,7 +38,13 @@ def sync_job_status(job: Job, db: Session):
         from celery.result import AsyncResult
         
         async_res = AsyncResult(str(job.job_id), app=celery_app)
-        if async_res.state == "SUCCESS":
+        if async_res.state == "PROGRESS":
+            meta = async_res.info or {}
+            job.stage = meta.get("stage", "processing")
+            job.progress = meta.get("progress", 0)
+        elif async_res.state == "SUCCESS":
+            job.stage = "completed"
+            job.progress = 100
             result = async_res.result
             if not result:
                 return
@@ -38,6 +55,10 @@ def sync_job_status(job: Job, db: Session):
                 video.status = VideoStatus.DONE
                 if "duration" in result:
                     video.duration = result["duration"]
+                if "video_title" in result:
+                    video.title = result["video_title"]
+                if "video_file_path" in result and result["video_file_path"]:
+                    video.file_path = result["video_file_path"]
             
             # Save Summary
             from app.models.summary import Summary

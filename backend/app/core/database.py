@@ -128,9 +128,21 @@ def initialize_database_data():
     from app.models.video import VideoStandard
     from app.api.deps import get_password_hash
     import uuid
+    from sqlalchemy import text, inspect
     
     db = SessionLocal()
     try:
+        # Self-healing migration: check if title column exists in videos table
+        try:
+            with db.bind.connect() as conn:
+                inspector = inspect(db.bind)
+                columns = [c["name"] for c in inspector.get_columns("videos")]
+                if "title" not in columns:
+                    logger.info("Migrating database: Adding 'title' column to 'videos' table.")
+                    conn.execute(text("ALTER TABLE videos ADD COLUMN title VARCHAR(256);"))
+                    conn.commit()
+        except Exception as e:
+            logger.warning(f"Self-healing database migration check failed: {e}")
         # 1. Initialize Default Standard if empty
         std_count = db.query(VideoStandard).count()
         if std_count == 0:
