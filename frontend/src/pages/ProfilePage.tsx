@@ -3,9 +3,11 @@ import { api } from "../services/api";
 import { UserRole } from "../types";
 import { useToast } from "../context/ToastContext";
 import { Skeleton } from "../components/Skeleton";
+import { useTranslation } from "react-i18next";
 
 export const ProfilePage: React.FC = () => {
   const toast = useToast();
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<{
     email: string;
     role: string;
@@ -65,26 +67,26 @@ export const ProfilePage: React.FC = () => {
     if (newPassword !== confirmPassword) {
       setPasswordMsg({
         type: "error",
-        text: "Mật khẩu xác nhận không khớp!",
+        text: t("profile.pass_mismatch"),
       });
-      toast.error("Mật khẩu xác nhận không khớp!", "Lỗi");
+      toast.error(t("profile.pass_mismatch"), t("common.error"));
       return;
     }
     if (newPassword.length < 6) {
       setPasswordMsg({
         type: "error",
-        text: "Mật khẩu mới phải từ 6 ký tự trở lên!",
+        text: t("profile.pass_length"),
       });
-      toast.error("Mật khẩu mới phải từ 6 ký tự trở lên!", "Lỗi");
+      toast.error(t("profile.pass_length"), t("common.error"));
       return;
     }
 
     // Success simulation
     setPasswordMsg({
       type: "success",
-      text: "Đổi mật khẩu thành công (Môi trường phát triển)!",
+      text: t("profile.pass_success"),
     });
-    toast.success("Đổi mật khẩu thành công (Môi trường phát triển)!", "Thành công");
+    toast.success(t("profile.pass_success"), t("common.success"));
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");
@@ -136,13 +138,13 @@ export const ProfilePage: React.FC = () => {
             {initialLetter}
           </div>
           <div className="text-center sm:text-left space-y-1">
-            <h2 className="text-lg font-bold text-deep-navy">{profile?.email || "Người dùng AI.Summarizer"}</h2>
+            <h2 className="text-lg font-bold text-deep-navy">{profile?.email || t("profile.default_name")}</h2>
             <div className="flex justify-center sm:justify-start">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                 isAdmin ? "bg-status-success/15 text-status-success border border-status-success/20" : "bg-vibrant-cyan/10 text-vibrant-cyan border border-vibrant-cyan/20"
               }`}>
                 <span className="material-symbols-outlined text-sm">{isAdmin ? "security" : "person"}</span>
-                {isAdmin ? "Quản trị viên" : "Hội viên"}
+                {isAdmin ? t("profile.role_admin") : t("profile.role_user")}
               </span>
             </div>
           </div>
@@ -155,28 +157,28 @@ export const ProfilePage: React.FC = () => {
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-deep-navy pb-2 border-b border-outline-variant/30 flex items-center gap-2">
                 <span className="material-symbols-outlined text-vibrant-cyan text-base">account_circle</span>
-                Chi tiết tài khoản
+                {t("profile.account_details")}
               </h3>
               
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">Email</span>
+                  <span className="text-secondary">{t("profile.email")}</span>
                   <span className="font-semibold text-deep-navy truncate max-w-[200px]">{profile?.email}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">Mã tài khoản (UUID)</span>
+                  <span className="text-secondary">{t("profile.uuid")}</span>
                   <span className="font-mono-data text-[10px] text-deep-navy">{profile?.userId}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">Trạng thái</span>
+                  <span className="text-secondary">{t("profile.status")}</span>
                   <span className="inline-flex items-center gap-1 font-semibold text-status-success">
                     <span className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
-                    Đang hoạt động
+                    {t("profile.active")}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">Vai trò hệ thống</span>
-                  <span className="font-semibold text-deep-navy">{isAdmin ? "Admin" : "User"}</span>
+                  <span className="text-secondary">{t("profile.system_role")}</span>
+                  <span className="font-semibold text-deep-navy">{isAdmin ? t("profile.admin") : t("profile.user")}</span>
                 </div>
               </div>
             </div>
@@ -186,7 +188,7 @@ export const ProfilePage: React.FC = () => {
               <span className="material-symbols-outlined text-vibrant-cyan text-3xl shrink-0">video_library</span>
               <div>
                 <h4 className="text-lg font-bold text-deep-navy">{videoCount}</h4>
-                <p className="text-[11px] text-secondary">Bài giảng đã tải lên phân tích</p>
+                <p className="text-[11px] text-secondary">{t("profile.videos_analyzed")}</p>
               </div>
             </div>
           </div>
@@ -195,12 +197,12 @@ export const ProfilePage: React.FC = () => {
           <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
             <h3 className="text-sm font-bold text-deep-navy pb-2 border-b border-outline-variant/30 flex items-center gap-2">
               <span className="material-symbols-outlined text-vibrant-cyan text-base">lock</span>
-              Bảo mật &amp; Cài đặt
+              {t("profile.security_settings")}
             </h3>
             
             <form onSubmit={handlePasswordChange} className="space-y-3">
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">Mật khẩu cũ</label>
+                <label className="text-xs text-secondary">{t("profile.old_pass")}</label>
                 <input
                   type="password"
                   placeholder="••••••••"
@@ -211,10 +213,10 @@ export const ProfilePage: React.FC = () => {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">Mật khẩu mới</label>
+                <label className="text-xs text-secondary">{t("profile.new_pass")}</label>
                 <input
                   type="password"
-                  placeholder="Tối thiểu 6 ký tự"
+                  placeholder={t("profile.new_pass_placeholder")}
                   className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none text-xs transition-all"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -222,10 +224,10 @@ export const ProfilePage: React.FC = () => {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">Xác nhận mật khẩu mới</label>
+                <label className="text-xs text-secondary">{t("profile.confirm_pass")}</label>
                 <input
                   type="password"
-                  placeholder="Nhập lại mật khẩu mới"
+                  placeholder={t("profile.confirm_pass_placeholder")}
                   className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none text-xs transition-all"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -248,7 +250,7 @@ export const ProfilePage: React.FC = () => {
                 type="submit"
                 className="w-full mt-2 py-2.5 bg-deep-navy hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
               >
-                Cập nhật mật khẩu
+                {t("profile.update_pass")}
               </button>
             </form>
           </div>

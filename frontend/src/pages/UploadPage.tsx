@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 export const UploadPage: React.FC = () => {
   const toast = useToast();
+  const { t } = useTranslation();
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [progressPercent, setProgressPercent] = useState<number>(0);
@@ -33,7 +35,7 @@ export const UploadPage: React.FC = () => {
       const pastedText = e.clipboardData?.getData('text') || '';
       if (pastedText.trim() && (pastedText.includes('youtube.com') || pastedText.includes('youtu.be'))) {
         setYoutubeUrl(pastedText.trim());
-        toast.info("Phát hiện liên kết YouTube từ clipboard. Đang chuẩn bị phân tích...", "Đã nhận liên kết");
+        toast.info(t('upload.toast_yt_clip'), t('upload.toast_yt_received'));
         handleStartProcessing(null, pastedText.trim());
       }
     };
@@ -76,28 +78,17 @@ export const UploadPage: React.FC = () => {
 
   const getStageText = (stage: string) => {
     switch (stage) {
-      case 'queued':
-        return 'Đang chờ xử lý trong hàng đợi...';
-      case 'download':
-        return 'Đang tải xuống và kiểm tra tệp video...';
-      case 'audio':
-        return 'Đang tách xuất âm thanh và phân tích giọng nói (WhisperX)...';
-      case 'speaker':
-        return 'Đang nhận dạng và phân vai người nói (ASR)...';
-      case 'visual':
-        return 'Đang phân tích cảnh quay và trích xuất slide keyframe...';
-      case 'semantic':
-        return 'Đang quét chữ OCR trên hình ảnh bằng CLIP...';
-      case 'timeline':
-        return 'Đang đồng bộ dòng thời gian và căn lề bài giảng...';
-      case 'text':
-        return 'Đang sử dụng LLM để tóm tắt và phân chương bài học...';
-      case 'completed':
-        return 'Hoàn thành xử lý bài giảng!';
-      case 'failed':
-        return 'Xử lý thất bại. Vui lòng kiểm tra lại.';
-      default:
-        return 'Đang xử lý phân tích bài giảng...';
+      case 'queued': return t('upload.stage_queued');
+      case 'download': return t('upload.stage_download');
+      case 'audio': return t('upload.stage_audio');
+      case 'speaker': return t('upload.stage_speaker');
+      case 'visual': return t('upload.stage_visual');
+      case 'semantic': return t('upload.stage_semantic');
+      case 'timeline': return t('upload.stage_timeline');
+      case 'text': return t('upload.stage_text');
+      case 'completed': return t('upload.stage_completed');
+      case 'failed': return t('upload.stage_failed');
+      default: return t('upload.stage_default');
     }
   };
 
@@ -132,7 +123,7 @@ export const UploadPage: React.FC = () => {
               if (pollIntervalRef.current !== null) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
-                toast.success('Xử lý video hoàn tất! Đang chuyển hướng...', 'Thành công');
+                toast.success(t('upload.toast_success_done'), t('common.success'));
                 setCurrentStep(5);
                 setProgressPercent(100);
                 setCurrentStage('completed');
@@ -144,7 +135,7 @@ export const UploadPage: React.FC = () => {
               clearInterval(pollIntervalRef.current);
               setIsProcessing(false);
               setErrorMsg(job.errorLog || 'Đã xảy ra lỗi trong quá trình xử lý video.');
-              toast.error(job.errorLog || 'Đã xảy ra lỗi trong quá trình xử lý video.', 'Xử lý thất bại');
+              toast.error(job.errorLog || t('upload.toast_err_process'), t('upload.toast_upload_failed'));
             } else {
               // Map stage to step
               let step = 1;
@@ -185,7 +176,7 @@ export const UploadPage: React.FC = () => {
       const res = await api.uploadVideo(file, url);
       if (res.success && res.data) {
         const videoId = res.data.videoId || res.data.video_id;
-        toast.info("Đã gửi video thành công. Đang bắt đầu phân tích...", "Đã tải lên");
+        toast.info(t('upload.toast_upload_success'), t('upload.toast_uploaded'));
         startPolling(videoId);
       } else {
         throw new Error(res.message || "Tải lên video thất bại.");
@@ -193,7 +184,7 @@ export const UploadPage: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Không thể gửi video lên máy chủ.");
-      toast.error(err.message || "Không thể gửi video lên máy chủ.", "Tải lên thất bại");
+      toast.error(err.message || t('upload.toast_upload_err'), t('upload.toast_upload_failed'));
       setIsProcessing(false);
     }
   };
@@ -240,7 +231,7 @@ export const UploadPage: React.FC = () => {
     const droppedText = e.dataTransfer.getData('text');
     if (droppedText && (droppedText.includes('youtube.com') || droppedText.includes('youtu.be'))) {
       setYoutubeUrl(droppedText.trim());
-      toast.info("Phát hiện liên kết YouTube được thả vào. Đang chuẩn bị phân tích...", "Đã nhận liên kết");
+      toast.info(t('upload.toast_yt_drop'), t('upload.toast_yt_received'));
       handleStartProcessing(null, droppedText.trim());
     }
   };
@@ -251,10 +242,10 @@ export const UploadPage: React.FC = () => {
         <div className="max-w-container-max mx-auto">
           <header className="mb-10">
             <h1 className="font-headline-xl text-3xl md:text-headline-xl text-deep-navy mb-2 font-bold">
-              Initialize Multimodal Analysis
+              {t('upload.title')}
             </h1>
             <p className="text-secondary text-body-lg">
-              Tải lên file video bài giảng hoặc nhập liên kết YouTube để hệ thống AI (Audio / Vision / LLM Fusion) bắt đầu xử lý tự động.
+              {t('upload.desc')}
             </p>
           </header>
 
@@ -291,13 +282,13 @@ export const UploadPage: React.FC = () => {
                   <div className="w-16 h-16 bg-primary-fixed text-deep-navy rounded-full flex items-center justify-center mb-4 group-hover:bg-vibrant-cyan group-hover:text-white transition-all">
                     <span className="material-symbols-outlined text-[32px]">upload_file</span>
                   </div>
-                  <h3 className="font-headline-md text-xl font-bold text-deep-navy mb-1">Kéo thả file video hoặc liên kết YouTube vào đây</h3>
-                  <p className="text-secondary font-body-sm mb-6 text-sm">Hỗ trợ MP4, AVI, MKV (Tối đa 2GB) hoặc thả link YouTube</p>
+                  <h3 className="font-headline-md text-xl font-bold text-deep-navy mb-1">{t('upload.drag_drop')}</h3>
+                  <p className="text-secondary font-body-sm mb-6 text-sm">{t('upload.support_formats')}</p>
                   <button 
                     onClick={handleBrowseClick}
                     className="px-6 py-2 bg-deep-navy text-white font-label-md text-label-md rounded hover:bg-primary transition-colors font-semibold"
                   >
-                    Browse Files
+                    {t('upload.browse_files')}
                   </button>
                 </div>
               </div>
@@ -309,20 +300,20 @@ export const UploadPage: React.FC = () => {
                     <div className="w-10 h-10 bg-error-container text-on-error-container rounded-full flex items-center justify-center">
                       <span className="material-symbols-outlined text-[24px]">link</span>
                     </div>
-                    <h3 className="font-headline-md text-lg font-bold text-deep-navy">Remote Import</h3>
+                    <h3 className="font-headline-md text-lg font-bold text-deep-navy">{t('upload.remote_import')}</h3>
                   </div>
                   <p className="text-secondary font-body-sm text-sm mb-6">
-                    Phân tích nội dung trực tiếp từ YouTube bằng cách cung cấp đường dẫn URL công khai.
+                    {t('upload.youtube_desc')}
                   </p>
                   <form onSubmit={handleYoutubeSubmit} className="space-y-4">
                     <div className="relative">
                       <label className="block font-label-sm text-xs font-semibold text-secondary mb-2 uppercase tracking-wider">
-                        YouTube URL
+                        {t('upload.youtube_url')}
                       </label>
                       <div className="relative flex items-center">
                         <input 
                           className="w-full pl-4 pr-10 py-3 bg-background border border-outline-variant rounded-lg focus:ring-1 focus:ring-vibrant-cyan focus:border-vibrant-cyan outline-none transition-all font-mono-data text-sm" 
-                          placeholder="https://youtube.com/watch?v=..." 
+                          placeholder={t('upload.youtube_placeholder')} 
                           type="url"
                           value={youtubeUrl}
                           onChange={(e) => setYoutubeUrl(e.target.value)}
@@ -334,15 +325,15 @@ export const UploadPage: React.FC = () => {
                               const text = await navigator.clipboard.readText();
                               if (text && (text.includes('youtube.com') || text.includes('youtu.be'))) {
                                 setYoutubeUrl(text.trim());
-                                toast.success("Đã dán liên kết từ clipboard!", "Thành công");
+                                toast.success(t('upload.toast_paste_success'), t('common.success'));
                               } else if (text) {
                                 setYoutubeUrl(text.trim());
-                                toast.info("Liên kết đã dán có vẻ không phải là YouTube URL.", "Cảnh báo");
+                                toast.info(t('upload.toast_paste_warn'), t('upload.toast_warn'));
                               } else {
-                                toast.error("Bộ nhớ tạm rỗng.", "Không thể dán");
+                                toast.error(t('upload.toast_paste_empty'), t('upload.toast_err_paste'));
                               }
                             } catch (err) {
-                              toast.error("Vui lòng cho phép quyền truy cập clipboard hoặc nhấn Ctrl+V.", "Lỗi truy cập");
+                              toast.error(t('upload.toast_paste_err'), t('upload.toast_err_access'));
                             }
                           }}
                           className="absolute right-3 text-secondary hover:text-vibrant-cyan transition-colors flex items-center justify-center"
@@ -357,13 +348,13 @@ export const UploadPage: React.FC = () => {
                       className="w-full py-3 bg-secondary-container text-on-secondary-container font-semibold font-label-md text-label-md rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
                     >
                       <span className="material-symbols-outlined">cloud_download</span>
-                      Fetch Video
+                      {t('upload.fetch_video')}
                     </button>
                   </form>
                 </div>
                 <div className="pt-6 border-t border-outline-variant/30 mt-6 lg:mt-0">
                   <div className="flex items-center justify-between text-secondary text-xs">
-                    <span className="font-label-sm font-medium">Hạn ngạch API ngày</span>
+                    <span className="font-label-sm font-medium">{t('upload.api_quota')}</span>
                     <span className="font-mono-data text-deep-navy font-bold">42 / 100</span>
                   </div>
                   <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 overflow-hidden">
@@ -380,7 +371,7 @@ export const UploadPage: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="font-headline-md text-lg text-deep-navy font-bold flex items-center gap-2">
                       <span className="material-symbols-outlined text-vibrant-cyan animate-spin">sync</span>
-                      Đang phân tích video bài giảng...
+                      {t('upload.analyzing')}
                     </span>
                     <span className="font-mono-data text-lg text-vibrant-cyan font-bold">
                       {progressPercent}%
@@ -393,7 +384,7 @@ export const UploadPage: React.FC = () => {
                     ></div>
                   </div>
                   <p className="text-center text-secondary font-body-sm text-sm italic">
-                    Trạng thái hiện tại: <span className="text-deep-navy font-bold not-italic">{getStageText(currentStage)}</span>
+                    {t('upload.status')} <span className="text-deep-navy font-bold not-italic">{getStageText(currentStage)}</span>
                   </p>
                 </div>
               </div>
@@ -405,7 +396,7 @@ export const UploadPage: React.FC = () => {
             <div className="mb-12 animate-fade-in">
               <h2 className="font-headline-md text-lg font-bold text-deep-navy mb-6 flex items-center gap-2">
                 <span className="material-symbols-outlined text-vibrant-cyan">memory</span>
-                Real-time Pipeline Status (Celery Tasks)
+                {t('upload.pipeline_status')}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {/* Step 1 */}
@@ -417,11 +408,11 @@ export const UploadPage: React.FC = () => {
                   }`} style={currentStep > 1 ? { fontVariationSettings: "'FILL' 1" } : {}}>
                     {currentStep > 1 ? 'check_circle' : 'downloading'}
                   </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">Tải & Kiểm tra video</p>
+                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step1_title')}</p>
                   <span className={`text-[10px] font-mono-data font-bold ${
                     currentStep > 1 ? 'text-status-success' : 'text-vibrant-cyan animate-pulse'
                   }`}>
-                    {currentStep > 1 ? 'COMPLETE' : 'PROCESSING...'}
+                    {currentStep > 1 ? t('upload.status_complete') : t('upload.status_processing')}
                   </span>
                 </div>
 
@@ -434,11 +425,11 @@ export const UploadPage: React.FC = () => {
                   }`} style={currentStep > 2 ? { fontVariationSettings: "'FILL' 1" } : {}}>
                     {currentStep > 2 ? 'check_circle' : 'mic'}
                   </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">Xử lý âm thanh (FFmpeg)</p>
+                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step2_title')}</p>
                   <span className={`text-[10px] font-mono-data font-bold ${
                     currentStep > 2 ? 'text-status-success' : currentStep === 2 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
                   }`}>
-                    {currentStep > 2 ? 'COMPLETE' : currentStep === 2 ? 'PROCESSING...' : 'PENDING'}
+                    {currentStep > 2 ? t('upload.status_complete') : currentStep === 2 ? t('upload.status_processing') : t('upload.status_pending')}
                   </span>
                 </div>
 
@@ -451,11 +442,11 @@ export const UploadPage: React.FC = () => {
                   }`} style={currentStep > 3 ? { fontVariationSettings: "'FILL' 1" } : {}}>
                     {currentStep > 3 ? 'check_circle' : 'transcribe'}
                   </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">Nhận dạng chữ (WhisperX)</p>
+                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step3_title')}</p>
                   <span className={`text-[10px] font-mono-data font-bold ${
                     currentStep > 3 ? 'text-status-success' : currentStep === 3 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
                   }`}>
-                    {currentStep > 3 ? 'COMPLETE' : currentStep === 3 ? 'PROCESSING...' : 'PENDING'}
+                    {currentStep > 3 ? t('upload.status_complete') : currentStep === 3 ? t('upload.status_processing') : t('upload.status_pending')}
                   </span>
                 </div>
 
@@ -468,11 +459,11 @@ export const UploadPage: React.FC = () => {
                   }`} style={currentStep > 4 ? { fontVariationSettings: "'FILL' 1" } : {}}>
                     {currentStep > 4 ? 'check_circle' : 'image_search'}
                   </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">Keyframes & OCR (CLIP)</p>
+                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step4_title')}</p>
                   <span className={`text-[10px] font-mono-data font-bold ${
                     currentStep > 4 ? 'text-status-success' : currentStep === 4 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
                   }`}>
-                    {currentStep > 4 ? 'COMPLETE' : currentStep === 4 ? 'PROCESSING...' : 'PENDING'}
+                    {currentStep > 4 ? t('upload.status_complete') : currentStep === 4 ? t('upload.status_processing') : t('upload.status_pending')}
                   </span>
                 </div>
 
@@ -485,11 +476,11 @@ export const UploadPage: React.FC = () => {
                   }`}>
                     {currentStep === 5 ? 'auto_awesome' : 'auto_awesome'}
                   </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">LLM Fusion tóm tắt</p>
+                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step5_title')}</p>
                   <span className={`text-[10px] font-mono-data font-bold ${
                     currentStep === 5 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
                   }`}>
-                    {currentStep === 5 ? 'PROCESSING...' : 'PENDING'}
+                    {currentStep === 5 ? t('upload.status_processing') : t('upload.status_pending')}
                   </span>
                 </div>
               </div>
@@ -499,9 +490,9 @@ export const UploadPage: React.FC = () => {
           {/* Recent Uploads Table */}
           <section className="animate-fade-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-headline-md text-xl font-bold text-deep-navy">Các video phân tích gần đây</h2>
+              <h2 className="font-headline-md text-xl font-bold text-deep-navy">{t('upload.recent_videos')}</h2>
               <Link to="/history" className="text-vibrant-cyan font-label-md text-label-md hover:underline flex items-center gap-1">
-                Xem tất cả <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                {t('upload.view_all')} <span className="material-symbols-outlined text-sm">arrow_forward</span>
               </Link>
             </div>
             <div className="bg-surface border border-outline-variant rounded-lg overflow-hidden shadow-sm">
@@ -509,17 +500,17 @@ export const UploadPage: React.FC = () => {
                 <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead>
                     <tr className="bg-surface-container-low border-b border-outline-variant">
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">Video Source</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">Timestamp</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">Trạng thái</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider text-right">Hành động</th>
+                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_source')}</th>
+                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_timestamp')}</th>
+                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_status')}</th>
+                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider text-right">{t('upload.col_action')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/30">
                     {recentVideos.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-6 py-8 text-center text-secondary font-body-sm text-sm">
-                          Chưa có video nào được phân tích.
+                          {t('upload.no_videos')}
                         </td>
                       </tr>
                     ) : (
@@ -551,9 +542,9 @@ export const UploadPage: React.FC = () => {
                                 isFailed ? 'bg-red-50 text-red-700 border-red-200' :
                                 'bg-blue-50 text-vibrant-cyan border-vibrant-cyan/20 animate-pulse'
                               }`} title={video.stage ? `Trạng thái: ${getStageText(video.stage)}` : undefined}>
-                                {isDone ? 'Hoàn tất' :
-                                 isFailed ? 'Thất bại' :
-                                 `Đang xử lý ${video.progress !== undefined && video.progress !== null ? `(${video.progress}%)` : ''}`}
+                                {isDone ? t('history.status_done') :
+                                 isFailed ? t('history.status_failed') :
+                                 `${t('history.status_processing')} ${video.progress !== undefined && video.progress !== null ? `(${video.progress}%)` : ''}`}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
@@ -562,12 +553,12 @@ export const UploadPage: React.FC = () => {
                                   to={`/results?videoId=${video.videoId}`} 
                                   className="text-deep-navy hover:text-vibrant-cyan font-bold text-xs inline-flex items-center gap-1"
                                 >
-                                  Xem kết quả
+                                  {t('upload.view_results')}
                                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
                                 </Link>
                               ) : (
                                 <span className="text-secondary text-xs italic">
-                                  {video.stage ? getStageText(video.stage) : 'Đang xử lý...'}
+                                  {video.stage ? getStageText(video.stage) : t('upload.stage_default')}
                                 </span>
                               )}
                             </td>

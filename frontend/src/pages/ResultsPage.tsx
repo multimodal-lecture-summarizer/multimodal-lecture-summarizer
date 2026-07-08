@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { TranscriptLine, Chapter } from '../types';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
@@ -67,6 +68,7 @@ export const ResultsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const videoId = searchParams.get('videoId') || searchParams.get('id');
   const toast = useToast();
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -343,7 +345,7 @@ export const ResultsPage: React.FC = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      toast.error(`Xuất thất bại: ${err.message}`, "Thất bại");
+      toast.error(`${t('common.error')}: ${err.message}`, t('common.error'));
     }
   };
 
@@ -423,21 +425,21 @@ export const ResultsPage: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-outline-variant/30">
         <div className="flex items-center gap-2">
           <Link to="/" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
-            <span className="material-symbols-outlined text-sm">home</span> Trang chủ
+            <span className="material-symbols-outlined text-sm">home</span> {t('results.home')}
           </Link>
           <Link to="/history" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
-            <span className="material-symbols-outlined text-sm">history</span> Lịch sử
+            <span className="material-symbols-outlined text-sm">history</span> {t('results.history')}
           </Link>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => handleExport('pdf')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
-            <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Xuất PDF
+            <span className="material-symbols-outlined text-sm">picture_as_pdf</span> {t('results.export_pdf')}
           </button>
           <button onClick={() => handleExport('txt')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
-            <span className="material-symbols-outlined text-sm">description</span> Xuất TXT
+            <span className="material-symbols-outlined text-sm">description</span> {t('results.export_txt')}
           </button>
           <Link to={`/qa?videoId=${videoId}`} className="px-4 py-2 bg-deep-navy text-white rounded-lg hover:opacity-90 text-xs font-bold transition-all flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-sm">forum</span> Hỏi Đáp RAG
+            <span className="material-symbols-outlined text-sm">forum</span> {t('results.qa_rag')}
           </Link>
         </div>
       </div>
@@ -449,7 +451,7 @@ export const ResultsPage: React.FC = () => {
           <div>
             <h2 className="font-headline-md text-lg font-bold text-deep-navy mb-4 flex items-center gap-2">
               <span className="material-symbols-outlined text-error">play_circle</span>
-              Bài Giảng Gốc &amp; Transcript (WhisperX)
+              {t('results.original_video')}
             </h2>
             
             {/* Player Container */}
@@ -547,7 +549,7 @@ export const ResultsPage: React.FC = () => {
                   <input 
                     ref={searchInputRef}
                     className="bg-transparent border-none focus:ring-0 text-xs w-full px-2 outline-none" 
-                    placeholder="Tìm kiếm từ khóa..."
+                    placeholder={t('results.search_keyword')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     type="text"
@@ -614,29 +616,31 @@ export const ResultsPage: React.FC = () => {
         </div>
 
         {/* Right Column: Summarization & Partition */}
-        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col justify-between shadow-sm space-y-6">
-          <div className="space-y-6">
-            <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2">
-              <span className="material-symbols-outlined text-vibrant-cyan">hub</span>
-              Kết Quả Tóm Tắt (AI Fusion)
-            </h2>
-            
-            <div>
-              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1">
+        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col shadow-sm h-full">
+          <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2 mb-6 shrink-0">
+            <span className="material-symbols-outlined text-vibrant-cyan">hub</span>
+            {t('results.summary_result')}
+          </h2>
+          
+          <div className="flex flex-col flex-1 gap-6 min-h-0">
+            {/* Box 1: Summary */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1 shrink-0">
                 <span className="material-symbols-outlined text-vibrant-cyan text-base">subject</span>
-                Tóm tắt nội dung bài giảng
+                {t('results.content_summary')}
               </h3>
-              <div className="p-4 bg-background border border-outline-variant/60 rounded-xl text-sm text-secondary leading-relaxed max-h-[220px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+              <div className="flex-1 p-4 bg-background border border-outline-variant/60 rounded-xl text-sm text-secondary leading-relaxed overflow-y-auto custom-scrollbar whitespace-pre-wrap">
                 {summaryData?.summaryText}
               </div>
             </div>
 
-            <div>
-              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1">
+            {/* Box 2: Chapters */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1 shrink-0">
                 <span className="material-symbols-outlined text-vibrant-cyan text-base">list</span>
-                Phân chương bài học tự động
+                {t('results.auto_chapters')}
               </h3>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
+              <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
                 {chaptersList.map((chapter, idx) => {
                   const isChapterActive = idx === activeChapterIdx;
                   const chStartSecs = parseTimeText(chapter.start);
@@ -669,7 +673,7 @@ export const ResultsPage: React.FC = () => {
         <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm space-y-6">
           <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2">
             <span className="material-symbols-outlined text-vibrant-cyan">image_search</span>
-            Keyframes trích xuất từ Video bài giảng (CLIP)
+            {t('results.keyframes')}
           </h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -708,7 +712,7 @@ export const ResultsPage: React.FC = () => {
                       )}
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30 text-[10px] text-secondary mt-2">
-                      <span className="font-bold text-vibrant-cyan">Độ quan trọng</span>
+                      <span className="font-bold text-vibrant-cyan">{t('results.importance')}</span>
                       <span className="font-mono-data font-bold bg-surface-container-high px-1.5 py-0.5 rounded text-deep-navy">
                         {Math.round(importance * 100)}%
                       </span>

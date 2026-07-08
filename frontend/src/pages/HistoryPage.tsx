@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { HistoryItem } from '../types';
 import { VideoStatus } from '../types';
 import { api } from '../services/api';
@@ -9,6 +10,7 @@ import { Skeleton } from '../components/Skeleton';
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation();
 
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export const HistoryPage: React.FC = () => {
       })
       .catch(err => {
         console.error("Failed to fetch real history from backend API:", err);
-        toast.error("Không thể tải danh sách lịch sử video.", "Lỗi kết nối");
+        toast.error(t('history.toast_fetch_err'), t('history.toast_conn_err'));
       })
       .finally(() => {
         setLoading(false);
@@ -69,7 +71,7 @@ export const HistoryPage: React.FC = () => {
   const handleDelete = (id: string) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa video này khỏi lịch sử?")) {
       setHistoryItems(prev => prev.filter(item => item.id !== id));
-      toast.success("Xóa video khỏi lịch sử thành công!", "Thành công");
+      toast.success(t('history.toast_del_success'), t('common.success'));
     }
   };
 
@@ -77,7 +79,7 @@ export const HistoryPage: React.FC = () => {
     if (window.confirm("Bạn có chắc chắn muốn dừng tác vụ đang chạy này không?")) {
       try {
         await api.cancelJob(jobId);
-        toast.success("Đã yêu cầu dừng tác vụ thành công!", "Thành công");
+        toast.success(t('history.toast_stop_success'), t('common.success'));
         // Reload list
         const statusParam = selectedStatus === 'All' ? undefined : selectedStatus;
         const res = await api.getVideos(statusParam, limit, (currentPage - 1) * limit);
@@ -112,7 +114,7 @@ export const HistoryPage: React.FC = () => {
           setHistoryItems(items);
         }
       } catch (err: any) {
-        toast.error(`Lỗi dừng tác vụ: ${err.message}`, "Lỗi");
+        toast.error(`${t('history.toast_stop_err')}${err.message}`, t('history.toast_err'));
       }
     }
   };
@@ -163,18 +165,18 @@ export const HistoryPage: React.FC = () => {
         <header className="mb-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <h1 className="font-headline-xl text-3xl md:text-headline-xl text-deep-navy font-bold mb-2">Lịch Sử Phân Tích</h1>
+              <h1 className="font-headline-xl text-3xl md:text-headline-xl text-deep-navy font-bold mb-2">{t('history.title')}</h1>
               <p className="text-secondary max-w-2xl font-body-md text-sm md:text-body-md">
-                Xem lại, quản lý và tra cứu các bản tóm tắt học thuật từ kho lưu trữ dữ liệu nghiên cứu đa phương thức của bạn.
+                {t('history.subtitle')}
               </p>
             </div>
             <div className="flex items-center gap-4 text-mono-data font-mono-data text-xs bg-surface-container-high px-4 py-2 rounded-full border border-outline-variant shrink-0">
               <span className="flex items-center gap-1 font-bold">
-                <span className="w-2 h-2 rounded-full bg-status-success"></span> {processedCount} Hoàn tất
+                <span className="w-2 h-2 rounded-full bg-status-success"></span> {processedCount} {t('history.completed')}
               </span>
               <span className="text-outline-variant">|</span>
               <span className="flex items-center gap-1 font-bold">
-                <span className="w-2 h-2 rounded-full bg-status-warning animate-pulse"></span> {queuedCount} Đang xử lý
+                <span className="w-2 h-2 rounded-full bg-status-warning animate-pulse"></span> {queuedCount} {t('history.processing')}
               </span>
             </div>
           </div>
@@ -184,7 +186,7 @@ export const HistoryPage: React.FC = () => {
             <div className="md:col-span-2 relative">
               <input 
                 className="w-full pl-10 pr-4 py-3 bg-white border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none transition-all font-body-sm text-sm shadow-sm" 
-                placeholder="Tìm kiếm tiêu đề hoặc từ khóa bài giảng..." 
+                placeholder={t('history.search_placeholder')} 
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -197,8 +199,8 @@ export const HistoryPage: React.FC = () => {
               onChange={(e) => setSortBy(e.target.value)}
               className="bg-white border border-slate-200 hover:border-slate-300 text-deep-navy font-semibold rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer shadow-sm hover:shadow transition-all duration-200"
             >
-              <option value="newest">Sắp xếp: Mới nhất</option>
-              <option value="oldest">Sắp xếp: Cũ nhất</option>
+              <option value="newest">{t('history.sort_newest')}</option>
+              <option value="oldest">{t('history.sort_oldest')}</option>
             </select>
 
             <select 
@@ -209,11 +211,11 @@ export const HistoryPage: React.FC = () => {
               }}
               className="bg-white border border-slate-200 hover:border-slate-300 text-deep-navy font-semibold rounded-xl px-4 py-3 text-sm focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none cursor-pointer shadow-sm hover:shadow transition-all duration-200"
             >
-              <option value="All">Tất cả trạng thái</option>
-              <option value="pending">Chờ xử lý</option>
-              <option value="processing">Đang xử lý</option>
-              <option value="done">Hoàn tất</option>
-              <option value="failed">Thất bại</option>
+              <option value="All">{t('history.status_all')}</option>
+              <option value="pending">{t('history.status_pending')}</option>
+              <option value="processing">{t('history.status_processing')}</option>
+              <option value="done">{t('history.status_done')}</option>
+              <option value="failed">{t('history.status_failed')}</option>
             </select>
           </div>
         </header>
@@ -233,12 +235,17 @@ export const HistoryPage: React.FC = () => {
             return (
               <div 
                 key={item.id} 
+                onClick={() => {
+                  if (item.status === VideoStatus.DONE) {
+                    navigate(`/results?videoId=${item.id}`);
+                  }
+                }}
                 className={`group bg-white border rounded-xl overflow-hidden transition-all duration-300 flex flex-col hover:shadow-md ${
                   isFailed 
                     ? 'border-error/25 hover:border-error bg-error/[0.01]' 
                     : isProcessing 
                       ? 'border-blue-100 hover:border-blue-400 bg-blue-50/[0.01]' 
-                      : 'border-outline-variant hover:border-vibrant-cyan'
+                      : 'border-outline-variant hover:border-vibrant-cyan cursor-pointer'
                 }`}
               >
                 <div className="relative h-48 w-full overflow-hidden bg-slate-950 shrink-0">
@@ -248,25 +255,25 @@ export const HistoryPage: React.FC = () => {
                   {item.status === VideoStatus.DONE && (
                     <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-status-success/15 text-status-success border border-status-success/30 flex items-center gap-1 shadow-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-status-success"></span>
-                      Hoàn tất
+                      {t('history.status_done')}
                     </span>
                   )}
                   {item.status === VideoStatus.PROCESSING && (
                     <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-blue-50 text-blue-600 border border-blue-200/50 flex items-center gap-1 shadow-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
-                      Đang xử lý
+                      {t('history.status_processing')}
                     </span>
                   )}
                   {item.status === VideoStatus.PENDING && (
                     <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-status-warning/15 text-status-warning border border-status-warning/30 flex items-center gap-1 shadow-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-status-warning"></span>
-                      Chờ xử lý
+                      {t('history.status_pending')}
                     </span>
                   )}
                   {item.status === VideoStatus.FAILED && (
                     <span className="absolute top-3 right-3 z-20 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase rounded-md bg-error/15 text-error border border-error/30 flex items-center gap-1 shadow-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                      Thất bại
+                      {t('history.status_failed')}
                     </span>
                   )}
 
@@ -289,7 +296,7 @@ export const HistoryPage: React.FC = () => {
                   ) : isFailed ? (
                     <div className="w-full h-full flex flex-col items-center justify-center text-white bg-error/[0.04] relative">
                       <span className="material-symbols-outlined text-4xl text-error">error</span>
-                      <span className="text-[10px] font-mono tracking-widest text-error mt-2 uppercase">Xử lý lỗi</span>
+                      <span className="text-[10px] font-mono tracking-widest text-error mt-2 uppercase">{t('history.status_failed')}</span>
                     </div>
                   ) : (
                     <div 
@@ -339,16 +346,15 @@ export const HistoryPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-outline-variant/30">
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-outline-variant/30" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
                       {item.status === VideoStatus.DONE ? (
-                        <Link 
-                          to={`/results?videoId=${item.id}`}
+                        <div 
                           className="w-9 h-9 flex items-center justify-center text-secondary hover:text-vibrant-cyan hover:bg-surface-container-low border border-outline-variant/30 rounded-lg transition-all" 
                           title="Xem kết quả"
                         >
                           <span className="material-symbols-outlined text-[20px]">play_circle</span>
-                        </Link>
+                        </div>
                       ) : isProcessing ? (
                         <button 
                           onClick={() => item.jobId && handleCancelJob(item.jobId)}
@@ -381,7 +387,7 @@ export const HistoryPage: React.FC = () => {
                                 a.click();
                                 a.remove();
                               })
-                              .catch(err => toast.error(`Lỗi tải PDF: ${err.message}`, "Thất bại"));
+                              .catch(err => toast.error(`${t('history.toast_pdf_err')}${err.message}`, t('history.toast_fail')));
                           }
                         }}
                         className="w-9 h-9 flex items-center justify-center text-secondary hover:text-vibrant-cyan hover:bg-surface-container-low border border-outline-variant/30 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed" 
@@ -413,9 +419,9 @@ export const HistoryPage: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <span className="material-symbols-outlined text-outline group-hover:text-vibrant-cyan">cloud_upload</span>
             </div>
-            <h4 className="font-headline-md text-headline-md text-deep-navy mb-2">Process More Data</h4>
-            <p className="text-secondary font-body-sm text-body-sm mb-6 max-w-[200px]">Upload new multimodal recordings to expand your knowledge base.</p>
-            <button className="px-6 py-2 bg-deep-navy text-white rounded font-label-md text-label-md hover:bg-slate-800 transition-all">Upload Video</button>
+            <h4 className="font-headline-md text-headline-md text-deep-navy mb-2">{t('history.empty_state_title')}</h4>
+            <p className="text-secondary font-body-sm text-body-sm mb-6 max-w-[200px]">{t('history.empty_state_desc')}</p>
+            <button className="px-6 py-2 bg-deep-navy text-white rounded font-label-md text-label-md hover:bg-slate-800 transition-all">{t('history.upload_btn')}</button>
           </div>
         </div>
 
@@ -481,8 +487,8 @@ export const HistoryPage: React.FC = () => {
       {/* Footer Shell */}
       <footer className="bg-surface-container-lowest flex flex-col md:flex-row justify-between items-center px-margin-desktop py-8 w-full border-t border-outline-variant mt-12 text-xs">
         <div className="mb-4 md:mb-0 text-center md:text-left space-y-1">
-          <span className="font-label-md font-bold text-deep-navy">Multimodal Lecture Summarizer</span>
-          <p className="text-secondary font-body-sm">© 2026 Institute for Multimodal AI Research. All rights reserved.</p>
+          <span className="font-label-md font-bold text-deep-navy">Lumina</span>
+          <p className="text-secondary font-body-sm">© 2026 Lumina. All rights reserved.</p>
         </div>
         <div className="flex flex-wrap justify-center gap-6 font-semibold">
           <a className="text-secondary hover:text-vibrant-cyan transition-colors" href="#credits">Academic Credits</a>

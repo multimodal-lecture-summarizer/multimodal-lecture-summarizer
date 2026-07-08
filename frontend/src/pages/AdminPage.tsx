@@ -6,6 +6,7 @@ import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 
 const PaginationControl: React.FC<{
   currentPage: number;
@@ -13,6 +14,7 @@ const PaginationControl: React.FC<{
   limit: number;
   onPageChange: (page: number) => void;
 }> = ({ currentPage, totalItems, limit, onPageChange }) => {
+  const { t } = useTranslation();
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
   if (totalPages <= 1) return null;
 
@@ -36,7 +38,7 @@ const PaginationControl: React.FC<{
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-outline-variant/30 text-xs font-semibold text-deep-navy shrink-0">
       <span className="text-secondary">
-        Hiển thị {Math.min(totalItems, (currentPage - 1) * limit + 1)} - {Math.min(currentPage * limit, totalItems)} trên tổng số {totalItems}
+        {t('admin.showing')} {Math.min(totalItems, (currentPage - 1) * limit + 1)} - {Math.min(currentPage * limit, totalItems)} {t('admin.of')} {totalItems} {t('admin.total')}
       </span>
       <div className="flex items-center gap-1.5">
         <button
@@ -45,7 +47,7 @@ const PaginationControl: React.FC<{
           onClick={() => onPageChange(currentPage - 1)}
           className="px-2.5 py-1.5 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:cursor-not-allowed text-deep-navy"
         >
-          Trước
+          {t('admin.prev')}
         </button>
         {uniquePages.map((page, idx) => {
           if (page === '...') {
@@ -76,7 +78,7 @@ const PaginationControl: React.FC<{
           onClick={() => onPageChange(currentPage + 1)}
           className="px-2.5 py-1.5 border border-outline-variant rounded-lg hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:cursor-not-allowed text-deep-navy"
         >
-          Sau
+          {t('admin.next')}
         </button>
       </div>
     </div>
@@ -145,6 +147,7 @@ interface UserItem {
 export const AdminPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'stats' | 'metrics' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
   const toast = useToast();
+  const { t } = useTranslation();
 
   // Chart refs
   const barChartRef = useRef<HTMLCanvasElement>(null);
@@ -664,13 +667,13 @@ export const AdminPage: React.FC = () => {
         <div className="px-2 py-4 border-b border-outline-variant/30 mb-4">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-vibrant-cyan">admin_panel_settings</span>
-            <span className="font-headline-md text-sm font-bold text-deep-navy">Quản Trị Hệ Thống</span>
+            <span className="font-headline-md text-sm font-bold text-deep-navy">{t('admin.title')}</span>
           </div>
         </div>
 
         <div className="flex-1 space-y-4">
           <div>
-            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">Analytics</div>
+            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">{t('admin.analytics')}</div>
             <nav className="flex flex-col gap-1">
               <button 
                 onClick={() => setActiveTab('stats')}
@@ -678,7 +681,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'stats' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">bar_chart</span> Báo cáo tổng hợp
+                <span className="material-symbols-outlined text-sm">bar_chart</span> {t('admin.stats')}
               </button>
               <button 
                 onClick={() => setActiveTab('metrics')}
@@ -686,13 +689,13 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'metrics' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">insights</span> Hiệu suất AI
+                <span className="material-symbols-outlined text-sm">insights</span> {t('admin.metrics')}
               </button>
             </nav>
           </div>
 
           <div>
-            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">Quản lý</div>
+            <div className="text-[10px] uppercase font-bold text-outline tracking-wider px-3 mb-1">{t('admin.management')}</div>
             <nav className="flex flex-col gap-1">
               <button 
                 onClick={() => setActiveTab('users')}
@@ -700,7 +703,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'users' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">group</span> Người dùng
+                <span className="material-symbols-outlined text-sm">group</span> {t('admin.users')}
               </button>
               <button 
                 onClick={() => setActiveTab('system-videos')}
@@ -708,7 +711,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'system-videos' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">video_library</span> Quản lý Video
+                <span className="material-symbols-outlined text-sm">video_library</span> {t('admin.videos')}
               </button>
               <button 
                 onClick={() => setActiveTab('system-jobs')}
@@ -716,7 +719,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'system-jobs' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">worklist</span> Tác vụ (Jobs)
+                <span className="material-symbols-outlined text-sm">worklist</span> {t('admin.jobs')}
               </button>
               <button 
                 onClick={() => setActiveTab('videos')}
@@ -724,7 +727,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'videos' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">settings_suggest</span> Tiêu chuẩn Video
+                <span className="material-symbols-outlined text-sm">settings_suggest</span> {t('admin.settings')}
               </button>
               <button 
                 onClick={() => setActiveTab('celery')}
@@ -732,7 +735,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'celery' ? 'bg-secondary-container text-primary' : 'text-secondary hover:bg-surface-container-high'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">dns</span> Celery Queue
+                <span className="material-symbols-outlined text-sm">dns</span> {t('admin.celery')}
               </button>
             </nav>
           </div>

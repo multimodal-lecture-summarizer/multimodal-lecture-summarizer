@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
@@ -9,6 +10,7 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const toast = useToast();
+  const { t } = useTranslation();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -177,7 +179,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               role: profileResult.data.role.toLowerCase(), // admin or user
             };
             if (onLogin) onLogin(userData);
-            toast.success(isLogin ? "Đăng nhập thành công!" : "Đăng ký thành công!", "Thành công");
+            toast.success(isLogin ? t('auth.login_success') : t('auth.register_success'), t('common.success'));
             
             if (userData.role === 'admin') {
               navigate('/admin');
@@ -188,13 +190,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           }
         }
       }
-      setErrorMessage("Không nhận được token xác thực từ máy chủ.");
-      toast.error("Không nhận được token xác thực!", "Lỗi");
+      setErrorMessage(t('auth.no_token'));
+      toast.error(t('auth.no_token'), t('common.error'));
     } catch (error: any) {
       console.error('API connection failed:', error);
-      const errMsg = error.message || "Kết nối máy chủ thất bại. Vui lòng kiểm tra lại.";
+      const errMsg = error.message || t('auth.conn_error');
       setErrorMessage(errMsg);
-      toast.error(errMsg, "Lỗi kết nối");
+      toast.error(errMsg, t('common.error'));
     }
   };
 
@@ -204,8 +206,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       <header className="relative z-10 w-full flex justify-center pb-8 shrink-0">
         <div className="flex flex-col items-center gap-2">
-          <span className="font-headline-lg text-2xl font-bold text-deep-navy tracking-tight">Multimodal Lecture Summarizer</span>
-          <span className="font-label-sm text-xs uppercase tracking-widest text-slate-600 font-semibold opacity-80">Research Portal Portal</span>
+          <span className="font-headline-lg text-2xl font-bold text-deep-navy tracking-tight">Lumina</span>
+          <span className="font-label-sm text-xs uppercase tracking-widest text-slate-600 font-semibold opacity-80">{t('auth.portal')}</span>
         </div>
       </header>
 
@@ -221,7 +223,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             }`} 
             onClick={() => setIsLogin(true)}
           >
-            Đăng Nhập
+            {t('auth.login')}
           </button>
           <button 
             type="button"
@@ -232,7 +234,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             }`} 
             onClick={() => setIsLogin(false)}
           >
-            Đăng Ký
+            {t('auth.register')}
           </button>
         </div>
 
@@ -246,12 +248,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
               <div className="flex flex-col gap-2">
-                <label className="font-label-sm text-xs text-on-surface-variant font-bold">Email bài giảng</label>
+                <label className="font-label-sm text-xs text-on-surface-variant font-bold">{t('auth.email_label')}</label>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-vibrant-cyan transition-colors text-xl">alternate_email</span>
                   <input 
                     type="email" 
-                    placeholder="researcher@institute.edu" 
+                    placeholder={t('auth.email_placeholder')} 
                     className="w-full pl-10 pr-4 py-3 bg-white/90 border border-outline-variant rounded-xl font-body-md text-sm placeholder:text-outline-variant focus:border-vibrant-cyan focus:bg-white transition-all text-on-surface outline-none"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -262,16 +264,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               
               <div className="flex flex-col gap-2">
                 <div className="flex justify-between items-center">
-                  <label className="font-label-sm text-xs text-on-surface-variant font-bold">Mật khẩu bảo mật</label>
+                  <label className="font-label-sm text-xs text-on-surface-variant font-bold">{t('auth.password_label')}</label>
                   {isLogin && (
-                    <a href="#forgot" className="text-[11px] font-label-md text-vibrant-cyan hover:underline font-bold">Quên mật khẩu?</a>
+                    <a href="#forgot" className="text-[11px] font-label-md text-vibrant-cyan hover:underline font-bold">{t('auth.forgot_password')}</a>
                   )}
                 </div>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-vibrant-cyan transition-colors text-xl">lock</span>
                   <input 
                     type="password" 
-                    placeholder="••••••••" 
+                    placeholder={t('auth.password_placeholder')} 
                     className="w-full pl-10 pr-4 py-3 bg-white/90 border border-outline-variant rounded-xl font-body-md text-sm placeholder:text-outline-variant focus:border-vibrant-cyan focus:bg-white transition-all text-on-surface outline-none"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -285,14 +287,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               type="submit" 
               className="w-full bg-deep-navy text-white font-bold text-xs uppercase tracking-wider py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-[0.98] shadow-md hover:shadow-lg"
             >
-              <span>{isLogin ? 'Vào phòng nghiên cứu' : 'Tạo hồ sơ nghiên cứu'}</span>
+              <span>{isLogin ? t('auth.btn_login') : t('auth.btn_register')}</span>
               <span className="material-symbols-outlined text-sm">arrow_forward</span>
             </button>
             
             <div className="relative py-2">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-outline-variant/50"></div></div>
               <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
-                <span className="bg-white px-4 text-outline-variant font-bold">Liên kết hệ thống</span>
+                <span className="bg-white px-4 text-outline-variant font-bold">{t('auth.system_link')}</span>
               </div>
             </div>
 
@@ -304,7 +306,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
                   const userData = { email: email || 'google_researcher@gmail.com', role: role };
                   if (onLogin) onLogin(userData); 
-                  toast.success("Đăng nhập bằng Google thành công!", "Thành công");
+                  toast.success(t('auth.google_success'), t('common.success'));
                   if (role === 'admin') {
                     navigate('/admin');
                   } else {
@@ -318,7 +320,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   <path fill="#fbbc05" d="M5.22 14.63c-.24-.71-.38-1.47-.38-2.26s.14-1.55.38-2.26L1.45 7.45C.52 9.27 0 11.29 0 13.41s.52 4.14 1.45 5.96l3.77-2.92c-.24-.71-.38-1.47-.38-2.26z" />
                   <path fill="#34a853" d="M12 23c3.24 0 5.97-1.07 7.96-2.92l-3.66-2.84c-1.01.68-2.31 1.08-3.8 1.08-3.16 0-5.88-2.1-6.78-5.33L.95 16.32C2.9 20.14 6.87 23 12 23z" />
                 </svg>
-                <span>Google</span>
+                <span>{t('auth.google_login')}</span>
               </button>
               
               <button 
@@ -328,7 +330,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
                   const userData = { email: email || 'github_researcher@gmail.com', role: role };
                   if (onLogin) onLogin(userData); 
-                  toast.success("Đăng nhập bằng GitHub thành công!", "Thành công");
+                  toast.success(t('auth.github_success'), t('common.success'));
                   if (role === 'admin') {
                     navigate('/admin');
                   } else {
@@ -337,7 +339,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                 }}
               >
                 <img alt="GitHub" className="w-4 h-4 shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARxcBrwcxfhViS14Xn10JUdMUx4yzH2sX7wJUP2c1sfvbvTLPdvNAWRQF8RpUmr4RmFZO87nEJfvZoQh07OxhgeQfAUJ6XSnJ05NQfnlapcLDQ5WLXEBdKlgIkplWNhxrtOB6lvy12HMmvia_3MBt3y7XFmYL3eOrpeekZ-QfmeI-thsqAEE94m0SkFadj--IjuVqXjMS_VzGg3vyz1-a_DuEz_1fhfj8UegUYV9SXZtDanubQBzWg"/>
-                <span>GitHub</span>
+                <span>{t('auth.github_login')}</span>
               </button>
             </div>
           </form>
@@ -345,7 +347,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
         <div className="bg-white/40 px-8 py-5 flex items-center justify-center gap-2 border-t border-outline-variant/30 shrink-0">
           <span className="material-symbols-outlined text-status-success text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
-          <span className="font-label-sm text-xs text-on-surface-variant font-medium">AES-256 Encrypted Lab Environment</span>
+          <span className="font-label-sm text-xs text-on-surface-variant font-medium">{t('auth.encrypted_env')}</span>
         </div>
       </div>
     </div>
