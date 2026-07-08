@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI):
         from redis import Redis
         redis_client = Redis.from_url(settings.CELERY_BROKER_URL)
         redis_client.ping()
+        redis_client.close()
         logger.info("Connected to Redis (Celery Broker) successfully.")
     except Exception as e:
         logger.warning(f"Failed to connect to Redis: {e}. Check CELERY_BROKER_URL config.")

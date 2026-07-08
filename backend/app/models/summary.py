@@ -25,7 +25,7 @@ class Summary(Base):
     chapters_json: Mapped[Any] = mapped_column(JSON, nullable=False)
     keyframes_json: Mapped[Any] = mapped_column(JSON, nullable=False)
     transcript_text: Mapped[str] = mapped_column(Text, nullable=False)
-    model_used: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_used: Mapped[str] = mapped_column(Text, nullable=False)
     processing_time: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Relationships
