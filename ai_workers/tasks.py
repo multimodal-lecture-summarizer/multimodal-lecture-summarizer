@@ -23,8 +23,8 @@ except Exception:
     pass
 
 from ai_workers.core.celery_app import app
-from ai_workers.modules.audio.transcriber import AudioTranscriber
-from ai_workers.modules.audio.speaker import SpeakerDiarizer
+from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
 from ai_workers.modules.visual.scene_detector import SceneDetector
 from ai_workers.modules.visual.semantic import SemanticAnalyzer
 from ai_workers.modules.fusion.timeline import TimelineBuilder
