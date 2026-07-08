@@ -537,11 +537,42 @@ def list_all_videos(
     )
 
 
+def perform_hard_delete(video: Video, db: Session):
+    """Performs a hard delete of a video, including storage files and ChromaDB vector chunks."""
+    # 1. Delete original video file
+    if video.file_path:
+        video_key = r2_service.extract_key(video.file_path)
+        if video_key:
+            r2_service.delete_file(video_key)
+
+    # 2. Delete keyframe images of scenes
+    for scene in video.scenes:
+        if scene.keyframe_url:
+            kf_key = r2_service.extract_key(scene.keyframe_url)
+            if kf_key:
+                r2_service.delete_file(kf_key)
+        elif scene.keyframe_path:
+            kf_key = r2_service.extract_key(scene.keyframe_path)
+            if kf_key:
+                r2_service.delete_file(kf_key)
+
+    # 3. Delete vector chunks from ChromaDB
+    try:
+        chromadb_service.delete_transcript_chunks(video.video_id)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to delete transcript chunks from ChromaDB: {e}")
+
+    # 4. Delete video record (cascade deletes jobs, summaries, scenes, qa_logs, video_metadata)
+    db.delete(video)
+    db.commit()
+
+
 @router.delete(
     "/admin/{video_id}",
     response_model=BaseDTO[bool],
     summary="Delete any video (Admin only)",
-    description="Deletes a video record and all associated jobs/summaries from the database. Requires Admin permissions.",
+    description="Deletes a video record and all associated jobs/summaries from the database, and cleans up R2 storage and ChromaDB. Requires Admin permissions.",
 )
 def delete_video_admin(
     video_id: uuid.UUID,
@@ -553,13 +584,35 @@ def delete_video_admin(
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
 
-    # Delete associated jobs
-    db.query(Job).filter(Job.video_id == video_id).delete()
-    # Delete associated summaries
-    db.query(Summary).filter(Summary.video_id == video_id).delete()
-    # Delete video
-    db.delete(video)
-    db.commit()
+    perform_hard_delete(video, db)
+
+    return BaseDTO(
+        success=True,
+        data=True,
+        message="Video and associated records deleted successfully",
+    )
+
+
+@router.delete(
+    "/{video_id}",
+    response_model=BaseDTO[bool],
+    summary="Delete user's own video",
+    description="Deletes a video record and all associated jobs/summaries from the database, and cleans up R2 storage and ChromaDB. Requires video owner permissions.",
+)
+def delete_video_user(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Deletes a video owned by the current active user."""
+    video = db.query(Video).filter(Video.video_id == video_id).first()
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    if video.user_id != current_user.user_id:
+        raise ForbiddenException(message="You do not have permission to delete this video")
+
+    perform_hard_delete(video, db)
 
     return BaseDTO(
         success=True,

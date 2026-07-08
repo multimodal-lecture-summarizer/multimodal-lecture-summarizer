@@ -270,6 +270,20 @@ export const api = {
     return result; // returns BaseDTO[List[VideoDTO]]
   },
 
+  async deleteVideo(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/videos/${videoId}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể xóa video của bạn");
+    return result; // returns BaseDTO[bool]
+  },
+
   async deleteVideoAdmin(videoId: string) {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/videos/admin/${videoId}`,

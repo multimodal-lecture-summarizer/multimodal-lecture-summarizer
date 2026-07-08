@@ -1,6 +1,3 @@
-# Docker Compose — Triển khai toàn bộ: Frontend, API, Worker, PostgreSQL, Redis
-
-version: '3.9'
 
 services:
   # ──────────────────────────────────────────

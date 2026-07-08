@@ -182,6 +182,28 @@ class ChromaDBService:
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
         return [doc for score, doc in scored_chunks[:limit]]
 
+    def delete_transcript_chunks(self, video_id: Any) -> bool:
+        """
+        Deletes all transcript chunks associated with a video_id from ChromaDB or mock store.
+        """
+        self._ensure_connection()
+        video_id_str = str(video_id)
+        deleted = False
+        if self.enabled and self.collection:
+            try:
+                self.collection.delete(where={"video_id": video_id_str})
+                logger.info(f"Successfully deleted chunks from ChromaDB for video {video_id_str}")
+                deleted = True
+            except Exception as e:
+                logger.error(f"Error deleting chunks from ChromaDB: {e}")
+
+        if video_id_str in self.mock_store:
+            self.mock_store.pop(video_id_str, None)
+            logger.info(f"[Mock ChromaDB] Deleted chunks in-memory for video {video_id_str}")
+            deleted = True
+
+        return deleted
+
     def verify_connection(self, retries: int = 5, delay: float = 2.0):
         """
         Verifies connection to ChromaDB on startup, with retries.
