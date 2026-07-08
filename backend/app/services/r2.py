@@ -144,5 +144,29 @@ class R2Service:
                 return True
             return False
 
+    def extract_key(self, url_or_path: str) -> Optional[str]:
+        """Extracts the R2/S3 object key from a URL or static path."""
+        if not url_or_path:
+            return None
+
+        # 1. Handle mock URL prefix
+        if url_or_path.startswith("/static/mock_r2/"):
+            return url_or_path.replace("/static/mock_r2/", "", 1)
+
+        # 2. Handle public URL prefix
+        if self.public_url and url_or_path.startswith(self.public_url):
+            key = url_or_path[len(self.public_url):]
+            if key.startswith("/"):
+                key = key[1:]
+            return key
+
+        # 3. Fallback: find standard folders in path
+        for folder in ["videos/", "keyframes/"]:
+            if folder in url_or_path:
+                idx = url_or_path.find(folder)
+                return url_or_path[idx:]
+
+        return None
+
 
 r2_service = R2Service()

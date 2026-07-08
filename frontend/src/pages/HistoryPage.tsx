@@ -68,10 +68,15 @@ export const HistoryPage: React.FC = () => {
       });
   }, [currentPage, selectedStatus]);
 
-  const handleDelete = (id: string) => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa video này khỏi lịch sử?")) {
-      setHistoryItems(prev => prev.filter(item => item.id !== id));
-      toast.success(t('history.toast_del_success'), t('common.success'));
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa video này? Thao tác này sẽ xóa vĩnh viễn video và toàn bộ dữ liệu tóm tắt liên quan.")) {
+      try {
+        await api.deleteVideo(id);
+        setHistoryItems(prev => prev.filter(item => item.id !== id));
+        toast.success(t('history.toast_del_success'), t('common.success'));
+      } catch (err: any) {
+        toast.error(`Xóa video thất bại: ${err.message}`, t('common.error') || 'Lỗi');
+      }
     }
   };
 
