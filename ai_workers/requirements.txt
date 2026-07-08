@@ -8,6 +8,7 @@ pyyaml>=6.0
 # Audio: WhisperX, pyannote
 torch>=2.1
 whisperx
+faster-whisper>=1.0.0
 pyannote.audio>=3.1
 noisereduce>=3.0
 
