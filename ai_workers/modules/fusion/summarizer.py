@@ -26,8 +26,7 @@ class Summarizer:
             "llama-3.1-8b-instant",
             "gemma2-9b-it",
             "mixtral-8x7b-32768",
-            "llama-3.3-70b-versatile",
-            "llama3-8b-8192"
+            "llama-3.3-70b-versatile"
         ]
 
     def build_rag_index(self, utterances: list[dict], slides: list[dict]) -> None:

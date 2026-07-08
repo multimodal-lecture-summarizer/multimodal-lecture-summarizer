@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
     # Groq API
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama3-8b-8192"
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
 
     # ChromaDB
     CHROMADB_HOST: str = "localhost"
