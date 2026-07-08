@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 
 interface Message {
   sender: 'user' | 'bot';
@@ -15,6 +16,7 @@ interface Message {
 
 export const QaPage: React.FC = () => {
   const toast = useToast();
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const videoId = searchParams.get('videoId') || searchParams.get('id') || '';
 
@@ -27,7 +29,7 @@ export const QaPage: React.FC = () => {
     {
       sender: 'bot',
       avatarIcon: 'auto_awesome',
-      text: 'Chào bạn! Tôi có thể giúp bạn giải đáp thắc mắc gì về video bài giảng này không? Hãy chọn video bài giảng bên trái và nhập câu hỏi của bạn bên dưới.',
+      text: t('qa.welcome_msg'),
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -115,7 +117,7 @@ export const QaPage: React.FC = () => {
     setIsTyping(true);
 
     if (!activeVideoId) {
-      toast.error("Vui lòng chọn hoặc tải lên một video trước khi thực hiện đặt câu hỏi.", "Chưa chọn video");
+      toast.error(t('qa.no_video_selected'), t('qa.no_video_alert'));
       setIsTyping(false);
       return;
     }
@@ -163,11 +165,11 @@ export const QaPage: React.FC = () => {
       {
         sender: 'bot',
         avatarIcon: 'auto_awesome',
-        text: 'Lịch sử trò chuyện đã được xóa. Tôi sẵn sàng trả lời các câu hỏi mới!',
+        text: t('qa.history_cleared_msg'),
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
-    toast.success('Lịch sử trò chuyện đã được xóa.', 'Đã xóa');
+    toast.success(t('qa.clear_success'), t('qa.clear_success_title'));
   };
 
   return (
@@ -188,16 +190,16 @@ export const QaPage: React.FC = () => {
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-secondary p-4 text-center">
                 <span className="material-symbols-outlined text-4xl mb-2 text-slate-400">videocam_off</span>
-                <p className="text-xs">Chưa có video được tải hoặc chọn lọc.</p>
+                <p className="text-xs">{t('qa.no_video_title')}</p>
               </div>
             )}
           </div>
           <div className="mt-4">
             <h2 className="font-headline-md text-base font-bold text-deep-navy">
-              {videoData?.title || 'Chưa chọn bài giảng'}
+              {videoData?.title || t('qa.not_selected')}
             </h2>
             <p className="font-body-sm text-xs text-secondary mt-1">
-              Thời lượng: {videoData?.duration ? formatTimeText(videoData.duration) : '00:00'} • AI RAG Engine v2.4.0
+              {t('qa.duration')}: {videoData?.duration ? formatTimeText(videoData.duration) : '00:00'} • AI RAG Engine v2.4.0
             </p>
           </div>
         </div>
@@ -205,7 +207,7 @@ export const QaPage: React.FC = () => {
         {/* Key Segments List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
           <div className="flex items-center justify-between py-2 border-b border-outline-variant mb-4">
-            <span className="font-label-md text-xs font-bold uppercase tracking-wider text-outline">Analyzed Segments</span>
+            <span className="font-label-md text-xs font-bold uppercase tracking-wider text-outline">{t('qa.analyzed_segments')}</span>
             <span className="material-symbols-outlined text-outline text-lg">filter_list</span>
           </div>
           <div className="space-y-3">
@@ -231,17 +233,17 @@ export const QaPage: React.FC = () => {
                     <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
                   </div>
                   <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">
-                    Phân đoạn #{scene.sceneIndex !== undefined ? scene.sceneIndex + 1 : idx + 1}
+                    {t('qa.segment')} #{scene.sceneIndex !== undefined ? scene.sceneIndex + 1 : idx + 1}
                   </h4>
                   <p className="text-[11px] text-secondary line-clamp-2">
-                    {scene.caption || scene.script || 'Đang xử lý phân đoạn...'}
+                    {scene.caption || scene.script || t('qa.processing_segment')}
                   </p>
                 </div>
               ))
             ) : (
               <div className="p-4 text-center text-secondary border border-dashed border-outline-variant rounded-xl">
                 <span className="material-symbols-outlined text-xl text-slate-400">segment</span>
-                <p className="text-[10px] mt-1">Không có phân đoạn nào trong video này.</p>
+                <p className="text-[10px] mt-1">{t('qa.no_segments')}</p>
               </div>
             )}
           </div>
@@ -269,7 +271,7 @@ export const QaPage: React.FC = () => {
               <span className="material-symbols-outlined text-sm">auto_awesome</span>
             </div>
             <div>
-              <h3 className="font-label-md text-sm font-bold text-deep-navy">Hỏi đáp Ngữ cảnh Video</h3>
+              <h3 className="font-label-md text-sm font-bold text-deep-navy">{t('qa.header_title')}</h3>
               <span className="text-[10px] text-status-success uppercase font-bold tracking-tighter">AI Engine Online</span>
             </div>
           </div>
@@ -277,10 +279,10 @@ export const QaPage: React.FC = () => {
             <button 
               onClick={clearHistory}
               className="px-3 py-1.5 hover:bg-surface-container-high rounded-lg text-secondary hover:text-primary transition-colors flex items-center gap-1.5 text-xs font-semibold"
-              title="Xóa lịch sử"
+              title={t('qa.clear_history')}
             >
               <span className="material-symbols-outlined text-sm">delete_outline</span>
-              <span className="hidden sm:inline">Xóa lịch sử</span>
+              <span className="hidden sm:inline">{t('qa.clear_history')}</span>
             </button>
           </div>
         </div>
@@ -294,10 +296,10 @@ export const QaPage: React.FC = () => {
             >
               <div className="flex items-center gap-2 mb-1 px-2">
                 <span className={`font-label-sm text-xs font-semibold ${msg.sender === 'user' ? 'text-secondary' : 'text-deep-navy font-bold'}`}>
-                  {msg.sender === 'user' ? 'Researcher' : 'Analysis Engine'}
+                  {msg.sender === 'user' ? t('qa.role_user') : t('qa.role_ai')}
                 </span>
                 {msg.sender === 'bot' && (
-                  <span className="bg-vibrant-cyan/10 text-vibrant-cyan text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Verified</span>
+                  <span className="bg-vibrant-cyan/10 text-vibrant-cyan text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">{t('qa.verified')}</span>
                 )}
               </div>
               <div 
@@ -315,7 +317,7 @@ export const QaPage: React.FC = () => {
                 >
                   <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
                   <span className="font-mono-data font-bold">{formatTimeText(msg.referenceTime)}</span>
-                  <span className="opacity-60 group-hover:opacity-100">Xem đoạn liên quan</span>
+                  <span className="opacity-60 group-hover:opacity-100">{t('qa.view_segment')}</span>
                 </button>
               )}
               {msg.timestamp && (
@@ -329,13 +331,13 @@ export const QaPage: React.FC = () => {
           {isTyping && (
             <div className="flex flex-col items-start">
               <div className="flex items-center gap-2 mb-1 px-2">
-                <span className="font-label-sm text-xs text-deep-navy font-bold">Analysis Engine</span>
+                <span className="font-label-sm text-xs text-deep-navy font-bold">{t('qa.role_ai')}</span>
               </div>
               <div className="glass-chat-ai p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce"></div>
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                 <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <span className="text-xs text-secondary italic ml-2">Đang phân tích...</span>
+                <span className="text-xs text-secondary italic ml-2">{t('qa.analyzing')}</span>
               </div>
             </div>
           )}
@@ -351,7 +353,7 @@ export const QaPage: React.FC = () => {
               </button>
               <textarea 
                 className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 px-2 resize-none max-h-32 min-h-[48px] placeholder-outline-variant outline-none" 
-                placeholder="Đặt câu hỏi về nội dung video bài giảng (Enter để gửi)..."
+                placeholder={t('qa.input_placeholder')}
                 rows={1}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -381,19 +383,19 @@ export const QaPage: React.FC = () => {
                 onClick={() => handleSendMessage('Giải thích cơ chế Backpropagation trong Deep Learning?')}
                 className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
               >
-                <span className="material-symbols-outlined text-[14px]">auto_awesome</span> Giải thích khái niệm chính
+                <span className="material-symbols-outlined text-[14px]">auto_awesome</span> {t('qa.suggest1')}
               </button>
               <button 
                 onClick={() => handleSendMessage('Tóm tắt các tham số hiệu năng được đề cập trong bài giảng?')}
                 className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
               >
-                <span className="material-symbols-outlined text-[14px]">table_chart</span> Thống kê số liệu
+                <span className="material-symbols-outlined text-[14px]">table_chart</span> {t('qa.suggest2')}
               </button>
               <button 
                 onClick={() => handleSendMessage('So sánh Transformer và RNN theo phân tích của giảng viên?')}
                 className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
               >
-                <span className="material-symbols-outlined text-[14px]">psychology</span> Phân tích logic bài giảng
+                <span className="material-symbols-outlined text-[14px]">psychology</span> {t('qa.suggest3')}
               </button>
             </div>
           </div>

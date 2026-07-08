@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../context/ToastContext';
-
 interface HeaderProps {
   isLoggedIn?: boolean;
   onLogout?: () => void;
@@ -10,7 +10,13 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) => {
   const toast = useToast();
   const location = useLocation();
+  const { t, i18n } = useTranslation();
   const isAdminPage = location.pathname.startsWith('/admin');
+
+  const toggleLanguage = () => {
+    const newLang = i18n.language.startsWith('en') ? 'vi' : 'en';
+    i18n.changeLanguage(newLang);
+  };
 
   return (
     <header className="bg-surface-container-lowest flex justify-between items-center px-6 md:px-margin-desktop w-full h-16 sticky top-0 z-50 border-b border-outline-variant">
@@ -18,12 +24,12 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
       <div className="flex items-center gap-3">
         <Link to={isAdminPage ? "/admin" : "/"} className="flex items-center gap-3">
           <img 
-            alt="Multimodal Lecture Summarizer Logo" 
+            alt="Lumina Logo" 
             className="w-8 h-8 object-contain" 
             src="/logo.png" 
           />
           <span className="font-headline-lg text-xl md:text-headline-lg font-bold text-deep-navy tracking-tight">
-            {isAdminPage ? "Admin Panel" : "Multimodal Lecture Summarizer"}
+            {isAdminPage ? "Admin Panel" : "Lumina"}
           </span>
         </Link>
       </div>
@@ -41,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
               }`
             }
           >
-            Dashboard
+            {t('header.dashboard')}
           </NavLink>
           <NavLink 
             to="/history" 
@@ -53,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
               }`
             }
           >
-            Lịch sử video
+            {t('header.history')}
           </NavLink>
           {isLoggedIn && (
             <NavLink 
@@ -66,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
                 }`
               }
             >
-              Tài khoản
+              {t('header.account')}
             </NavLink>
           )}
           <NavLink 
@@ -79,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
               }`
             }
           >
-            Tài liệu
+            {t('header.docs')}
           </NavLink>
         </nav>
       )}
@@ -95,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
                 className="px-4 py-2 bg-deep-navy text-on-primary font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-all scale-active-95"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
-                <span className="hidden sm:inline">Upload Video</span>
+                <span className="hidden sm:inline">{t('header.upload_video')}</span>
               </Link>
             )}
 
@@ -105,9 +111,13 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
                 className="px-4 py-2 border border-slate-600 text-slate-600 font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
               >
                 <span className="material-symbols-outlined text-[18px]">home</span>
-                Dashboard
+                {t('header.dashboard')}
               </Link>
             )}
+
+            <button onClick={toggleLanguage} className="font-bold text-xs uppercase px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-high transition-colors text-deep-navy">
+              {i18n.language.startsWith('en') ? 'EN' : 'VI'}
+            </button>
 
             <button className="text-secondary hover:text-primary p-1.5 transition-colors hidden sm:block">
               <span className="material-symbols-outlined">notifications</span>
@@ -144,17 +154,20 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
           </>
         ) : (
           <>
+            <button onClick={toggleLanguage} className="font-bold text-xs uppercase px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-high transition-colors text-deep-navy">
+              {i18n.language.startsWith('en') ? 'EN' : 'VI'}
+            </button>
             <Link 
               to="/auth" 
               className="px-4 py-2 border border-slate-600 text-slate-600 font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
             >
-              Đăng nhập
+              {t('header.login')}
             </Link>
             <Link 
               to="/auth" 
               className="px-4 py-2 bg-deep-navy text-on-primary font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-all scale-active-95"
             >
-              Bắt đầu ngay
+              {t('header.start_now')}
             </Link>
           </>
         )}
