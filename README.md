@@ -90,6 +90,10 @@ celery -A ai_workers.core.celery_app worker --loglevel=info
 
 | Tài liệu | Nội dung |
 |----------|----------|
+| [docs/ROADMAP_EVALUATION.md](docs/ROADMAP_EVALUATION.md) | Đánh giá lộ trình nghiên cứu luận văn & Khảo sát mô hình SOTA |
+| [docs/RESEARCH_DIRECTIONS.md](docs/RESEARCH_DIRECTIONS.md) | Thiết kế đề cương nghiên cứu, câu hỏi khoa học (RQs) và kịch bản thử nghiệm |
+| [docs/POTENTIAL_RESEARCH_TRENDS.md](docs/POTENTIAL_RESEARCH_TRENDS.md) | Phân tích các hướng phát triển tiên phong (cutting-edge) trong tương lai |
+| [docs/HYBRID_MODEL_GUIDE.md](docs/HYBRID_MODEL_GUIDE.md) | Hướng dẫn thiết kế, cài đặt PyTorch và huấn luyện mô hình Hybrid |
 | [docs/setup-guide.md](docs/setup-guide.md) | Hướng dẫn cài đặt, chạy local và reset DB |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc chi tiết, data flow |
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
