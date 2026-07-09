@@ -198,6 +198,7 @@ export const AdminPage: React.FC = () => {
   // Dashboard Stats Videos State
   const [statsVideos, setStatsVideos] = useState<any[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
 
   // Selection and Modal States for Detail Views
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
@@ -270,7 +271,7 @@ export const AdminPage: React.FC = () => {
 
   // Chart initialization (only when on stats tab)
   useEffect(() => {
-    if (activeTab !== 'stats') {
+    if (activeTab !== 'stats' || !dashboardStats) {
       if (barInstance.current) barInstance.current.destroy();
       if (doughnutInstance.current) doughnutInstance.current.destroy();
       return;
@@ -278,13 +279,18 @@ export const AdminPage: React.FC = () => {
 
     const timer = setTimeout(() => {
       if (barChartRef.current) {
+        if (barInstance.current) barInstance.current.destroy();
+
+        const weeklyLabels = dashboardStats.weeklyVolume?.map((w: any) => w.weekLabel) || ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5', 'Tuần 6'];
+        const weeklyData = dashboardStats.weeklyVolume?.map((w: any) => w.count) || [0, 0, 0, 0, 0, 0];
+
         barInstance.current = new Chart(barChartRef.current, {
           type: 'bar',
           data: {
-            labels: ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5', 'Tuần 6'],
+            labels: weeklyLabels,
             datasets: [{
               label: 'Số Video Xử Lý',
-              data: [320, 450, 680, 890, 1200, 1540],
+              data: weeklyData,
               backgroundColor: '#06B6D4',
               borderRadius: 6,
               barThickness: 15
@@ -303,13 +309,24 @@ export const AdminPage: React.FC = () => {
       }
 
       if (doughnutChartRef.current) {
+        if (doughnutInstance.current) doughnutInstance.current.destroy();
+
+        const modelLabels = dashboardStats.modelDistribution?.map((m: any) => m.modelName) || [];
+        const modelData = dashboardStats.modelDistribution?.map((m: any) => m.count) || [];
+
+        const finalLabels = modelLabels.length > 0 ? modelLabels : ['Chưa có dữ liệu'];
+        const finalData = modelData.length > 0 ? modelData : [1];
+        const finalColors = modelLabels.length > 0 
+          ? ['#06B6D4', '#d5e3fd', '#0F172A', '#A855F7', '#EAB308', '#EC4899'].slice(0, modelLabels.length)
+          : ['#E2E8F0'];
+
         doughnutInstance.current = new Chart(doughnutChartRef.current, {
           type: 'doughnut',
           data: {
-            labels: ['GPT-4o API', 'Gemini 1.5 API', 'Qwen2.5 Local'],
+            labels: finalLabels,
             datasets: [{
-              data: [30, 25, 45],
-              backgroundColor: ['#06B6D4', '#d5e3fd', '#0F172A'],
+              data: finalData,
+              backgroundColor: finalColors,
               borderWidth: 0,
               hoverOffset: 4
             }]
@@ -334,7 +351,7 @@ export const AdminPage: React.FC = () => {
       if (barInstance.current) barInstance.current.destroy();
       if (doughnutInstance.current) doughnutInstance.current.destroy();
     };
-  }, [activeTab]);
+  }, [activeTab, dashboardStats]);
 
   // Fetch dynamic stats counts and videos list for General Dashboard
   useEffect(() => {
@@ -344,9 +361,13 @@ export const AdminPage: React.FC = () => {
           api.getUsers(), 
           api.getAllVideosAdmin(10),
           api.getAllJobsAdmin(1),
-          api.getVideos(undefined, 1)
+          api.getVideos(undefined, 1),
+          api.getAdminStats().catch(err => {
+            console.warn("Failed to fetch admin stats dashboard", err);
+            return { success: false, data: null };
+          })
         ])
-          .then(([usersRes, videosRes, jobsRes, queueRes]) => {
+          .then(([usersRes, videosRes, jobsRes, queueRes, statsRes]) => {
             const emailMap: Record<string, string> = {};
             if (usersRes.success && usersRes.data) {
               const mappedUsers = usersRes.data.map((u: any) => ({
@@ -387,6 +408,10 @@ export const AdminPage: React.FC = () => {
 
             if (queueRes.success) {
               setQueueTotal(queueRes.metadata?.totalResults || queueRes.metadata?.total || 0);
+            }
+
+            if (statsRes && statsRes.success && statsRes.data) {
+              setDashboardStats(statsRes.data);
             }
           })
           .catch(err => {

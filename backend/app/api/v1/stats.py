@@ -4,12 +4,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.middleware.case_converter import CamelCaseAPIRoute
 from app.schemas import BaseDTO, AdminDashboardStats, SystemStatDTO
-from app.schemas.stats import ResourceCostStats, JobStatusDistribution
+from app.schemas.stats import ResourceCostStats, JobStatusDistribution, WeeklyVideoVolume, ModelUsageDistribution
 from app.api.deps import check_admin
 from app.models.user import User
 from app.models.stats import SystemStat
 from app.models.job import Job
+from app.models.video import Video
+from app.models.summary import Summary
 from app.core.constants import JobStatus
+from sqlalchemy import func
 
 router = APIRouter(route_class=CamelCaseAPIRoute)
 
@@ -107,10 +110,58 @@ def get_dashboard_stats(
         for s in stats_list
     ]
 
+    # Calculate weekly video upload traffic (last 6 weeks)
+    weekly_volume = []
+    today = datetime.date.today()
+    for i in range(6, 0, -1):
+        start_date = today - datetime.timedelta(days=i * 7)
+        end_date = today - datetime.timedelta(days=(i - 1) * 7)
+        count = (
+            db.query(Video)
+            .filter(
+                Video.uploaded_at >= datetime.datetime.combine(start_date, datetime.time.min),
+                Video.uploaded_at < datetime.datetime.combine(end_date, datetime.time.max),
+            )
+            .count()
+        )
+        week_of_month = (end_date.day - 1) // 7 + 1
+        week_label = f"Tuần {week_of_month} - T{end_date.month}"
+        weekly_volume.append(
+            WeeklyVideoVolume(week_label=week_label, count=count)
+        )
+
+    # Calculate AI model breakdown from summaries table
+    model_query = (
+        db.query(Summary.model_used, func.count(Summary.summary_id))
+        .group_by(Summary.model_used)
+        .all()
+    )
+    total_summaries = sum(q[1] for q in model_query)
+
+    model_distribution = []
+    if total_summaries > 0:
+        for model_name, count in model_query:
+            pct = round((count / total_summaries) * 100, 1)
+            model_distribution.append(
+                ModelUsageDistribution(
+                    model_name=model_name or "Unknown Model",
+                    percentage=pct,
+                    count=count,
+                )
+            )
+    else:
+        model_distribution = [
+            ModelUsageDistribution(
+                model_name="Groq Llama 3.1 8B", percentage=100.0, count=0
+            )
+        ]
+
     stats = AdminDashboardStats(
         history=history_dto,
         job_distribution=job_distribution,
         resource_usage=resource_usage,
+        weekly_volume=weekly_volume,
+        model_distribution=model_distribution,
     )
 
     return BaseDTO(
