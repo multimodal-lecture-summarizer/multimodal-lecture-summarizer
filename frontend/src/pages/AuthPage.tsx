@@ -206,7 +206,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       <header className="relative z-10 w-full flex justify-center pb-8 shrink-0">
         <div className="flex flex-col items-center gap-2">
-          <span className="font-headline-lg text-2xl font-bold text-deep-navy tracking-tight">Lumina</span>
+          <span className="font-headline-lg text-2xl font-bold text-deep-navy tracking-tight">PrismVideo</span>
           <span className="font-label-sm text-xs uppercase tracking-widest text-slate-600 font-semibold opacity-80">{t('auth.portal')}</span>
         </div>
       </header>

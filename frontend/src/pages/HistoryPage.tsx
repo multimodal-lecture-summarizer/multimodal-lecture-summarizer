@@ -6,6 +6,7 @@ import { VideoStatus } from '../types';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
+import { parseUTCDate } from '../utils/dateUtils';
 
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ export const HistoryPage: React.FC = () => {
               ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
               : `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            const uploadDate = new Date(video.uploadedAt);
+            const uploadDate = parseUTCDate(video.uploadedAt)!;
             const dateStr = uploadDate.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' });
 
             return {
@@ -100,7 +101,7 @@ export const HistoryPage: React.FC = () => {
               ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
               : `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            const uploadDate = new Date(video.uploadedAt);
+            const uploadDate = parseUTCDate(video.uploadedAt)!;
             const dateStr = uploadDate.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' });
 
             return {
@@ -492,8 +493,8 @@ export const HistoryPage: React.FC = () => {
       {/* Footer Shell */}
       <footer className="bg-surface-container-lowest flex flex-col md:flex-row justify-between items-center px-margin-desktop py-8 w-full border-t border-outline-variant mt-12 text-xs">
         <div className="mb-4 md:mb-0 text-center md:text-left space-y-1">
-          <span className="font-label-md font-bold text-deep-navy">Lumina</span>
-          <p className="text-secondary font-body-sm">© 2026 Lumina. All rights reserved.</p>
+          <span className="font-label-md font-bold text-deep-navy">PrismVideo</span>
+          <p className="text-secondary font-body-sm">© 2026 PrismVideo. All rights reserved.</p>
         </div>
         <div className="flex flex-wrap justify-center gap-6 font-semibold">
           <a className="text-secondary hover:text-vibrant-cyan transition-colors" href="#credits">Academic Credits</a>

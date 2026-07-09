@@ -57,9 +57,10 @@ class SemanticAnalyzer:
                     
             embeddings = np.vstack(all_embeddings)
             
-            # Clustering
-            target_clusters = max(1, int(num_frames * 0.3))
-            num_clusters = min(num_frames, min(12, target_clusters))
+            # Clustering: Use configurable keep_ratio (default 0.7) and a high safety cap (50) instead of a hardcap of 12.
+            target_clusters = max(1, int(num_frames * self.keep_ratio))
+            max_keyframes = self.config.get("max_keyframes", 50)
+            num_clusters = min(num_frames, min(max_keyframes, target_clusters))
             if num_clusters == num_frames:
                 # Assign uniform importance
                 for s in valid_scenes:

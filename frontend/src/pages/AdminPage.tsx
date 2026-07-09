@@ -7,6 +7,7 @@ import { VideoStatus } from '../types';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
 import { useTranslation } from 'react-i18next';
+import { parseUTCDate } from '../utils/dateUtils';
 
 const PaginationControl: React.FC<{
   currentPage: number;
@@ -92,14 +93,14 @@ const formatTime = (secs: number) => {
 };
 
 const getSystemLogs = (job: any) => {
-  const startStr = job.startedAt ? new Date(job.startedAt).toISOString() : new Date().toISOString();
+  const startStr = job.startedAt ? parseUTCDate(job.startedAt)!.toISOString() : new Date().toISOString();
   let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...`;
   
   const isCompleted = job.status === 'completed' || job.status === 'done' || job.status === 'SUCCESS';
   const isFailed = job.status === 'failed' || job.status === 'FAILED';
   
   if (isCompleted) {
-    const endStr = job.completedAt ? new Date(job.completedAt).toISOString() : new Date().toISOString();
+    const endStr = job.completedAt ? parseUTCDate(job.completedAt)!.toISOString() : new Date().toISOString();
     return logs + `\n[INFO] Hoàn thành chuyển đổi giọng nói (Speech-to-Text).` +
                   `\n[INFO] Khởi chạy trích xuất Keyframes bằng CLIP...` +
                   `\n[INFO] Đọc dữ liệu ảnh và xếp hạng độ quan trọng slide...` +
@@ -113,7 +114,7 @@ const getSystemLogs = (job: any) => {
   }
   
   if (job.startedAt) {
-    const elapsed = (Date.now() - new Date(job.startedAt).getTime()) / 1000;
+    const elapsed = (Date.now() - parseUTCDate(job.startedAt)!.getTime()) / 1000;
     if (elapsed > 2) {
       logs += `\n[INFO] Đang chuyển đổi giọng nói sang văn bản (Speech-to-Text)...`;
     }
@@ -375,7 +376,7 @@ export const AdminPage: React.FC = () => {
                 email: u.email,
                 role: u.role.toUpperCase(),
                 active: u.isActive,
-                joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
+                joined: parseUTCDate(u.createdAt)!.toLocaleDateString('vi-VN')
               }));
               setUsers(mappedUsers);
               setUsersTotal(usersRes.metadata?.totalResults || usersRes.metadata?.total || usersRes.data.length);
@@ -488,7 +489,7 @@ export const AdminPage: React.FC = () => {
                 email: u.email,
                 role: u.role.toUpperCase(),
                 active: u.isActive,
-                joined: new Date(u.createdAt).toLocaleDateString('vi-VN')
+                joined: parseUTCDate(u.createdAt)!.toLocaleDateString('vi-VN')
               }));
               setUsers(mappedUsers);
               setUsersTotal(res.metadata?.totalResults || res.metadata?.total || res.data.length);
@@ -1370,7 +1371,7 @@ export const AdminPage: React.FC = () => {
                                 {v.status === VideoStatus.DONE ? 'Hoàn tất' : v.status === VideoStatus.FAILED ? 'Lỗi' : 'Đang xử lý'}
                               </span>
                             </td>
-                            <td className="p-3">{new Date(v.uploadedAt).toLocaleDateString('vi-VN')}</td>
+                            <td className="p-3">{parseUTCDate(v.uploadedAt)!.toLocaleDateString('vi-VN')}</td>
                             <td className="p-3">
                               <div className="flex gap-2">
                                 <button onClick={() => openVideoDetail(v)} className="px-2 py-1 text-[10px] bg-surface-container-high rounded border border-outline-variant font-bold hover:bg-outline-variant/30 text-deep-navy flex items-center gap-0.5">
@@ -1463,8 +1464,8 @@ export const AdminPage: React.FC = () => {
                                 {j.status === 'done' || j.status === 'completed' ? 'Hoàn tất' : j.status === 'failed' ? 'Lỗi' : 'Đang xử lý'}
                               </span>
                             </td>
-                            <td className="p-3">{j.startedAt ? new Date(j.startedAt).toLocaleTimeString('vi-VN') : '-'}</td>
-                            <td className="p-3">{j.completedAt ? new Date(j.completedAt).toLocaleTimeString('vi-VN') : '-'}</td>
+                            <td className="p-3">{j.startedAt ? parseUTCDate(j.startedAt)!.toLocaleTimeString('vi-VN') : '-'}</td>
+                            <td className="p-3">{j.completedAt ? parseUTCDate(j.completedAt)!.toLocaleTimeString('vi-VN') : '-'}</td>
                             <td className="p-3 truncate max-w-[150px]" title={j.errorLog}>
                               {j.errorLog ? (
                                 <span className="text-error font-semibold">{j.errorLog}</span>
@@ -1557,7 +1558,7 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Ngày tải lên:</span>
-                  <span className="font-semibold">{new Date(selectedVideo.uploadedAt).toLocaleString('vi-VN')}</span>
+                  <span className="font-semibold">{parseUTCDate(selectedVideo.uploadedAt)!.toLocaleString('vi-VN')}</span>
                 </div>
               </div>
 
@@ -1682,11 +1683,11 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Thời gian bắt đầu:</span>
-                  <span className="font-semibold">{selectedJob.startedAt ? new Date(selectedJob.startedAt).toLocaleString('vi-VN') : '-'}</span>
+                  <span className="font-semibold">{selectedJob.startedAt ? parseUTCDate(selectedJob.startedAt)!.toLocaleString('vi-VN') : '-'}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-secondary font-bold">Thời gian hoàn thành:</span>
-                  <span className="font-semibold">{selectedJob.completedAt ? new Date(selectedJob.completedAt).toLocaleString('vi-VN') : '-'}</span>
+                  <span className="font-semibold">{selectedJob.completedAt ? parseUTCDate(selectedJob.completedAt)!.toLocaleString('vi-VN') : '-'}</span>
                 </div>
               </div>
 

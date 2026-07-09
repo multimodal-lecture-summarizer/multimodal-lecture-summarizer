@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { parseUTCDate } from '../utils/dateUtils';
 
 export const UploadPage: React.FC = () => {
   const toast = useToast();
@@ -534,7 +535,7 @@ export const UploadPage: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 font-mono-data text-xs text-secondary">
-                              {new Date(video.uploadedAt).toLocaleString()}
+                              {parseUTCDate(video.uploadedAt)!.toLocaleString()}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-2 py-1 text-[10px] font-extrabold rounded-full border tracking-wider uppercase ${

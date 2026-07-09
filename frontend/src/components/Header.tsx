@@ -24,12 +24,12 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
       <div className="flex items-center gap-3">
         <Link to={isAdminPage ? "/admin" : "/"} className="flex items-center gap-3">
           <img 
-            alt="Lumina Logo" 
+            alt="PrismVideo Logo" 
             className="w-8 h-8 object-contain" 
-            src="/logo.png" 
+            src="/logo.svg" 
           />
           <span className="font-headline-lg text-xl md:text-headline-lg font-bold text-deep-navy tracking-tight">
-            {isAdminPage ? "Admin Panel" : "Lumina"}
+            {isAdminPage ? "Admin Panel" : "PrismVideo"}
           </span>
         </Link>
       </div>

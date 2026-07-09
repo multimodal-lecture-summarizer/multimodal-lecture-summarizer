@@ -381,7 +381,7 @@ export const LandingPage: React.FC = () => {
       <footer className="bg-surface-container-lowest text-secondary font-body-sm text-sm border-t border-outline-variant">
         <div className="flex flex-col md:flex-row justify-between items-center px-6 md:px-margin-desktop py-8 w-full max-w-container-max mx-auto">
           <div className="flex flex-col gap-2 mb-6 md:mb-0">
-            <div className="font-label-md text-label-md font-bold text-deep-navy">Lumina</div>
+            <div className="font-label-md text-label-md font-bold text-deep-navy">PrismVideo</div>
             <p className="max-w-xs text-xs text-secondary">
               {t('landing.copyright')}
             </p>

@@ -25,8 +25,8 @@ except Exception:
 from ai_workers.core.celery_app import app
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
 from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
-from ai_workers.modules.visual.scene_detector import SceneDetector
-from ai_workers.modules.visual.semantic import SemanticAnalyzer
+from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
 from ai_workers.modules.fusion.timeline import TimelineBuilder
 from ai_workers.modules.fusion.summarizer import Summarizer
 
