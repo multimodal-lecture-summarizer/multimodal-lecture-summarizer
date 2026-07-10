@@ -4,6 +4,11 @@ import { UserRole } from "../types";
 import { useToast } from "../context/ToastContext";
 import { Skeleton } from "../components/Skeleton";
 import { useTranslation } from "react-i18next";
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  User, Shield, Lock, Video, CheckCircle2, 
+  AlertCircle, KeyRound, Mail, Settings 
+} from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
   const toast = useToast();
@@ -94,30 +99,12 @@ export const ProfilePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto min-h-screen">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Header Skeleton */}
-          <div className="bg-white border border-outline-variant rounded-xl p-6 flex flex-col sm:flex-row items-center gap-6 shadow-sm">
-            <Skeleton className="w-16 h-16 rounded-full" />
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-5 w-48 rounded-md" />
-              <Skeleton className="h-4 w-24 rounded-md" />
-            </div>
-          </div>
+      <div className="bg-[#FAF5FF] min-h-[calc(100vh-64px)] p-6 md:p-12 w-full flex justify-center">
+        <div className="max-w-4xl w-full space-y-6">
+          <Skeleton.Card className="rounded-[2rem] border-none shadow-sm h-[140px]" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
-              <Skeleton className="h-5 w-32 rounded-md" />
-              <div className="space-y-3 pt-2">
-                <Skeleton.Text lines={3} />
-              </div>
-            </div>
-            <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
-              <Skeleton className="h-5 w-32 rounded-md" />
-              <div className="space-y-3 pt-2">
-                <Skeleton className="h-8 w-full rounded-md" />
-                <Skeleton className="h-8 w-full rounded-md" />
-              </div>
-            </div>
+            <Skeleton.Card className="rounded-[2rem] border-none shadow-sm h-[300px]" />
+            <Skeleton.Card className="rounded-[2rem] border-none shadow-sm h-[300px]" />
           </div>
         </div>
       </div>
@@ -130,130 +117,189 @@ export const ProfilePage: React.FC = () => {
   const isAdmin = profile?.role.toLowerCase() === UserRole.ADMIN;
 
   return (
-    <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto min-h-screen">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="bg-[#FAF5FF] min-h-[calc(100vh-64px)] p-6 md:p-12 w-full flex justify-center relative overflow-hidden">
+      
+      {/* Background Blobs */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+
+      <div className="max-w-4xl w-full space-y-6 relative z-10">
         {/* Profile Card Header */}
-        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col sm:flex-row items-center gap-6 shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-deep-navy text-vibrant-cyan flex items-center justify-center font-bold text-xl uppercase border-2 border-outline-variant shadow-inner">
-            {initialLetter}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="glass-panel rounded-[2rem] p-8 flex flex-col sm:flex-row items-center gap-8 shadow-xl shadow-primary/5 border border-white/60"
+        >
+          <div className="relative">
+            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-primary to-indigo-600 text-white flex items-center justify-center font-black text-4xl shadow-lg shadow-primary/30 border-4 border-white">
+              {initialLetter}
+            </div>
+            {profile?.isActive && (
+              <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-full border-4 border-white flex items-center justify-center text-white" title="Active">
+                <CheckCircle2 size={16} />
+              </div>
+            )}
           </div>
-          <div className="text-center sm:text-left space-y-1">
-            <h2 className="text-lg font-bold text-deep-navy">{profile?.email || t("profile.default_name")}</h2>
-            <div className="flex justify-center sm:justify-start">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                isAdmin ? "bg-status-success/15 text-status-success border border-status-success/20" : "bg-vibrant-cyan/10 text-vibrant-cyan border border-vibrant-cyan/20"
+          
+          <div className="text-center sm:text-left space-y-3">
+            <h2 className="font-heading text-3xl font-black text-slate-900 tracking-tight">
+              {profile?.email || t("profile.default_name")}
+            </h2>
+            <div className="flex justify-center sm:justify-start gap-3">
+              <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm ${
+                isAdmin 
+                  ? "bg-gradient-to-r from-emerald-100 to-emerald-50 text-emerald-700 border border-emerald-200/50" 
+                  : "bg-gradient-to-r from-slate-100 to-white text-slate-700 border border-slate-200/50"
               }`}>
-                <span className="material-symbols-outlined text-sm">{isAdmin ? "security" : "person"}</span>
+                {isAdmin ? <Shield size={14} /> : <User size={14} />}
                 {isAdmin ? t("profile.role_admin") : t("profile.role_user")}
               </span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Profile Info Details Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Details Box */}
-          <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm flex flex-col justify-between">
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-deep-navy pb-2 border-b border-outline-variant/30 flex items-center gap-2">
-                <span className="material-symbols-outlined text-vibrant-cyan text-base">account_circle</span>
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+            className="glass-panel rounded-[2rem] p-8 shadow-sm flex flex-col justify-between border border-white/60"
+          >
+            <div className="space-y-6">
+              <h3 className="font-heading text-lg font-bold text-slate-900 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <User size={18} />
+                </div>
                 {t("profile.account_details")}
               </h3>
               
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">{t("profile.email")}</span>
-                  <span className="font-semibold text-deep-navy truncate max-w-[200px]">{profile?.email}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">{t("profile.uuid")}</span>
-                  <span className="font-mono-data text-[10px] text-deep-navy">{profile?.userId}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">{t("profile.status")}</span>
-                  <span className="inline-flex items-center gap-1 font-semibold text-status-success">
-                    <span className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></span>
-                    {t("profile.active")}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-white/50 px-4 py-3 rounded-xl border border-slate-100">
+                  <span className="text-sm text-slate-500 flex items-center gap-2">
+                    <Mail size={16} className="text-slate-400" />
+                    {t("profile.email")}
                   </span>
+                  <span className="font-bold text-slate-900 truncate max-w-[200px]">{profile?.email}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs py-1">
-                  <span className="text-secondary">{t("profile.system_role")}</span>
-                  <span className="font-semibold text-deep-navy">{isAdmin ? t("profile.admin") : t("profile.user")}</span>
+                
+                <div className="flex justify-between items-center bg-white/50 px-4 py-3 rounded-xl border border-slate-100">
+                  <span className="text-sm text-slate-500 flex items-center gap-2">
+                    <KeyRound size={16} className="text-slate-400" />
+                    {t("profile.uuid")}
+                  </span>
+                  <span className="font-mono text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{profile?.userId}</span>
+                </div>
+                
+                <div className="flex justify-between items-center bg-white/50 px-4 py-3 rounded-xl border border-slate-100">
+                  <span className="text-sm text-slate-500 flex items-center gap-2">
+                    <Settings size={16} className="text-slate-400" />
+                    {t("profile.system_role")}
+                  </span>
+                  <span className={`font-bold ${isAdmin ? 'text-emerald-600' : 'text-primary'}`}>
+                    {isAdmin ? t("profile.admin") : t("profile.user")}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Video Analysis Stats */}
-            <div className="mt-6 p-4 bg-background border border-outline-variant/60 rounded-xl flex items-center gap-4">
-              <span className="material-symbols-outlined text-vibrant-cyan text-3xl shrink-0">video_library</span>
-              <div>
-                <h4 className="text-lg font-bold text-deep-navy">{videoCount}</h4>
-                <p className="text-[11px] text-secondary">{t("profile.videos_analyzed")}</p>
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="mt-8 p-6 bg-primary/5 rounded-[1.5rem] flex items-center gap-5 border border-primary/20"
+            >
+              <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
+                <Video size={24} className="text-primary" />
               </div>
-            </div>
-          </div>
+              <div>
+                <h4 className="font-heading text-3xl font-black text-primary">{videoCount}</h4>
+                <p className="text-sm text-slate-600 font-bold">{t("profile.videos_analyzed")}</p>
+              </div>
+            </motion.div>
+          </motion.div>
 
-          {/* Change Password / Settings Box */}
-          <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-deep-navy pb-2 border-b border-outline-variant/30 flex items-center gap-2">
-              <span className="material-symbols-outlined text-vibrant-cyan text-base">lock</span>
+          {/* Change Password Box */}
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
+            className="glass-panel rounded-[2rem] p-8 shadow-sm border border-white/60"
+          >
+            <h3 className="font-heading text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-500 flex items-center justify-center">
+                <Lock size={18} />
+              </div>
               {t("profile.security_settings")}
             </h3>
             
-            <form onSubmit={handlePasswordChange} className="space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">{t("profile.old_pass")}</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none text-xs transition-all"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">{t("profile.new_pass")}</label>
-                <input
-                  type="password"
-                  placeholder={t("profile.new_pass_placeholder")}
-                  className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none text-xs transition-all"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-secondary">{t("profile.confirm_pass")}</label>
-                <input
-                  type="password"
-                  placeholder={t("profile.confirm_pass_placeholder")}
-                  className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:border-vibrant-cyan focus:ring-1 focus:ring-vibrant-cyan outline-none text-xs transition-all"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              {passwordMsg && (
-                <div className={`text-xs font-semibold flex items-center gap-1.5 pt-1 ${
-                  passwordMsg.type === "success" ? "text-status-success" : "text-error"
-                }`}>
-                  <span className="material-symbols-outlined text-sm">
-                    {passwordMsg.type === "success" ? "check_circle" : "info"}
-                  </span>
-                  {passwordMsg.text}
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">{t("profile.old_pass")}</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    className="w-full pl-11 pr-4 py-3 bg-white/60 border border-slate-200/60 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm transition-all shadow-sm"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    required
+                  />
                 </div>
-              )}
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">{t("profile.new_pass")}</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="password"
+                    placeholder={t("profile.new_pass_placeholder")}
+                    className="w-full pl-11 pr-4 py-3 bg-white/60 border border-slate-200/60 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm transition-all shadow-sm"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-600 ml-1">{t("profile.confirm_pass")}</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="password"
+                    placeholder={t("profile.confirm_pass_placeholder")}
+                    className="w-full pl-11 pr-4 py-3 bg-white/60 border border-slate-200/60 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm transition-all shadow-sm"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
 
-              <button
+              <AnimatePresence>
+                {passwordMsg && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                    className={`text-xs font-bold flex items-center gap-2 p-3 rounded-xl border ${
+                      passwordMsg.type === "success" 
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-100" 
+                        : "bg-red-50 text-red-500 border-red-100"
+                    }`}
+                  >
+                    {passwordMsg.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    {passwordMsg.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
-                className="w-full mt-2 py-2.5 bg-deep-navy hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                className="btn primary w-full mt-4 py-3 shadow-lg shadow-primary/20"
               >
                 {t("profile.update_pass")}
-              </button>
+              </motion.button>
             </form>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

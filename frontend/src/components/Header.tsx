@@ -2,6 +2,16 @@ import React from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../context/ToastContext';
+import { motion } from 'framer-motion';
+import { 
+  UploadCloud, 
+  LayoutDashboard, 
+  Settings, 
+  LogOut, 
+  Bell, 
+  Globe 
+} from 'lucide-react';
+
 interface HeaderProps {
   isLoggedIn?: boolean;
   onLogout?: () => void;
@@ -19,16 +29,18 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
   };
 
   return (
-    <header className="bg-surface-container-lowest flex justify-between items-center px-6 md:px-margin-desktop w-full h-16 sticky top-0 z-50 border-b border-outline-variant">
+    <header className="glass-panel flex justify-between items-center px-6 md:px-8 w-full h-16 sticky top-0 z-50">
       {/* Brand Logo */}
       <div className="flex items-center gap-3">
-        <Link to={isAdminPage ? "/admin" : "/"} className="flex items-center gap-3">
-          <img 
+        <Link to={isAdminPage ? "/admin" : "/"} className="flex items-center gap-3 group">
+          <motion.img 
+            whileHover={{ rotate: 180 }}
+            transition={{ duration: 0.5 }}
             alt="PrismVideo Logo" 
             className="w-8 h-8 object-contain" 
             src="/logo.svg" 
           />
-          <span className="font-headline-lg text-xl md:text-headline-lg font-bold text-deep-navy tracking-tight">
+          <span className="text-xl md:text-2xl font-heading font-bold text-slate-900 tracking-tight group-hover:text-primary transition-colors">
             {isAdminPage ? "Admin Panel" : "PrismVideo"}
           </span>
         </Link>
@@ -37,56 +49,35 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
       {/* Nav Links */}
       {!isAdminPage && (
         <nav className="hidden md:flex items-center gap-8 h-full">
-          <NavLink 
-            to="/" 
-            className={({ isActive }) => 
-              `font-label-md text-label-md transition-all duration-150 pb-1 ${
-                isActive 
-                  ? 'text-primary border-b-2 border-primary' 
-                  : 'text-secondary hover:text-primary'
-              }`
-            }
-          >
-            {t('header.dashboard')}
-          </NavLink>
-          <NavLink 
-            to="/history" 
-            className={({ isActive }) => 
-              `font-label-md text-label-md transition-all duration-150 pb-1 ${
-                isActive 
-                  ? 'text-primary border-b-2 border-primary' 
-                  : 'text-secondary hover:text-primary'
-              }`
-            }
-          >
-            {t('header.history')}
-          </NavLink>
-          {isLoggedIn && (
+          {[
+            { path: '/', label: t('header.dashboard') },
+            { path: '/history', label: t('header.history') },
+            ...(isLoggedIn ? [{ path: '/profile', label: t('header.account') }] : []),
+            { path: '/docs', label: t('header.docs') },
+          ].map((navItem) => (
             <NavLink 
-              to="/profile" 
+              key={navItem.path}
+              to={navItem.path} 
               className={({ isActive }) => 
-                `font-label-md text-label-md transition-all duration-150 pb-1 ${
-                  isActive 
-                    ? 'text-primary border-b-2 border-primary' 
-                    : 'text-secondary hover:text-primary'
+                `relative text-sm font-semibold transition-all duration-300 py-1 flex items-center ${
+                  isActive ? 'text-primary' : 'text-slate-500 hover:text-slate-900'
                 }`
               }
             >
-              {t('header.account')}
+              {({ isActive }) => (
+                <>
+                  {navItem.label}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute -bottom-1 left-0 right-0 h-[3px] bg-primary rounded-full"
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    />
+                  )}
+                </>
+              )}
             </NavLink>
-          )}
-          <NavLink 
-            to="/docs" 
-            className={({ isActive }) => 
-              `font-label-md text-label-md transition-all duration-150 pb-1 ${
-                isActive 
-                  ? 'text-primary border-b-2 border-primary' 
-                  : 'text-secondary hover:text-primary'
-              }`
-            }
-          >
-            {t('header.docs')}
-          </NavLink>
+          ))}
         </nav>
       )}
 
@@ -96,49 +87,54 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
           <>
             {/* Quick Actions */}
             {!isAdminPage && (
-              <Link 
-                to="/upload" 
-                className="px-4 py-2 bg-deep-navy text-on-primary font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-all scale-active-95"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                <span className="hidden sm:inline">{t('header.upload_video')}</span>
-              </Link>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link 
+                  to="/upload" 
+                  className="btn primary !py-1.5 !px-4 !text-sm flex items-center gap-2 shadow-lg shadow-primary/20"
+                >
+                  <UploadCloud size={18} />
+                  <span className="hidden sm:inline">{t('header.upload_video')}</span>
+                </Link>
+              </motion.div>
             )}
 
             {isAdminPage && (
               <Link 
                 to="/" 
-                className="px-4 py-2 border border-slate-600 text-slate-600 font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
+                className="btn secondary !py-1.5 !px-3 !text-sm flex items-center gap-2"
               >
-                <span className="material-symbols-outlined text-[18px]">home</span>
+                <LayoutDashboard size={18} />
                 {t('header.dashboard')}
               </Link>
             )}
 
-            <button onClick={toggleLanguage} className="font-bold text-xs uppercase px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-high transition-colors text-deep-navy">
+            <button onClick={toggleLanguage} className="flex items-center gap-1 font-bold text-xs uppercase px-2 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-700 cursor-pointer">
+              <Globe size={14} />
               {i18n.language.startsWith('en') ? 'EN' : 'VI'}
             </button>
 
-            <button className="text-secondary hover:text-primary p-1.5 transition-colors hidden sm:block">
-              <span className="material-symbols-outlined">notifications</span>
+            <button className="text-slate-400 hover:text-primary p-2 rounded-full hover:bg-primary-light transition-all hidden sm:block cursor-pointer">
+              <Bell size={20} />
             </button>
             
-            <Link to="/admin" className="text-secondary hover:text-primary p-1.5 transition-colors hidden sm:block" title="Admin Settings">
-              <span className="material-symbols-outlined">settings</span>
+            <Link to="/admin" className="text-slate-400 hover:text-primary p-2 rounded-full hover:bg-primary-light transition-all hidden sm:block cursor-pointer" title="Admin Settings">
+              <Settings size={20} />
             </Link>
 
             {/* Profile Avatar */}
-            <Link 
-              to="/profile" 
-              className="w-10 h-10 rounded-full overflow-hidden border border-outline-variant bg-surface-container-high transition-transform hover:scale-105"
-            >
-              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                <circle cx="50" cy="50" r="48" fill="none" stroke="#e0e3e5" stroke-width="2"/>
-                <path d="M50 55 C35 55 25 65 25 75 L25 80 L75 80 L75 75 C75 65 65 55 50 55 Z" fill="#0f172a"/>
-                <circle cx="50" cy="35" r="15" fill="#0f172a"/>
-                <circle cx="80" cy="80" r="8" fill="#10B981" stroke="#ffffff" stroke-width="2"/>
-              </svg>
-            </Link>
+            <motion.div whileHover={{ scale: 1.1 }}>
+              <Link 
+                to="/profile" 
+                className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-md bg-slate-100 flex block"
+              >
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                  <circle cx="50" cy="50" r="48" fill="#f8fafc" />
+                  <path d="M50 55 C35 55 25 65 25 75 L25 80 L75 80 L75 75 C75 65 65 55 50 55 Z" fill="#6366f1"/>
+                  <circle cx="50" cy="35" r="15" fill="#6366f1"/>
+                  <circle cx="80" cy="80" r="8" fill="#10B981" stroke="#ffffff" strokeWidth="2"/>
+                </svg>
+              </Link>
+            </motion.div>
 
             {/* Logout Button */}
             <button 
@@ -146,26 +142,27 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
                 if (onLogout) onLogout();
                 toast.success("Đăng xuất thành công!", "Thành công");
               }} 
-              className="text-secondary hover:text-error p-1.5 transition-colors"
+              className="text-slate-400 hover:text-danger p-2 rounded-full hover:bg-danger-bg transition-all cursor-pointer"
               title="Đăng xuất"
             >
-              <span className="material-symbols-outlined">logout</span>
+              <LogOut size={20} />
             </button>
           </>
         ) : (
           <>
-            <button onClick={toggleLanguage} className="font-bold text-xs uppercase px-2 py-1 border border-outline-variant rounded hover:bg-surface-container-high transition-colors text-deep-navy">
+            <button onClick={toggleLanguage} className="flex items-center gap-1 font-bold text-xs uppercase px-2 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-700 cursor-pointer">
+              <Globe size={14} />
               {i18n.language.startsWith('en') ? 'EN' : 'VI'}
             </button>
             <Link 
               to="/auth" 
-              className="px-4 py-2 border border-slate-600 text-slate-600 font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:bg-slate-100 transition-all"
+              className="btn secondary !py-1.5 !px-4 !text-sm"
             >
               {t('header.login')}
             </Link>
             <Link 
               to="/auth" 
-              className="px-4 py-2 bg-deep-navy text-on-primary font-label-md text-label-sm rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-all scale-active-95"
+              className="btn primary !py-1.5 !px-4 !text-sm shadow-lg shadow-primary/20"
             >
               {t('header.start_now')}
             </Link>

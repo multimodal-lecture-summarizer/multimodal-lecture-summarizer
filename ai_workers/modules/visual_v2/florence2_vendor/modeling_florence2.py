@@ -1423,6 +1423,7 @@ class Florence2LanguagePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_cache_class = False
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -2347,7 +2348,7 @@ class Florence2PreTrainedModel(PreTrainedModel):
         Retrieve language_model's attribute to check whether the model supports
         SDPA or not.
         """
-        return self.language_model._supports_sdpa
+        return getattr(self, "language_model", None) is not None and getattr(self.language_model, "_supports_sdpa", False)
 
 
 FLORENCE2_INPUTS_DOCSTRING = r"""
@@ -2532,6 +2533,8 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
     _tied_weights_keys = ["language_model.encoder.embed_tokens.weight", "language_model.decoder.embed_tokens.weight", "language_model.lm_head.weight"]
+    _supports_sdpa = True
+    _supports_cache_class = False
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
