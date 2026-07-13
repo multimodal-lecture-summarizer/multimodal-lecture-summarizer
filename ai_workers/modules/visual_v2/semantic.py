@@ -343,12 +343,58 @@ class SemanticAnalyzer:
             gc.collect()
             print("[Semantic] Florence-2 model released successfully.")
         
+    def extract_ocr_paddleocr(self, scenes: list[dict[str, Any]]):
+        """Extract text from scenes using PaddleOCR."""
+        if not scenes:
+            return
+            
+        try:
+            print("[Semantic] Loading PaddleOCR model...")
+            # We import here to avoid slow loading if not needed
+            from paddleocr import PaddleOCR
+            import logging
+            logging.getLogger("ppocr").setLevel(logging.WARNING) # Suppress noisy logs
+            
+            try:
+                ocr = PaddleOCR(use_angle_cls=True, lang='vi', use_gpu=torch.cuda.is_available())
+            except Exception as init_err:
+                print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
+                ocr = PaddleOCR(lang='vi')
+            
+            for scene in scenes:
+                path = scene.get("keyframe_path")
+                if not path or not os.path.exists(path):
+                    scene["ocr_text"] = ""
+                    continue
+                
+                try:
+                    result = ocr.ocr(path, cls=True)
+                    text_blocks = []
+                    if result and result[0]:
+                        for line in result[0]:
+                            text_blocks.append(line[1][0])
+                    
+                    ocr_text = " | ".join(text_blocks)
+                    scene["ocr_text"] = ocr_text.strip()
+                except Exception as e:
+                    print(f"[Semantic] OCR Error for {path}: {e}")
+                    scene["ocr_text"] = ""
+                    
+            print(f"[Semantic] OCR extraction completed for {len(scenes)} scenes.")
+        except Exception as e:
+            print(f"[Semantic] Failed to load or run PaddleOCR: {e}")
+            for scene in scenes:
+                scene["ocr_text"] = ""
+                
     def process(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Full semantic pipeline: CLIP filtering -> Florence-2 captioning."""
+        """Full semantic pipeline: CLIP filtering -> Florence-2 captioning -> OCR."""
         # Step 1: Filter redundant scenes using CLIP
         filtered_scenes = self.filter_scenes_clip(scenes)
         
         # Step 2: Generate rich captions for the remaining scenes
         self.caption_scenes_florence2(filtered_scenes)
+        
+        # Step 3: Extract text from slides via OCR
+        self.extract_ocr_paddleocr(filtered_scenes)
         
         return filtered_scenes

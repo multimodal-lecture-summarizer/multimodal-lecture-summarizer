@@ -328,9 +328,10 @@ export const UploadPage: React.FC = () => {
                 <p className="text-slate-500 font-body mb-8">{t('upload.support_formats')}</p>
                 <button 
                   onClick={handleBrowseClick}
-                  className="btn primary shadow-lg shadow-primary/20"
+                  disabled={isProcessing}
+                  className="btn primary shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {t('upload.browse_files')}
+                  {isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : t('upload.browse_files')}
                 </button>
               </div>
             </motion.div>
@@ -390,10 +391,11 @@ export const UploadPage: React.FC = () => {
                 </div>
                 <button 
                   type="submit" 
-                  className="btn bg-slate-900 text-white hover:bg-slate-800 border-none w-full flex justify-center gap-2"
+                  disabled={isProcessing}
+                  className="btn bg-slate-900 text-white hover:bg-slate-800 border-none w-full flex justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <DownloadCloud size={18} />
-                  {t('upload.fetch_video')}
+                  {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <DownloadCloud size={18} />}
+                  {isProcessing ? t('upload.status_processing') : t('upload.fetch_video')}
                 </button>
               </form>
             </div>
@@ -498,9 +500,16 @@ export const UploadPage: React.FC = () => {
                         key={video.videoId} 
                         className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-primary/30 hover:shadow-md transition-all flex items-center gap-4 group"
                       >
-                        <div className="w-16 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200">
-                          <Film size={20} />
-                        </div>
+                        {video.scenes && video.scenes.length > 0 && video.scenes[0].keyframeUrl ? (
+                          <div className="w-16 h-12 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative">
+                            <img src={video.scenes[0].keyframeUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                          </div>
+                        ) : (
+                          <div className="w-16 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200">
+                            <Film size={20} />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <h4 className="font-bold text-slate-900 truncate text-sm">
                             {video.title || (video.originalUrl ? video.originalUrl : (video.r2Url ? (video.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (video.filePath && !video.filePath.includes('/stream') ? (video.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video bài giảng')))}

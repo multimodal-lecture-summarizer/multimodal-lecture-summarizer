@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface AuthPageProps {
   onLogin?: (userData: { email: string; role: string }) => void;
@@ -17,12 +17,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setIsLoading(true);
     
     try {
       const result = isLogin 
@@ -64,6 +66,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       const errMsg = error.message || t('auth.conn_error');
       setErrorMessage(errMsg);
       toast.error(errMsg, t('common.error'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -197,10 +201,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
               type="submit" 
-              className="btn primary w-full py-4 text-sm tracking-wide shadow-lg shadow-primary/20 mt-2"
+              disabled={isLoading}
+              className="btn primary w-full py-4 text-sm tracking-wide shadow-lg shadow-primary/20 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <span>{isLogin ? t('auth.btn_login') : t('auth.btn_register')}</span>
-              <ArrowRight size={18} />
+              {isLoading ? (
+                <Loader2 className="animate-spin mx-auto" size={20} />
+              ) : (
+                <>
+                  <span>{isLogin ? t('auth.btn_login') : t('auth.btn_register')}</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
             </motion.button>
             
             <div className="relative py-4">

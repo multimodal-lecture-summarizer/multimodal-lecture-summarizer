@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { HistoryItem } from '../types';
@@ -10,8 +10,63 @@ import { parseUTCDate } from '../utils/dateUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Play, StopCircle, AlertCircle, Download, Trash2, 
-  Calendar, Clock, CheckCircle2, Loader2, CloudUpload, Sparkles
+  Calendar, Clock, CheckCircle2, Loader2, CloudUpload, Sparkles, ChevronDown
 } from 'lucide-react';
+
+const CustomSelect = ({ value, onChange, options, className }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find((opt: any) => opt.value === value) || options[0];
+
+  return (
+    <div className={`relative ${className || ''}`} ref={dropdownRef}>
+      <button 
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full h-full min-h-[48px] bg-white/50 border border-slate-100 hover:bg-white text-slate-700 font-semibold rounded-xl px-4 text-sm outline-none transition-colors flex items-center justify-between gap-2"
+      >
+        <span className="truncate">{selectedOption?.label}</span>
+        <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 top-full mt-2 w-full left-0 bg-white rounded-xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden py-1"
+          >
+            {options.map((opt: any) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === opt.value ? 'bg-primary/10 text-primary font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -155,10 +210,10 @@ export const HistoryPage: React.FC = () => {
           </div>
 
           {/* Filters Bar */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-2 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-4 gap-2">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-2 rounded-xl grid grid-cols-1 md:grid-cols-4 gap-2 relative z-50">
             <div className="md:col-span-2 relative">
               <input 
-                className="w-full pl-12 pr-4 py-3.5 bg-white/50 border-none rounded-xl focus:ring-2 focus:ring-primary/20 outline-none transition-all font-body text-sm" 
+                className="w-full h-full min-h-[48px] pl-12 pr-4 bg-white/50 border-none rounded-xl focus:ring-2 focus:ring-primary/20 outline-none transition-all font-body text-sm" 
                 placeholder={t('history.search_placeholder')} 
                 type="text"
                 value={searchQuery}
@@ -167,29 +222,31 @@ export const HistoryPage: React.FC = () => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             </div>
             
-            <select 
+            <CustomSelect
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white/50 border-none hover:bg-white text-slate-700 font-semibold rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-colors"
-            >
-              <option value="newest">{t('history.sort_newest')}</option>
-              <option value="oldest">{t('history.sort_oldest')}</option>
-            </select>
+              onChange={(val: string) => setSortBy(val)}
+              options={[
+                { value: 'newest', label: t('history.sort_newest') },
+                { value: 'oldest', label: t('history.sort_oldest') }
+              ]}
+              className="z-40"
+            />
 
-            <select 
+            <CustomSelect
               value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
+              onChange={(val: string) => {
+                setSelectedStatus(val);
                 setCurrentPage(1);
               }}
-              className="bg-white/50 border-none hover:bg-white text-slate-700 font-semibold rounded-xl px-4 py-3.5 text-sm focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-colors"
-            >
-              <option value="All">{t('history.status_all')}</option>
-              <option value="pending">{t('history.status_pending')}</option>
-              <option value="processing">{t('history.status_processing')}</option>
-              <option value="done">{t('history.status_done')}</option>
-              <option value="failed">{t('history.status_failed')}</option>
-            </select>
+              options={[
+                { value: 'All', label: t('history.status_all') },
+                { value: 'pending', label: t('history.status_pending') },
+                { value: 'processing', label: t('history.status_processing') },
+                { value: 'done', label: t('history.status_done') },
+                { value: 'failed', label: t('history.status_failed') }
+              ]}
+              className="z-30"
+            />
           </motion.div>
         </header>
 
@@ -198,7 +255,7 @@ export const HistoryPage: React.FC = () => {
           {loading ? (
             Array.from({ length: 6 }).map((_, idx) => (
               <motion.div key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.1 }}>
-                <Skeleton.Card className="rounded-[2rem] border-none shadow-sm" />
+                <Skeleton.Card className="rounded-2xl border-none shadow-sm" />
               </motion.div>
             ))
           ) : (
@@ -219,7 +276,7 @@ export const HistoryPage: React.FC = () => {
                     onClick={() => {
                       if (isDone) navigate(`/results?videoId=${item.id}`);
                     }}
-                    className={`group glass-panel rounded-[2rem] overflow-hidden transition-all duration-300 flex flex-col hover:-translate-y-1 hover:shadow-xl ${
+                    className={`group glass-panel rounded-2xl overflow-hidden transition-all duration-300 flex flex-col hover:-translate-y-1 hover:shadow-xl ${
                       isFailed ? 'border-red-200/50 hover:border-red-300 hover:shadow-red-500/10' : 
                       isProcessing ? 'border-blue-200/50 hover:border-blue-300 hover:shadow-blue-500/10' : 
                       'border-white/40 hover:border-primary/40 hover:shadow-primary/10 cursor-pointer'
@@ -319,50 +376,44 @@ export const HistoryPage: React.FC = () => {
                       </div>
 
                       {/* Actions */}
-                      <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-2">
-                          {isDone ? (
-                            <button className="w-10 h-10 flex items-center justify-center text-primary bg-primary/10 hover:bg-primary hover:text-white rounded-xl transition-colors" title="Xem kết quả">
-                              <Play size={18} fill="currentColor" />
-                            </button>
-                          ) : isProcessing ? (
-                            <button 
-                              onClick={() => item.jobId && handleCancelJob(item.jobId)}
-                              className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-colors" 
-                              title="Dừng tác vụ"
-                              disabled={!item.jobId}
-                            >
-                              <StopCircle size={20} />
-                            </button>
-                          ) : (
-                            <button disabled className="w-10 h-10 flex items-center justify-center text-red-300 bg-red-50/50 rounded-xl cursor-not-allowed">
-                              <AlertCircle size={20} />
-                            </button>
-                          )}
-                          
+                      <div className="mt-auto pt-4 flex items-center justify-start gap-2 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                        {isProcessing ? (
                           <button 
-                            onClick={() => {
-                              if (isDone) {
-                                api.exportSummary(item.id, 'pdf')
-                                  .then(blob => {
-                                    const url = window.URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `summary_${item.id}.pdf`;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    a.remove();
-                                  })
-                                  .catch(err => toast.error(`${t('history.toast_pdf_err')}${err.message}`, t('history.toast_fail')));
-                              }
-                            }}
-                            className="w-10 h-10 flex items-center justify-center text-slate-500 bg-slate-100 hover:bg-primary hover:text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-                            title="Tải báo cáo PDF"
-                            disabled={!isDone}
+                            onClick={() => item.jobId && handleCancelJob(item.jobId)}
+                            className="w-10 h-10 flex items-center justify-center text-red-500 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-colors" 
+                            title="Dừng tác vụ"
+                            disabled={!item.jobId}
                           >
-                            <Download size={18} />
+                            <StopCircle size={20} />
                           </button>
-                        </div>
+                        ) : isFailed ? (
+                          <button disabled className="w-10 h-10 flex items-center justify-center text-red-300 bg-red-50/50 rounded-xl cursor-not-allowed">
+                            <AlertCircle size={20} />
+                          </button>
+                        ) : null}
+                        
+                        <button 
+                          onClick={() => {
+                            if (isDone) {
+                              api.exportSummary(item.id, 'pdf')
+                                .then(blob => {
+                                  const url = window.URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `summary_${item.id}.pdf`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  a.remove();
+                                })
+                                .catch(err => toast.error(`${t('history.toast_pdf_err')}${err.message}`, t('history.toast_fail')));
+                            }
+                          }}
+                          className="w-10 h-10 flex items-center justify-center text-slate-500 bg-slate-100 hover:bg-primary hover:text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                          title="Tải báo cáo PDF"
+                          disabled={!isDone}
+                        >
+                          <Download size={18} />
+                        </button>
                         
                         <button 
                           onClick={() => handleDelete(item.id)}
@@ -381,7 +432,7 @@ export const HistoryPage: React.FC = () => {
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                   onClick={() => navigate('/upload')}
-                  className="col-span-full border-2 border-dashed border-primary/30 rounded-[2rem] flex flex-col items-center justify-center p-12 text-center bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer group min-h-[300px]"
+                  className="col-span-full border-2 border-dashed border-primary/30 rounded-2xl flex flex-col items-center justify-center p-12 text-center bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer group min-h-[300px]"
                 >
                   <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-md shadow-primary/10">
                     <CloudUpload size={32} className="text-primary" />
