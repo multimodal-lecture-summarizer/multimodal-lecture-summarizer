@@ -24,9 +24,8 @@ class Summarizer:
         # Fallback models in priority order
         self.models_list = [
             "llama-3.1-8b-instant",
-            "gemma2-9b-it",
-            "mixtral-8x7b-32768",
-            "llama-3.3-70b-versatile"
+            "llama-3.3-70b-versatile",
+            "llama3-70b-8192"
         ]
 
     def build_rag_index(self, utterances: list[dict], slides: list[dict]) -> None:
@@ -72,8 +71,16 @@ class Summarizer:
         for slide in slides:
             timecode = slide.get("start_timecode", "00:00:00")
             caption = slide.get("caption", "").strip()
+            ocr_text = slide.get("ocr_text", "").strip()
+            
+            desc_parts = []
             if caption and caption != "[Nhạc nền / Im lặng]":
-                visual_descriptions.append(f"[{timecode}] {caption}")
+                desc_parts.append(f"Image: {caption}")
+            if ocr_text:
+                desc_parts.append(f"Text on slide: {ocr_text}")
+                
+            if desc_parts:
+                visual_descriptions.append(f"[{timecode}] " + " | ".join(desc_parts))
         visual_text = "\n".join(visual_descriptions)
 
         # Bail out only if BOTH transcript and visual data are empty
@@ -109,29 +116,36 @@ class Summarizer:
 
         prompt = f"""
         You are a professional AI assistant tasked with summarizing lecture or informational videos.
-        Analyze the following audio transcript AND visual keyframe descriptions to:
-        1. Create a detailed video summary in plain text format (do NOT use markdown syntax like #, ##, **, -, *, etc. Use standard paragraphs and clear spacing, around 300-500 words).
-        2. Automatically generate a concise, descriptive title for this video (video_title - a short string of 5-10 words, in the same language as the content).
-        3. Automatically divide the video into logical chapters. The chapters MUST be segmented based on slide changes (Visual Context keyframe timestamps) and semantic topic transitions in the speech. Do NOT segment chapters by fixed time intervals (e.g., every 5 minutes). Each chapter must contain:
+        Analyze the following audio transcript AND visual keyframe descriptions. 
+        
+        Before generating the final summary, you MUST perform a step-by-step analysis (Chain of Thought).
+        1. Step 1: Map the speaker's main points to the visual text (OCR) and images shown on screen.
+        2. Step 2: Identify the core topics and how they transition over time.
+        
+        After your analysis, generate:
+        1. A detailed video summary in plain text format (around 300-500 words).
+        2. A concise, descriptive title for this video (video_title - 5-10 words, in the same language as the content).
+        3. Logical chapters segmented based on slide changes (Visual Context timestamps) and semantic topic transitions. Each chapter must contain:
            - Chapter title (title)
-           - Start time (startTime - in seconds, as float/int)
-           - End time (endTime - in seconds, as float/int)
-           - Brief chapter summary (summary - about 1-2 sentences)
+           - Start time (startTime - in seconds)
+           - End time (endTime - in seconds)
+           - Brief chapter summary (summary - 1-2 sentences)
 
         CRITICAL CONSTRAINTS FOR CHAPTERS:
         - The total duration of this video is {duration} seconds ({formatted_duration}).
         - You MUST NOT generate any chapters with an endTime greater than {duration}.
         - The last chapter's endTime MUST be exactly {duration}.
-        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts (e.g. [Nhạc nền / Im lặng]).
+        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts.
 
         Audio Transcript (with timestamps):
         {transcript if transcript.strip() else "[No speech detected]"}
 
-        Visual Context (Descriptions of key scenes at specific timestamps):
+        Visual Context (Descriptions & OCR of key scenes at specific timestamps):
         {visual_text if visual_text else "[No visual descriptions available]"}
 
-        Please return the result in the following STRICT JSON format (with no other explanations outside the JSON):
+        Please return the result in the following STRICT JSON format:
         {{
+            "analysis": "Keep this concise (max 150 words). Step-by-step reasoning and mapping of audio to visual concepts...",
             "video_title": "Concise Descriptive Video Title Here",
             "summary": "Plain text summary content here...",
             "chapters": [

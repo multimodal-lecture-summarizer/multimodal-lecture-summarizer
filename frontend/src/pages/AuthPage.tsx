@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Lock, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface AuthPageProps {
   onLogin?: (userData: { email: string; role: string }) => void;
@@ -15,168 +17,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let animationFrameId: number;
-
-    const gl = (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
-    if (!gl) return;
-
-    const resizeCanvas = () => {
-      const w = window.innerWidth || 1280;
-      const h = window.innerHeight || 720;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-      }
-      gl.viewport(0, 0, canvas.width, canvas.height);
-    };
-
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    const vsSource = `
-      attribute vec2 a_position;
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
-      }
-    `;
-
-    const fsSource = `
-      precision highp float;
-      uniform float u_time;
-      uniform vec2 u_resolution;
-
-      void main() {
-          vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-          float t = u_time * 0.15;
-          
-          // Light-themed academic palette
-          vec3 color1 = vec3(0.95, 0.96, 0.98); // Very light slate/surface
-          vec3 color2 = vec3(0.92, 0.94, 0.96); // Soft gray-blue
-          vec3 accent = vec3(0.02, 0.71, 0.83); // Vibrant Cyan (normalized)
-          
-          // Smooth flowing motion
-          float waves = sin(uv.x * 8.0 + t) * cos(uv.y * 6.0 - t * 0.5) * 0.5 + 0.5;
-          vec3 baseColor = mix(color1, color2, waves);
-          
-          // Subtle digital grid
-          vec2 grid = fract(uv * 35.0);
-          float line = smoothstep(0.0, 0.03, grid.x) * smoothstep(0.0, 0.03, grid.y);
-          baseColor = mix(baseColor, baseColor - 0.02, 1.0 - line);
-          
-          // Very faint light pulses
-          float pulse = sin(uv.x * 3.0 - t * 2.0) * cos(uv.y * 2.0 + t) * 0.5 + 0.5;
-          baseColor = mix(baseColor, mix(baseColor, accent, 0.03), pulse * 0.2);
-
-          gl_FragColor = vec4(baseColor, 1.0);
-      }
-    `;
-
-    const compileShader = (source: string, type: number) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = compileShader(vsSource, gl.VERTEX_SHADER);
-    const fs = compileShader(fsSource, gl.FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram();
-    if (!program) return;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program linking error:', gl.getProgramInfoLog(program));
-      return;
-    }
-
-    gl.useProgram(program);
-
-    // Quad buffer
-    const vertices = new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-       1,  1,
-    ]);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-    const positionLoc = gl.getAttribLocation(program, 'a_position');
-    gl.enableVertexAttribArray(positionLoc);
-    gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
-
-    const uTimeLoc = gl.getUniformLocation(program, 'u_time');
-    const uResolutionLoc = gl.getUniformLocation(program, 'u_resolution');
-
-    const render = (time: number) => {
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.uniform1f(uTimeLoc, time * 0.001);
-      gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      animationFrameId = requestAnimationFrame(render);
-    };
-
-    animationFrameId = requestAnimationFrame(render);
-
-    return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      cancelAnimationFrame(animationFrameId);
-      gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteBuffer(buffer);
-    };
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setIsLoading(true);
     
-    // Try to authenticate against the real backend API
     try {
       const result = isLogin 
         ? await api.login(email, password)
         : await api.register(email, password);
 
       if (result.success && result.data) {
-        // If it was register, we might need to log in first or we get token directly
-        // Let's assume login is needed or the response contains token (api.ts registers via POST /auth/register and returns BaseDTO[UserDTO], let's check login if it was login)
         let token = result.data.accessToken;
         
         if (!isLogin) {
-          // Auto login after registration
           const loginRes = await api.login(email, password);
           token = loginRes.data.accessToken;
         }
 
         if (token) {
           localStorage.setItem('token', token);
-          // Fetch user profile to get the role
           const profileResult = await api.getMe();
           if (profileResult.success && profileResult.data) {
             const userData = {
               email: profileResult.data.email,
-              role: profileResult.data.role.toLowerCase(), // admin or user
+              role: profileResult.data.role.toLowerCase(),
             };
             if (onLogin) onLogin(userData);
             toast.success(isLogin ? t('auth.login_success') : t('auth.register_success'), t('common.success'));
@@ -197,64 +66,109 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       const errMsg = error.message || t('auth.conn_error');
       setErrorMessage(errMsg);
       toast.error(errMsg, t('common.error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const mockSocialLogin = (provider: string) => {
+    const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
+    const defaultEmail = provider === 'google' ? 'google_researcher@gmail.com' : 'github_researcher@gmail.com';
+    const userData = { email: email || defaultEmail, role: role };
+    if (onLogin) onLogin(userData); 
+    toast.success(provider === 'google' ? t('auth.google_success') : t('auth.github_success'), t('common.success'));
+    if (role === 'admin') {
+      navigate('/admin');
+    } else {
+      navigate('/history');
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] w-full flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden bg-background">
-      <canvas ref={canvasRef} className="fixed inset-0 w-full h-full -z-10 pointer-events-none" />
+    <div className="min-h-[calc(100vh-64px)] w-full flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden bg-[#FAF5FF]">
+      
+      {/* Animated Background Blobs */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <motion.div 
+          animate={{ x: [0, 100, 0], y: [0, -50, 0] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+          className="absolute -top-[20%] -left-[10%] w-[50vw] h-[50vw] rounded-full bg-primary/20 blur-[120px]" 
+        />
+        <motion.div 
+          animate={{ x: [0, -100, 0], y: [0, 50, 0] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[40%] -right-[10%] w-[40vw] h-[40vw] rounded-full bg-indigo-500/10 blur-[100px]" 
+        />
+      </div>
 
-      <header className="relative z-10 w-full flex justify-center pb-8 shrink-0">
-        <div className="flex flex-col items-center gap-2">
-          <span className="font-headline-lg text-2xl font-bold text-deep-navy tracking-tight">Lumina</span>
-          <span className="font-label-sm text-xs uppercase tracking-widest text-slate-600 font-semibold opacity-80">{t('auth.portal')}</span>
+      <motion.header 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-10 w-full flex justify-center pb-8 shrink-0"
+      >
+        <div className="flex flex-col items-center gap-1">
+          <span className="font-heading text-3xl font-black text-slate-900 tracking-tight">PrismVideo</span>
+          <span className="text-xs uppercase tracking-[0.3em] text-primary font-bold">{t('auth.portal')}</span>
         </div>
-      </header>
+      </motion.header>
 
-      <div className="w-full max-w-[480px] bg-white/85 border border-outline-variant rounded-2xl overflow-hidden flex flex-col shadow-lg relative z-10 glass-panel">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.1 }}
+        className="w-full max-w-[480px] glass-panel rounded-[2rem] overflow-hidden flex flex-col shadow-xl shadow-primary/5 relative z-10"
+      >
         {/* Tab switchers */}
-        <div className="flex border-b border-outline-variant bg-white/40 shrink-0">
+        <div className="flex border-b border-slate-200/50 bg-white/40">
           <button 
             type="button"
-            className={`flex-1 py-5 font-label-md text-sm font-semibold transition-all ${
-              isLogin 
-                ? 'text-deep-navy border-b-2 border-vibrant-cyan bg-white/60' 
-                : 'text-secondary border-b-2 border-transparent hover:bg-white/40'
-            }`} 
+            className="flex-1 py-5 text-sm font-bold relative transition-colors" 
             onClick={() => setIsLogin(true)}
           >
-            {t('auth.login')}
+            <span className={`relative z-10 ${isLogin ? 'text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
+              {t('auth.login')}
+            </span>
+            {isLogin && <motion.div layoutId="activeAuthTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
           </button>
           <button 
             type="button"
-            className={`flex-1 py-5 font-label-md text-sm font-semibold transition-all ${
-              !isLogin 
-                ? 'text-deep-navy border-b-2 border-vibrant-cyan bg-white/60' 
-                : 'text-secondary border-b-2 border-transparent hover:bg-white/40'
-            }`} 
+            className="flex-1 py-5 text-sm font-bold relative transition-colors" 
             onClick={() => setIsLogin(false)}
           >
-            {t('auth.register')}
+            <span className={`relative z-10 ${!isLogin ? 'text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
+              {t('auth.register')}
+            </span>
+            {!isLogin && <motion.div layoutId="activeAuthTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
           </button>
         </div>
 
-        <div className="p-8 md:p-10 flex-grow">
-          {errorMessage && (
-            <div className="p-3 bg-red-50 text-error text-xs rounded-xl border border-red-200 mb-4 font-semibold">
-              {errorMessage}
-            </div>
-          )}
+        <div className="p-8 md:p-10 flex-grow bg-white/60">
+          <AnimatePresence mode="wait">
+            {errorMessage && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 bg-red-50 text-red-600 text-xs rounded-xl border border-red-200 font-bold flex items-center gap-2">
+                  <ShieldCheck size={16} />
+                  {errorMessage}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex flex-col gap-2">
-                <label className="font-label-sm text-xs text-on-surface-variant font-bold">{t('auth.email_label')}</label>
+                <label className="text-xs text-slate-700 font-bold ml-1">{t('auth.email_label')}</label>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-vibrant-cyan transition-colors text-xl">alternate_email</span>
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
                   <input 
                     type="email" 
                     placeholder={t('auth.email_placeholder')} 
-                    className="w-full pl-10 pr-4 py-3 bg-white/90 border border-outline-variant rounded-xl font-body-md text-sm placeholder:text-outline-variant focus:border-vibrant-cyan focus:bg-white transition-all text-on-surface outline-none"
+                    className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200/60 rounded-2xl font-body text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-900 outline-none shadow-sm"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required 
@@ -263,18 +177,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               </div>
               
               <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <label className="font-label-sm text-xs text-on-surface-variant font-bold">{t('auth.password_label')}</label>
+                <div className="flex justify-between items-center ml-1 mr-1">
+                  <label className="text-xs text-slate-700 font-bold">{t('auth.password_label')}</label>
                   {isLogin && (
-                    <a href="#forgot" className="text-[11px] font-label-md text-vibrant-cyan hover:underline font-bold">{t('auth.forgot_password')}</a>
+                    <a href="#forgot" className="text-[11px] text-primary hover:text-primary-hover font-bold transition-colors">{t('auth.forgot_password')}</a>
                   )}
                 </div>
                 <div className="relative group">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-vibrant-cyan transition-colors text-xl">lock</span>
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
                   <input 
                     type="password" 
                     placeholder={t('auth.password_placeholder')} 
-                    className="w-full pl-10 pr-4 py-3 bg-white/90 border border-outline-variant rounded-xl font-body-md text-sm placeholder:text-outline-variant focus:border-vibrant-cyan focus:bg-white transition-all text-on-surface outline-none"
+                    className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200/60 rounded-2xl font-body text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-900 outline-none shadow-sm"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required 
@@ -283,36 +197,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               </div>
             </div>
             
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               type="submit" 
-              className="w-full bg-deep-navy text-white font-bold text-xs uppercase tracking-wider py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-[0.98] shadow-md hover:shadow-lg"
+              disabled={isLoading}
+              className="btn primary w-full py-4 text-sm tracking-wide shadow-lg shadow-primary/20 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <span>{isLogin ? t('auth.btn_login') : t('auth.btn_register')}</span>
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </button>
+              {isLoading ? (
+                <Loader2 className="animate-spin mx-auto" size={20} />
+              ) : (
+                <>
+                  <span>{isLogin ? t('auth.btn_login') : t('auth.btn_register')}</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </motion.button>
             
-            <div className="relative py-2">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-outline-variant/50"></div></div>
-              <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
-                <span className="bg-white px-4 text-outline-variant font-bold">{t('auth.system_link')}</span>
+            <div className="relative py-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200/60"></div></div>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-bold">
+                <span className="bg-[#FAF5FF] px-4 text-slate-400">{t('auth.system_link')}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <button 
                 type="button"
-                className="flex items-center justify-center gap-3 py-3 px-4 border border-outline-variant rounded-xl bg-white/70 hover:bg-white transition-all font-semibold text-xs text-on-surface shadow-sm active:scale-95"
-                onClick={() => {
-                  const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
-                  const userData = { email: email || 'google_researcher@gmail.com', role: role };
-                  if (onLogin) onLogin(userData); 
-                  toast.success(t('auth.google_success'), t('common.success'));
-                  if (role === 'admin') {
-                    navigate('/admin');
-                  } else {
-                    navigate('/history');
-                  }
-                }}
+                className="flex items-center justify-center gap-2.5 py-3.5 px-4 border border-slate-200/60 rounded-xl bg-white hover:bg-slate-50 hover:border-primary/50 transition-all shadow-sm font-bold text-xs text-slate-700"
+                onClick={() => mockSocialLogin('google')}
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path fill="#ea4335" d="M12 5.04c1.62 0 3.08.56 4.22 1.65l3.16-3.16C17.47 1.7 14.93 1 12 1 7.37 1 3.4 3.63 1.45 7.45l3.77 2.92C6.12 7.14 8.84 5.04 12 5.04z" />
@@ -325,31 +238,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               
               <button 
                 type="button"
-                className="flex items-center justify-center gap-3 py-3 px-4 border border-outline-variant rounded-xl bg-white/70 hover:bg-white transition-all font-semibold text-xs text-on-surface shadow-sm active:scale-95"
-                onClick={() => {
-                  const role = email.trim().toLowerCase() === 'hungphitran.22@gmail.com' ? 'admin' : 'user';
-                  const userData = { email: email || 'github_researcher@gmail.com', role: role };
-                  if (onLogin) onLogin(userData); 
-                  toast.success(t('auth.github_success'), t('common.success'));
-                  if (role === 'admin') {
-                    navigate('/admin');
-                  } else {
-                    navigate('/history');
-                  }
-                }}
+                className="flex items-center justify-center gap-2.5 py-3.5 px-4 border border-slate-200/60 rounded-xl bg-white hover:bg-slate-50 hover:border-primary/50 transition-all shadow-sm font-bold text-xs text-slate-700"
+                onClick={() => mockSocialLogin('github')}
               >
-                <img alt="GitHub" className="w-4 h-4 shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARxcBrwcxfhViS14Xn10JUdMUx4yzH2sX7wJUP2c1sfvbvTLPdvNAWRQF8RpUmr4RmFZO87nEJfvZoQh07OxhgeQfAUJ6XSnJ05NQfnlapcLDQ5WLXEBdKlgIkplWNhxrtOB6lvy12HMmvia_3MBt3y7XFmYL3eOrpeekZ-QfmeI-thsqAEE94m0SkFadj--IjuVqXjMS_VzGg3vyz1-a_DuEz_1fhfj8UegUYV9SXZtDanubQBzWg"/>
+                <svg className="w-4 h-4 shrink-0 text-slate-800" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                </svg>
                 <span>{t('auth.github_login')}</span>
               </button>
             </div>
           </form>
         </div>
 
-        <div className="bg-white/40 px-8 py-5 flex items-center justify-center gap-2 border-t border-outline-variant/30 shrink-0">
-          <span className="material-symbols-outlined text-status-success text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
-          <span className="font-label-sm text-xs text-on-surface-variant font-medium">{t('auth.encrypted_env')}</span>
+        <div className="bg-emerald-50/50 px-8 py-4 flex items-center justify-center gap-2 border-t border-slate-200/50 shrink-0">
+          <ShieldCheck className="text-emerald-500" size={16} />
+          <span className="text-[11px] text-emerald-700 font-bold uppercase tracking-widest">{t('auth.encrypted_env')}</span>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

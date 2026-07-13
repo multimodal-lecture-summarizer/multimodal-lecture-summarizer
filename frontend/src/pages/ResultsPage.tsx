@@ -359,7 +359,7 @@ export const ResultsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
+      <div className="bg-[#FAF5FF] text-slate-900 p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
         {/* Top actions bar skeleton */}
         <div className="flex justify-between items-center py-4 border-b border-slate-200 animate-pulse">
           <div className="flex gap-2">
@@ -406,12 +406,12 @@ export const ResultsPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex flex-col justify-center items-center h-[60vh] bg-background p-6 text-center">
-        <span className="material-symbols-outlined text-[48px] text-error mb-4">warning</span>
-        <p className="text-error font-bold max-w-md mb-6 text-sm">{error}</p>
+      <div className="flex flex-col justify-center items-center h-[60vh] bg-[#FAF5FF] p-6 text-center">
+        <span className="material-symbols-outlined text-[48px] text-danger mb-4">warning</span>
+        <p className="text-danger font-bold max-w-md mb-6 text-sm">{error}</p>
         <Link 
           to="/history" 
-          className="px-6 py-2 bg-deep-navy text-white rounded hover:bg-primary font-semibold text-sm transition-all"
+          className="px-6 py-2 bg-slate-900 text-white rounded hover:bg-primary font-semibold text-sm transition-all"
         >
           Quay lại Lịch sử
         </Link>
@@ -420,43 +420,43 @@ export const ResultsPage: React.FC = () => {
   }
 
   return (
-    <div className="bg-background text-on-surface p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
+    <div className="bg-[#FAF5FF] text-slate-900 p-6 md:p-margin-desktop max-w-container-max mx-auto space-y-8 min-h-screen">
       {/* Top Nav/Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-outline-variant/30">
+      <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-slate-200/50">
         <div className="flex items-center gap-2">
-          <Link to="/" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+          <Link to="/" className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">home</span> {t('results.home')}
           </Link>
-          <Link to="/history" className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+          <Link to="/history" className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">history</span> {t('results.history')}
           </Link>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => handleExport('pdf')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+          <button onClick={() => handleExport('pdf')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">picture_as_pdf</span> {t('results.export_pdf')}
           </button>
-          <button onClick={() => handleExport('txt')} className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container-high text-xs font-bold transition-all flex items-center gap-1.5 text-deep-navy">
+          <button onClick={() => handleExport('txt')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">description</span> {t('results.export_txt')}
           </button>
-          <Link to={`/qa?videoId=${videoId}`} className="px-4 py-2 bg-deep-navy text-white rounded-lg hover:opacity-90 text-xs font-bold transition-all flex items-center gap-1.5">
+          <Link to={`/qa?videoId=${videoId}`} className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:opacity-90 text-xs font-bold transition-all flex items-center gap-1.5">
             <span className="material-symbols-outlined text-sm">forum</span> {t('results.qa_rag')}
           </Link>
         </div>
       </div>
 
       {/* Main Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Left Column: Video Player & Transcripts */}
-        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col justify-between shadow-sm space-y-6">
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 flex flex-col justify-between shadow-sm space-y-6">
           <div>
-            <h2 className="font-headline-md text-lg font-bold text-deep-navy mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-error">play_circle</span>
+            <h2 className="font-headline-md text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">play_circle</span>
               {t('results.original_video')}
             </h2>
             
             {/* Player Container */}
             <div className="w-full mb-6">
-              <div className="relative group aspect-video bg-video-background rounded-lg overflow-hidden border border-outline-variant shadow-sm" id="videoContainer">
+              <div className="relative group aspect-video bg-black rounded-lg overflow-hidden border border-slate-200 shadow-sm" id="videoContainer">
                 <video 
                   ref={videoRef}
                   src={videoData?.filePath ? (videoData.filePath.startsWith('http') ? videoData.filePath : `${CONFIG.API_BASE_URL.replace('/api/v1', '')}${videoData.filePath}`) : ''} 
@@ -471,7 +471,7 @@ export const ResultsPage: React.FC = () => {
                 
                 {/* Center Play button */}
                 {!isPlaying && (
-                  <button onClick={togglePlay} className="absolute inset-0 m-auto w-14 h-14 bg-vibrant-cyan text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-20">
+                  <button onClick={togglePlay} className="absolute inset-0 m-auto w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-20">
                     <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
                   </button>
                 )}
@@ -481,7 +481,7 @@ export const ResultsPage: React.FC = () => {
                   <div className="w-full flex items-center">
                     <input 
                       type="range" 
-                      className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan" 
+                      className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-primary" 
                       min={0} 
                       max={duration || 2710} 
                       step={0.1}
@@ -492,16 +492,16 @@ export const ResultsPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center text-white text-xs">
                     <div className="flex items-center gap-3">
-                      <button onClick={togglePlay} className="hover:text-vibrant-cyan transition-colors">
+                      <button onClick={togglePlay} className="hover:text-primary transition-colors">
                         <span className="material-symbols-outlined text-sm">{isPlaying ? "pause" : "play_arrow"}</span>
                       </button>
                       <div className="flex items-center gap-1.5">
-                        <button onClick={toggleMute} className="hover:text-vibrant-cyan transition-colors">
+                        <button onClick={toggleMute} className="hover:text-primary transition-colors">
                           <span className="material-symbols-outlined text-sm">{isMuted || volume === 0 ? "volume_off" : "volume_up"}</span>
                         </button>
                         <input 
                           type="range" 
-                          className="w-12 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-vibrant-cyan volume-slider" 
+                          className="w-12 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-primary volume-slider" 
                           min={0} 
                           max={1} 
                           step={0.05} 
@@ -514,7 +514,7 @@ export const ResultsPage: React.FC = () => {
                     
                     <div className="flex items-center gap-3 relative">
                       <div className="relative">
-                        <button onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)} className="hover:text-vibrant-cyan transition-colors px-1 bg-slate-800 rounded font-mono-data text-[10px]">
+                        <button onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)} className="hover:text-primary transition-colors px-1 bg-slate-800 rounded font-mono-data text-[10px]">
                           {playbackRate}x
                         </button>
                         {isSpeedMenuOpen && (
@@ -523,7 +523,7 @@ export const ResultsPage: React.FC = () => {
                               <button 
                                 key={rate} 
                                 onClick={() => selectSpeed(rate)}
-                                className={`px-3 py-1 text-left hover:bg-vibrant-cyan hover:text-deep-navy font-semibold ${playbackRate === rate ? 'text-vibrant-cyan' : 'text-white'}`}
+                                className={`px-3 py-1 text-left hover:bg-primary hover:text-slate-900 font-semibold ${playbackRate === rate ? 'text-primary' : 'text-white'}`}
                               >
                                 {rate}x
                               </button>
@@ -531,7 +531,7 @@ export const ResultsPage: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <button onClick={toggleFullscreen} className="hover:text-vibrant-cyan transition-colors">
+                      <button onClick={toggleFullscreen} className="hover:text-primary transition-colors">
                         <span className="material-symbols-outlined text-sm">fullscreen</span>
                       </button>
                     </div>
@@ -540,12 +540,17 @@ export const ResultsPage: React.FC = () => {
               </div>
             </div>
 
+            </div>
+          </div>
+        {/* Right Column: Transcripts */}
+        <div className="lg:col-span-5 relative min-h-[400px] lg:min-h-0">
+          <div className="absolute inset-0 bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
             {/* Transcript Sync Area */}
-            <div className="border border-outline-variant/60 rounded-xl overflow-hidden bg-background">
-              <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-outline-variant/60">
-                <span className="font-label-md text-xs font-bold uppercase tracking-wider text-outline">Timestamps &amp; Transcript</span>
-                <div className="flex items-center glass-panel px-3 py-1.5 rounded-full border border-outline-variant/60 focus-within:border-vibrant-cyan transition-all max-w-[200px] sm:max-w-xs bg-white">
-                  <span className="material-symbols-outlined text-outline text-sm">search</span>
+            <div className="border border-slate-200/60 rounded-xl overflow-hidden bg-[#FAF5FF] flex flex-col flex-1 min-h-0">
+              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200/60">
+                <span className="font-label-md text-xs font-bold uppercase tracking-wider text-slate-400">Timestamps &amp; Transcript</span>
+                <div className="flex items-center glass-panel px-3 py-1.5 rounded-full border border-slate-200/60 focus-within:border-primary transition-all max-w-[200px] sm:max-w-xs bg-white">
+                  <span className="material-symbols-outlined text-slate-400 text-sm">search</span>
                   <input 
                     ref={searchInputRef}
                     className="bg-transparent border-none focus:ring-0 text-xs w-full px-2 outline-none" 
@@ -557,7 +562,7 @@ export const ResultsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="h-[250px] overflow-y-auto p-4 space-y-3 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-0">
                 {transcriptList.map((line, idx) => {
                   const isLineActive = idx === activeLineIdx;
                   const matchesSearch = searchQuery.trim() === '' || line.text.toLowerCase().includes(searchQuery.toLowerCase());
@@ -570,15 +575,15 @@ export const ResultsPage: React.FC = () => {
                       ref={isLineActive ? activeLineRef : null}
                       onClick={() => seekTo(line.start)}
                       className={`flex gap-3 items-start p-2 rounded-lg cursor-pointer transition-colors duration-150 ${
-                        isLineActive ? 'bg-secondary-container/20 border-l-2 border-vibrant-cyan' : 'hover:bg-surface-container-low'
+                        isLineActive ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-slate-50'
                       }`}
                     >
                       <span className={`font-mono-data text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 mt-0.5 ${
-                        isLineActive ? 'bg-vibrant-cyan text-white' : 'bg-surface-container-high text-deep-navy'
+                        isLineActive ? 'bg-primary text-white' : 'bg-slate-200/50 text-slate-900'
                       }`}>
                         {formatTime(line.start)}
                       </span>
-                      <p className="text-xs text-deep-navy leading-relaxed flex-1 flex flex-wrap">
+                      <p className="text-xs text-slate-900 leading-relaxed flex-1 flex flex-wrap">
                         {line.words && line.words.length > 0 ? (
                           line.words.map((word, wIdx) => {
                             const isWordActive = isLineActive && currentTime >= word.start && currentTime <= word.end;
@@ -593,10 +598,10 @@ export const ResultsPage: React.FC = () => {
                                 }}
                                 className={`mr-1 px-0.5 rounded cursor-pointer transition-all ${
                                   isWordActive 
-                                    ? 'bg-vibrant-cyan text-white font-bold' 
+                                    ? 'bg-primary text-white font-bold' 
                                     : isSearchMatch 
-                                      ? 'bg-status-warning/20 text-deep-navy border-b border-status-warning' 
-                                      : 'hover:text-vibrant-cyan'
+                                      ? 'bg-warning-bg text-slate-900 border-b border-warning-border' 
+                                      : 'hover:text-primary'
                                 }`}
                               >
                                 {word.word}
@@ -604,7 +609,7 @@ export const ResultsPage: React.FC = () => {
                             );
                           })
                         ) : (
-                          <span className="italic text-secondary">{line.text}</span>
+                          <span className="italic text-slate-500">{line.text}</span>
                         )}
                       </p>
                     </div>
@@ -614,32 +619,36 @@ export const ResultsPage: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right Column: Summarization & Partition */}
-        <div className="bg-surface border border-outline-variant rounded-xl p-6 flex flex-col shadow-sm h-full">
-          <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2 mb-6 shrink-0">
-            <span className="material-symbols-outlined text-vibrant-cyan">hub</span>
-            {t('results.summary_result')}
-          </h2>
-          
-          <div className="flex flex-col flex-1 gap-6 min-h-0">
-            {/* Box 1: Summary */}
+      {/* Full Information Section */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6 mt-8">
+        <h2 className="font-headline-md text-lg font-bold text-slate-900 flex items-center gap-2">
+           <span className="material-symbols-outlined text-primary">insights</span>
+           {t('results.ai_insights', 'AI Insights & Analysis')}
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 bg-white border border-slate-200 rounded-xl p-6 shadow-sm ">
+          {/* Summary */}
+          <div className="lg:col-span-2 flex flex-col">
             <div className="flex flex-col flex-1 min-h-0">
-              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1 shrink-0">
-                <span className="material-symbols-outlined text-vibrant-cyan text-base">subject</span>
+              <h2 className="font-headline-md text-md font-bold text-slate-900 mb-6 flex items-center gap-2 shrink-0">
+                <span className="material-symbols-outlined text-primary">subject</span>
                 {t('results.content_summary')}
-              </h3>
-              <div className="flex-1 p-4 bg-background border border-outline-variant/60 rounded-xl text-sm text-secondary leading-relaxed overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+              </h2>
+              <div className="flex-1 p-4 bg-[#FAF5FF] border border-slate-200/60 rounded-xl text-sm text-slate-500 leading-relaxed overflow-y-auto custom-scrollbar whitespace-pre-wrap">
                 {summaryData?.summaryText}
               </div>
             </div>
+          </div>
 
-            {/* Box 2: Chapters */}
+          {/* Box 2: Chapters */}
+          <div className="lg:col-span-1 flex flex-col">
             <div className="flex flex-col flex-1 min-h-0">
-              <h3 className="text-sm font-bold text-deep-navy mb-2 flex items-center gap-1 shrink-0">
-                <span className="material-symbols-outlined text-vibrant-cyan text-base">list</span>
+              <h2 className="font-headline-md text-md font-bold text-slate-900 mb-6 flex items-center gap-2 shrink-0">
+                <span className="material-symbols-outlined text-primary">list</span>
                 {t('results.auto_chapters')}
-              </h3>
+              </h2>
               <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
                 {chaptersList.map((chapter, idx) => {
                   const isChapterActive = idx === activeChapterIdx;
@@ -651,12 +660,12 @@ export const ResultsPage: React.FC = () => {
                       onClick={() => seekTo(chStartSecs)}
                       className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-colors duration-150 ${
                         isChapterActive 
-                          ? 'border-vibrant-cyan bg-secondary-container/20 text-deep-navy font-bold' 
-                          : 'border-outline-variant/50 bg-background text-secondary hover:border-vibrant-cyan'
+                          ? 'border-primary bg-primary/10 text-slate-900 font-bold' 
+                          : 'border-slate-200/50 bg-[#FAF5FF] text-slate-500 hover:border-primary'
                       }`}
                     >
                       <span className="text-xs truncate max-w-[200px] sm:max-w-xs">{chapter.title}</span>
-                      <span className="font-mono-data text-[10px] px-1.5 py-0.5 bg-surface-container-high rounded text-deep-navy font-bold">
+                      <span className="font-mono-data text-[10px] px-1.5 py-0.5 bg-slate-200/50 rounded text-slate-900 font-bold">
                         {chapter.start}
                       </span>
                     </div>
@@ -666,13 +675,12 @@ export const ResultsPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Keyframes Gallery Section */}
       {summaryData?.keyframes && summaryData.keyframes.length > 0 && (
-        <div className="bg-surface border border-outline-variant rounded-xl p-6 shadow-sm space-y-6">
-          <h2 className="font-headline-md text-lg font-bold text-deep-navy flex items-center gap-2">
-            <span className="material-symbols-outlined text-vibrant-cyan">image_search</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
+          <h2 className="font-headline-md text-md font-bold text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">image_search</span>
             {t('results.keyframes')}
           </h2>
           
@@ -685,7 +693,7 @@ export const ResultsPage: React.FC = () => {
                 <div 
                   key={idx} 
                   onClick={() => seekTo(kf.timestamp)}
-                  className="group border border-outline-variant/60 rounded-xl overflow-hidden hover:border-vibrant-cyan transition-all duration-300 cursor-pointer bg-background flex flex-col justify-between"
+                  className="group border border-slate-200/60 rounded-xl overflow-hidden hover:border-primary transition-all duration-300 cursor-pointer bg-[#FAF5FF] flex flex-col justify-between"
                 >
                   <div className="relative aspect-video w-full bg-black overflow-hidden shrink-0">
                     <img 
@@ -693,27 +701,27 @@ export const ResultsPage: React.FC = () => {
                       alt={kf.description}
                       className="absolute inset-0 w-full h-full object-contain transform group-hover:scale-105 transition-transform duration-500"
                     />
-                    <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-deep-navy/85 text-white font-mono-data text-[9px] rounded font-bold">
+                    <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-slate-900/85 text-white font-mono-data text-[9px] rounded font-bold">
                       {formatTime(kf.timestamp)}
                     </div>
                   </div>
                   
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
                     <div>
-                      <p className="text-xs text-deep-navy font-semibold leading-normal line-clamp-2" title={kf.description}>
-                        <span className="material-symbols-outlined text-[14px] align-text-bottom mr-1 text-vibrant-cyan">image</span>
+                      <p className="text-xs text-slate-900 font-semibold leading-normal line-clamp-2" title={kf.description}>
+                        <span className="material-symbols-outlined text-[14px] align-text-bottom mr-1 text-primary">image</span>
                         {kf.description}
                       </p>
                       {kf.transcript && (
-                        <p className="text-[10px] text-secondary italic leading-tight line-clamp-2 mt-2" title={kf.transcript}>
-                          <span className="material-symbols-outlined text-[12px] align-text-bottom mr-1 text-outline">record_voice_over</span>
+                        <p className="text-[10px] text-slate-500 italic leading-tight line-clamp-2 mt-2" title={kf.transcript}>
+                          <span className="material-symbols-outlined text-[12px] align-text-bottom mr-1 text-slate-400">record_voice_over</span>
                           "{kf.transcript}"
                         </p>
                       )}
                     </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-outline-variant/30 text-[10px] text-secondary mt-2">
-                      <span className="font-bold text-vibrant-cyan">{t('results.importance')}</span>
-                      <span className="font-mono-data font-bold bg-surface-container-high px-1.5 py-0.5 rounded text-deep-navy">
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200/50 text-[10px] text-slate-500 mt-2">
+                      <span className="font-bold text-primary">{t('results.importance')}</span>
+                      <span className="font-mono-data font-bold bg-slate-200/50 px-1.5 py-0.5 rounded text-slate-900">
                         {Math.round(importance * 100)}%
                       </span>
                     </div>
@@ -724,6 +732,7 @@ export const ResultsPage: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

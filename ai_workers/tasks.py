@@ -25,8 +25,8 @@ except Exception:
 from ai_workers.core.celery_app import app
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
 from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
-from ai_workers.modules.visual.scene_detector import SceneDetector
-from ai_workers.modules.visual.semantic import SemanticAnalyzer
+from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
 from ai_workers.modules.fusion.timeline import TimelineBuilder
 from ai_workers.modules.fusion.summarizer import Summarizer
 
@@ -335,28 +335,37 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     scenes = visual_result.get("scenes", [])
     scene_utterance_lists = {id(scene): [] for scene in scenes}
     
-    for utt in utterances:
-        u_start = utt.get("start", 0.0)
-        u_end = utt.get("end", 0.0)
-        
-        best_scene = None
-        max_overlap = 0.0
-        
-        for scene in scenes:
-            scene_start = scene.get("start_seconds", 0.0)
-            scene_end = scene.get("end_seconds", 0.0)
+    aligned_segments = timeline_result.get("aligned_segments", [])
+    if aligned_segments:
+        for item in aligned_segments:
+            scene_id = item.get("scene_id")
+            utt_text = item.get("utterance", {}).get("text", "")
+            if scene_id in scene_utterance_lists and utt_text:
+                scene_utterance_lists[scene_id].append(utt_text)
+    else:
+        # Fallback to pure temporal overlap if timeline semantic alignment failed
+        for utt in utterances:
+            u_start = utt.get("start", 0.0)
+            u_end = utt.get("end", 0.0)
             
-            overlap_start = max(u_start, scene_start)
-            overlap_end = min(u_end, scene_end)
-            overlap = overlap_end - overlap_start
+            best_scene = None
+            max_overlap = 0.0
             
-            if overlap > max_overlap:
-                max_overlap = overlap
-                best_scene = scene
+            for scene in scenes:
+                scene_start = scene.get("start_seconds", 0.0)
+                scene_end = scene.get("end_seconds", 0.0)
                 
-        if best_scene is not None and max_overlap > 0:
-            scene_utterance_lists[id(best_scene)].append(utt.get("text", ""))
-            
+                overlap_start = max(u_start, scene_start)
+                overlap_end = min(u_end, scene_end)
+                overlap = overlap_end - overlap_start
+                
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_scene = scene
+                    
+            if best_scene is not None and max_overlap > 0:
+                scene_utterance_lists[id(best_scene)].append(utt.get("text", ""))
+                
     for scene in scenes:
         scene["script"] = " ".join(scene_utterance_lists[id(scene)]).strip()
 

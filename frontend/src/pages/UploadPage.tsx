@@ -3,6 +3,23 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import { parseUTCDate } from '../utils/dateUtils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  UploadCloud, 
+  Link as LinkIcon, 
+  ClipboardPaste, 
+  DownloadCloud, 
+  Film, 
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  Mic,
+  FileText,
+  Image as ImageIcon,
+  Sparkles,
+  AlertCircle
+} from 'lucide-react';
 
 export const UploadPage: React.FC = () => {
   const toast = useToast();
@@ -17,6 +34,7 @@ export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollIntervalRef = useRef<any>(null);
+  const isPollingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -101,8 +119,10 @@ export const UploadPage: React.FC = () => {
     setCurrentStage('queued');
     
     pollIntervalRef.current = setInterval(async () => {
-      // Prevent overlapping updates if already marked as completed
       if (pollIntervalRef.current === null) return;
+      if (isPollingRef.current) return;
+      
+      isPollingRef.current = true;
       try {
         const res = await api.getJobStatus(videoId);
         if (res.success && res.data && res.data.length > 0) {
@@ -137,16 +157,15 @@ export const UploadPage: React.FC = () => {
               setErrorMsg(job.errorLog || 'Đã xảy ra lỗi trong quá trình xử lý video.');
               toast.error(job.errorLog || t('upload.toast_err_process'), t('upload.toast_upload_failed'));
             } else {
-              // Map stage to step
               let step = 1;
               const stage = job.stage;
               if (stage === 'audio' || stage === 'speaker') {
                 step = 2;
               } else if (stage === 'visual') {
                 step = 3;
-              } else if (stage === 'semantic' || stage === 'timeline') {
+              } else if (stage === 'semantic' || stage === 'storage' || stage === 'timeline') {
                 step = 4;
-              } else if (stage === 'text') {
+              } else if (stage === 'text' || stage === 'completed') {
                 step = 5;
               }
               setCurrentStep(step);
@@ -161,8 +180,11 @@ export const UploadPage: React.FC = () => {
         }
       } catch (err) {
         console.error("Error polling job status:", err);
-        clearInterval(pollIntervalRef.current);
-        setIsProcessing(false);
+        // Do not immediately clear interval on a network error/500, to allow recovery
+        // clearInterval(pollIntervalRef.current);
+        // setIsProcessing(false);
+      } finally {
+        isPollingRef.current = false;
       }
     }, 2000);
   };
@@ -209,7 +231,6 @@ export const UploadPage: React.FC = () => {
     }
   };
 
-  // Drag and drop handlers
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -236,343 +257,299 @@ export const UploadPage: React.FC = () => {
     }
   };
 
+  // Pipeline Steps Configuration
+  const pipelineSteps = [
+    { id: 1, icon: DownloadCloud, title: t('upload.step1_title') },
+    { id: 2, icon: Mic, title: t('upload.step2_title') },
+    { id: 3, icon: FileText, title: t('upload.step3_title') },
+    { id: 4, icon: ImageIcon, title: t('upload.step4_title') },
+    { id: 5, icon: Sparkles, title: t('upload.step5_title') },
+  ];
+
   return (
-    <div className="bg-surface text-on-surface font-body-md text-body-md antialiased min-h-screen">
-      <main className="flex-1 overflow-y-auto bg-background p-6 md:p-margin-desktop">
-        <div className="max-w-container-max mx-auto">
-          <header className="mb-10">
-            <h1 className="font-headline-xl text-3xl md:text-headline-xl text-deep-navy mb-2 font-bold">
-              {t('upload.title')}
-            </h1>
-            <p className="text-secondary text-body-lg">
-              {t('upload.desc')}
-            </p>
-          </header>
+    <div className="bg-[#FAF5FF] min-h-[calc(100vh-64px)] overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 h-full min-h-[calc(100vh-64px)]">
+        
+        {/* Left Pane - Upload Zone */}
+        <div className="p-8 md:p-12 lg:p-16 flex flex-col justify-center relative">
+          {/* Background Blobs */}
+          <div className="absolute top-0 left-0 w-[50%] h-[50%] bg-primary/10 rounded-br-full blur-[100px] pointer-events-none" />
+          
+          <div className="max-w-xl mx-auto w-full relative z-10">
+            <header className="mb-10">
+              <h1 className="font-heading text-4xl md:text-5xl text-slate-900 mb-4 font-black tracking-tight">
+                {t('upload.title')}
+              </h1>
+              <p className="text-slate-600 text-lg">
+                {t('upload.desc')}
+              </p>
+            </header>
 
-          {errorMsg && (
-            <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2">
-              <span className="material-symbols-outlined text-red-600">error</span>
-              <span className="font-semibold text-sm">{errorMsg}</span>
-            </div>
-          )}
+            <AnimatePresence>
+              {errorMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-8 p-4 glass border-l-4 border-l-red-500 rounded-xl flex items-start gap-3"
+                >
+                  <AlertCircle className="text-red-500 mt-0.5 shrink-0" size={20} />
+                  <span className="font-medium text-slate-700">{errorMsg}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Upload Section Bento Grid */}
-          <div className="relative">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
-              {/* File Drag & Drop (Span 2) */}
-              <div 
-                className={`lg:col-span-2 bg-surface border rounded-lg p-8 upload-area-gradient group cursor-pointer transition-all duration-300 relative overflow-hidden ${
-                  dragActive ? 'border-vibrant-cyan ring-2 ring-vibrant-cyan/20' : 'border-outline-variant hover:border-vibrant-cyan'
-                }`}
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                onClick={handleBrowseClick}
-              >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileChange} 
-                  accept="video/*" 
-                  style={{ display: 'none' }} 
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-outline-variant/50 rounded-lg group-hover:border-vibrant-cyan/50 transition-colors">
-                  <div className="w-16 h-16 bg-primary-fixed text-deep-navy rounded-full flex items-center justify-center mb-4 group-hover:bg-vibrant-cyan group-hover:text-white transition-all">
-                    <span className="material-symbols-outlined text-[32px]">upload_file</span>
-                  </div>
-                  <h3 className="font-headline-md text-xl font-bold text-deep-navy mb-1">{t('upload.drag_drop')}</h3>
-                  <p className="text-secondary font-body-sm mb-6 text-sm">{t('upload.support_formats')}</p>
-                  <button 
-                    onClick={handleBrowseClick}
-                    className="px-6 py-2 bg-deep-navy text-white font-label-md text-label-md rounded hover:bg-primary transition-colors font-semibold"
-                  >
-                    {t('upload.browse_files')}
-                  </button>
+            {/* Interactive Drag & Drop Area */}
+            <motion.div 
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className={`relative overflow-hidden cursor-pointer rounded-[2rem] border-2 transition-all duration-300 ${
+                dragActive ? 'border-primary bg-primary/5 shadow-2xl shadow-primary/20 scale-[1.02]' : 'border-slate-200/50 glass hover:border-primary/40 hover:shadow-xl hover:bg-white/40'
+              }`}
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={handleBrowseClick}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept="video/*" 
+                style={{ display: 'none' }} 
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="flex flex-col items-center justify-center p-16 text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-primary-light to-white rounded-full flex items-center justify-center mb-6 shadow-inner text-primary">
+                  <UploadCloud size={40} />
                 </div>
+                <h3 className="font-heading text-2xl font-bold text-slate-900 mb-2">{t('upload.drag_drop')}</h3>
+                <p className="text-slate-500 font-body mb-8">{t('upload.support_formats')}</p>
+                <button 
+                  onClick={handleBrowseClick}
+                  disabled={isProcessing}
+                  className="btn primary shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : t('upload.browse_files')}
+                </button>
               </div>
+            </motion.div>
 
-              {/* YouTube URL Input */}
-              <div className="bg-surface border border-outline-variant rounded-lg p-8 flex flex-col justify-between">
+            <div className="flex items-center gap-4 my-8">
+              <div className="h-px bg-slate-200/80 flex-1"></div>
+              <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">HOẶC</span>
+              <div className="h-px bg-slate-200/80 flex-1"></div>
+            </div>
+
+            {/* URL Input */}
+            <div className="glass-panel p-6 rounded-[1.5rem]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
+                  <LinkIcon size={20} />
+                </div>
                 <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-error-container text-on-error-container rounded-full flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[24px]">link</span>
-                    </div>
-                    <h3 className="font-headline-md text-lg font-bold text-deep-navy">{t('upload.remote_import')}</h3>
-                  </div>
-                  <p className="text-secondary font-body-sm text-sm mb-6">
+                  <h3 className="font-heading text-lg font-bold text-slate-900">{t('upload.remote_import')}</h3>
+                  <p className="text-slate-500 text-sm">
                     {t('upload.youtube_desc')}
                   </p>
-                  <form onSubmit={handleYoutubeSubmit} className="space-y-4">
-                    <div className="relative">
-                      <label className="block font-label-sm text-xs font-semibold text-secondary mb-2 uppercase tracking-wider">
-                        {t('upload.youtube_url')}
-                      </label>
-                      <div className="relative flex items-center">
-                        <input 
-                          className="w-full pl-4 pr-10 py-3 bg-background border border-outline-variant rounded-lg focus:ring-1 focus:ring-vibrant-cyan focus:border-vibrant-cyan outline-none transition-all font-mono-data text-sm" 
-                          placeholder={t('upload.youtube_placeholder')} 
-                          type="url"
-                          value={youtubeUrl}
-                          onChange={(e) => setYoutubeUrl(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              const text = await navigator.clipboard.readText();
-                              if (text && (text.includes('youtube.com') || text.includes('youtu.be'))) {
-                                setYoutubeUrl(text.trim());
-                                toast.success(t('upload.toast_paste_success'), t('common.success'));
-                              } else if (text) {
-                                setYoutubeUrl(text.trim());
-                                toast.info(t('upload.toast_paste_warn'), t('upload.toast_warn'));
-                              } else {
-                                toast.error(t('upload.toast_paste_empty'), t('upload.toast_err_paste'));
-                              }
-                            } catch (err) {
-                              toast.error(t('upload.toast_paste_err'), t('upload.toast_err_access'));
-                            }
-                          }}
-                          className="absolute right-3 text-secondary hover:text-vibrant-cyan transition-colors flex items-center justify-center"
-                          title="Dán từ Clipboard"
-                        >
-                          <span className="material-symbols-outlined text-[20px]">content_paste</span>
-                        </button>
-                      </div>
-                    </div>
-                    <button 
-                      type="submit" 
-                      className="w-full py-3 bg-secondary-container text-on-secondary-container font-semibold font-label-md text-label-md rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <span className="material-symbols-outlined">cloud_download</span>
-                      {t('upload.fetch_video')}
-                    </button>
-                  </form>
-                </div>
-                <div className="pt-6 border-t border-outline-variant/30 mt-6 lg:mt-0">
-                  <div className="flex items-center justify-between text-secondary text-xs">
-                    <span className="font-label-sm font-medium">{t('upload.api_quota')}</span>
-                    <span className="font-mono-data text-deep-navy font-bold">42 / 100</span>
-                  </div>
-                  <div className="w-full bg-surface-container-high h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div className="bg-deep-navy h-full" style={{ width: '42%' }}></div>
-                  </div>
                 </div>
               </div>
+              
+              <form onSubmit={handleYoutubeSubmit} className="flex flex-col gap-3">
+                <div className="relative flex items-center">
+                  <input 
+                    className="w-full bg-white/50 border border-slate-200 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-700" 
+                    placeholder={t('upload.youtube_placeholder')} 
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && (text.includes('youtube.com') || text.includes('youtu.be'))) {
+                          setYoutubeUrl(text.trim());
+                          toast.success(t('upload.toast_paste_success'), t('common.success'));
+                        } else if (text) {
+                          setYoutubeUrl(text.trim());
+                          toast.info(t('upload.toast_paste_warn'), t('upload.toast_warn'));
+                        } else {
+                          toast.error(t('upload.toast_paste_empty'), t('upload.toast_err_paste'));
+                        }
+                      } catch (err) {
+                        toast.error(t('upload.toast_paste_err'), t('upload.toast_err_access'));
+                      }
+                    }}
+                    className="absolute right-3 p-2 text-slate-400 hover:text-primary transition-colors hover:bg-primary/5 rounded-lg"
+                    title="Dán từ Clipboard"
+                  >
+                    <ClipboardPaste size={18} />
+                  </button>
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={isProcessing}
+                  className="btn bg-slate-900 text-white hover:bg-slate-800 border-none w-full flex justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <DownloadCloud size={18} />}
+                  {isProcessing ? t('upload.status_processing') : t('upload.fetch_video')}
+                </button>
+              </form>
             </div>
-
-            {/* Progress Overlay (Displayed when isProcessing is true) */}
-            {isProcessing && (
-              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-xl flex items-center justify-center p-8 transition-opacity duration-300 z-50 border border-outline-variant shadow-lg">
-                <div className="w-full max-w-lg space-y-6">
-                  <div className="flex justify-between items-center">
-                    <span className="font-headline-md text-lg text-deep-navy font-bold flex items-center gap-2">
-                      <span className="material-symbols-outlined text-vibrant-cyan animate-spin">sync</span>
-                      {t('upload.analyzing')}
-                    </span>
-                    <span className="font-mono-data text-lg text-vibrant-cyan font-bold">
-                      {progressPercent}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-surface-container-high h-3 rounded-full overflow-hidden shadow-inner">
-                    <div 
-                      className="bg-vibrant-cyan h-full transition-all duration-500 ease-out" 
-                      style={{ width: `${progressPercent}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-center text-secondary font-body-sm text-sm italic">
-                    {t('upload.status')} <span className="text-deep-navy font-bold not-italic">{getStageText(currentStage)}</span>
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
+        </div>
 
-          {/* Pipeline Processing (Dynamic State) */}
-          {isProcessing && (
-            <div className="mb-12 animate-fade-in">
-              <h2 className="font-headline-md text-lg font-bold text-deep-navy mb-6 flex items-center gap-2">
-                <span className="material-symbols-outlined text-vibrant-cyan">memory</span>
+        {/* Right Pane - Processing & History */}
+        <div className="bg-white border-l border-slate-200/60 p-8 md:p-12 lg:p-16 overflow-y-auto relative">
+          <div className="max-w-xl mx-auto w-full">
+            
+            {/* Pipeline Visualization */}
+            <div className="mb-16">
+              <h2 className="font-heading text-2xl font-bold text-slate-900 mb-8 flex items-center gap-3">
+                {isProcessing ? (
+                  <Loader2 className="text-primary animate-spin" size={24} />
+                ) : (
+                  <Sparkles className="text-primary" size={24} />
+                )}
                 {t('upload.pipeline_status')}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {/* Step 1 */}
-                <div className={`bg-surface p-4 rounded-lg flex flex-col items-center text-center border ${
-                  currentStep > 1 ? 'border-status-success/30' : 'border-vibrant-cyan active-step-pulse'
-                }`}>
-                  <span className={`material-symbols-outlined mb-2 ${
-                    currentStep > 1 ? 'text-status-success' : 'text-vibrant-cyan'
-                  }`} style={currentStep > 1 ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                    {currentStep > 1 ? 'check_circle' : 'downloading'}
-                  </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step1_title')}</p>
-                  <span className={`text-[10px] font-mono-data font-bold ${
-                    currentStep > 1 ? 'text-status-success' : 'text-vibrant-cyan animate-pulse'
-                  }`}>
-                    {currentStep > 1 ? t('upload.status_complete') : t('upload.status_processing')}
-                  </span>
-                </div>
+              
+              <div className="space-y-6 relative before:absolute before:inset-0 before:ml-[1.15rem] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+                {pipelineSteps.map((step) => {
+                  const isCompleted = currentStep > step.id;
+                  const isActive = currentStep === step.id && isProcessing;
 
-                {/* Step 2 */}
-                <div className={`bg-surface p-4 rounded-lg flex flex-col items-center text-center border ${
-                  currentStep > 2 ? 'border-status-success/30' : currentStep === 2 ? 'border-vibrant-cyan active-step-pulse' : 'border-outline-variant/30 opacity-50'
-                }`}>
-                  <span className={`material-symbols-outlined mb-2 ${
-                    currentStep > 2 ? 'text-status-success' : currentStep === 2 ? 'text-vibrant-cyan' : 'text-secondary'
-                  }`} style={currentStep > 2 ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                    {currentStep > 2 ? 'check_circle' : 'mic'}
-                  </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step2_title')}</p>
-                  <span className={`text-[10px] font-mono-data font-bold ${
-                    currentStep > 2 ? 'text-status-success' : currentStep === 2 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
-                  }`}>
-                    {currentStep > 2 ? t('upload.status_complete') : currentStep === 2 ? t('upload.status_processing') : t('upload.status_pending')}
-                  </span>
-                </div>
+                  const StepIcon = step.icon;
 
-                {/* Step 3 */}
-                <div className={`bg-surface p-4 rounded-lg flex flex-col items-center text-center border ${
-                  currentStep > 3 ? 'border-status-success/30' : currentStep === 3 ? 'border-vibrant-cyan active-step-pulse' : 'border-outline-variant/30 opacity-50'
-                }`}>
-                  <span className={`material-symbols-outlined mb-2 ${
-                    currentStep > 3 ? 'text-status-success' : currentStep === 3 ? 'text-vibrant-cyan' : 'text-secondary'
-                  }`} style={currentStep > 3 ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                    {currentStep > 3 ? 'check_circle' : 'transcribe'}
-                  </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step3_title')}</p>
-                  <span className={`text-[10px] font-mono-data font-bold ${
-                    currentStep > 3 ? 'text-status-success' : currentStep === 3 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
-                  }`}>
-                    {currentStep > 3 ? t('upload.status_complete') : currentStep === 3 ? t('upload.status_processing') : t('upload.status_pending')}
-                  </span>
-                </div>
-
-                {/* Step 4 */}
-                <div className={`bg-surface p-4 rounded-lg flex flex-col items-center text-center border ${
-                  currentStep > 4 ? 'border-status-success/30' : currentStep === 4 ? 'border-vibrant-cyan active-step-pulse' : 'border-outline-variant/30 opacity-50'
-                }`}>
-                  <span className={`material-symbols-outlined mb-2 ${
-                    currentStep > 4 ? 'text-status-success' : currentStep === 4 ? 'text-vibrant-cyan' : 'text-secondary'
-                  }`} style={currentStep > 4 ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                    {currentStep > 4 ? 'check_circle' : 'image_search'}
-                  </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step4_title')}</p>
-                  <span className={`text-[10px] font-mono-data font-bold ${
-                    currentStep > 4 ? 'text-status-success' : currentStep === 4 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
-                  }`}>
-                    {currentStep > 4 ? t('upload.status_complete') : currentStep === 4 ? t('upload.status_processing') : t('upload.status_pending')}
-                  </span>
-                </div>
-
-                {/* Step 5 */}
-                <div className={`bg-surface p-4 rounded-lg flex flex-col items-center text-center border ${
-                  currentStep === 5 ? 'border-vibrant-cyan active-step-pulse' : 'border-outline-variant/30 opacity-50'
-                }`}>
-                  <span className={`material-symbols-outlined mb-2 ${
-                    currentStep === 5 ? 'text-vibrant-cyan' : 'text-secondary'
-                  }`}>
-                    {currentStep === 5 ? 'auto_awesome' : 'auto_awesome'}
-                  </span>
-                  <p className="font-label-sm text-xs font-bold text-deep-navy mb-1">{t('upload.step5_title')}</p>
-                  <span className={`text-[10px] font-mono-data font-bold ${
-                    currentStep === 5 ? 'text-vibrant-cyan animate-pulse' : 'text-secondary'
-                  }`}>
-                    {currentStep === 5 ? t('upload.status_processing') : t('upload.status_pending')}
-                  </span>
-                </div>
+                  return (
+                    <motion.div 
+                      key={step.id} 
+                      className={`relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: step.id * 0.1 }}
+                    >
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-slate-100 text-slate-400 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2"
+                        style={isActive ? { backgroundColor: '#7C3AED', color: 'white', borderColor: '#EFE7FC' } : isCompleted ? { backgroundColor: '#10B981', color: 'white' } : {}}
+                      >
+                        {isCompleted ? <CheckCircle2 size={18} /> : <StepIcon size={18} />}
+                      </div>
+                      <div className={`w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border ${
+                        isActive ? 'border-primary bg-primary/5 shadow-md shadow-primary/5' : 
+                        isCompleted ? 'border-emerald-200 bg-emerald-50/30' : 
+                        'border-slate-100 bg-white opacity-50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className={`font-bold text-sm ${isActive ? 'text-primary' : isCompleted ? 'text-emerald-700' : 'text-slate-500'}`}>
+                            {step.title}
+                          </h4>
+                        </div>
+                        <div className={`text-xs font-mono font-medium ${isActive ? 'text-primary animate-pulse' : isCompleted ? 'text-emerald-500' : 'text-slate-400'}`}>
+                          {isActive && step.id === 1 && currentStage !== 'queued' ? `${getStageText(currentStage)} ${progressPercent}%` : 
+                           isActive ? t('upload.status_processing') : 
+                           isCompleted ? t('upload.status_complete') : 
+                           t('upload.status_pending')}
+                        </div>
+                        {isActive && (
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-3 overflow-hidden">
+                            <motion.div 
+                              className="bg-primary h-full" 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progressPercent}%` }}
+                              transition={{ duration: 0.5 }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
-          )}
 
-          {/* Recent Uploads Table */}
-          <section className="animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-headline-md text-xl font-bold text-deep-navy">{t('upload.recent_videos')}</h2>
-              <Link to="/history" className="text-vibrant-cyan font-label-md text-label-md hover:underline flex items-center gap-1">
-                {t('upload.view_all')} <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </Link>
-            </div>
-            <div className="bg-surface border border-outline-variant rounded-lg overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
-                    <tr className="bg-surface-container-low border-b border-outline-variant">
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_source')}</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_timestamp')}</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider">{t('upload.col_status')}</th>
-                      <th className="px-6 py-4 font-label-sm text-xs font-bold text-secondary uppercase tracking-wider text-right">{t('upload.col_action')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/30">
-                    {recentVideos.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-secondary font-body-sm text-sm">
-                          {t('upload.no_videos')}
-                        </td>
-                      </tr>
-                    ) : (
-                      recentVideos.map((video) => {
-                        const statusUpper = (video.status || "").toUpperCase();
-                        const isDone = statusUpper === 'DONE' || statusUpper === 'COMPLETED' || statusUpper === 'SUCCESS';
-                        const isFailed = statusUpper === 'FAILED';
-                        return (
-                          <tr key={video.videoId} className="hover:bg-surface-container-lowest transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-16 h-10 rounded bg-slate-100 overflow-hidden border border-outline-variant shrink-0 flex items-center justify-center">
-                                  <span className="material-symbols-outlined text-secondary">video_file</span>
-                                </div>
-                                <div>
-                                  <p className="font-label-md text-sm font-semibold text-deep-navy truncate max-w-xs" title={video.title || video.originalUrl || (video.r2Url ? video.r2Url : (video.filePath && !video.filePath.includes('/stream') ? video.filePath : 'Video bài giảng'))}>
-                                    {video.title || (video.originalUrl ? video.originalUrl : (video.r2Url ? (video.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (video.filePath && !video.filePath.includes('/stream') ? (video.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video bài giảng')))}
-                                  </p>
-                                  <p className="text-xs text-secondary">Duration: {video.duration ? `${Math.round(video.duration)}s` : 'N/A'}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 font-mono-data text-xs text-secondary">
-                              {new Date(video.uploadedAt).toLocaleString()}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`px-2 py-1 text-[10px] font-extrabold rounded-full border tracking-wider uppercase ${
-                                isDone ? 'bg-green-50 text-status-success border-status-success/20' :
-                                isFailed ? 'bg-red-50 text-red-700 border-red-200' :
-                                'bg-blue-50 text-vibrant-cyan border-vibrant-cyan/20 animate-pulse'
-                              }`} title={video.stage ? `Trạng thái: ${getStageText(video.stage)}` : undefined}>
-                                {isDone ? t('history.status_done') :
-                                 isFailed ? t('history.status_failed') :
-                                 `${t('history.status_processing')} ${video.progress !== undefined && video.progress !== null ? `(${video.progress}%)` : ''}`}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              {isDone ? (
-                                <Link 
-                                  to={`/results?videoId=${video.videoId}`} 
-                                  className="text-deep-navy hover:text-vibrant-cyan font-bold text-xs inline-flex items-center gap-1"
-                                >
-                                  {t('upload.view_results')}
-                                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                                </Link>
-                              ) : (
-                                <span className="text-secondary text-xs italic">
-                                  {video.stage ? getStageText(video.stage) : t('upload.stage_default')}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+            {/* Recent Uploads */}
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-heading text-2xl font-bold text-slate-900">{t('upload.recent_videos')}</h2>
+                <Link to="/history" className="text-primary hover:text-primary-hover text-sm font-bold flex items-center gap-1 group">
+                  {t('upload.view_all')}
+                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
+
+              <div className="space-y-3">
+                {recentVideos.length === 0 ? (
+                  <div className="p-8 text-center glass border border-slate-200 rounded-2xl">
+                    <Film className="mx-auto text-slate-300 mb-3" size={32} />
+                    <p className="text-slate-500">{t('upload.no_videos')}</p>
+                  </div>
+                ) : (
+                  recentVideos.map((video, idx) => {
+                    const statusUpper = (video.status || "").toUpperCase();
+                    const isDone = statusUpper === 'DONE' || statusUpper === 'COMPLETED' || statusUpper === 'SUCCESS';
+                    const isFailed = statusUpper === 'FAILED';
+                    
+                    return (
+                      <motion.div 
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        key={video.videoId} 
+                        className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-primary/30 hover:shadow-md transition-all flex items-center gap-4 group"
+                      >
+                        {video.scenes && video.scenes.length > 0 && video.scenes[0].keyframeUrl ? (
+                          <div className="w-16 h-12 rounded-xl overflow-hidden border border-slate-200 shrink-0 relative">
+                            <img src={video.scenes[0].keyframeUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                          </div>
+                        ) : (
+                          <div className="w-16 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200">
+                            <Film size={20} />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-slate-900 truncate text-sm">
+                            {video.title || (video.originalUrl ? video.originalUrl : (video.r2Url ? (video.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (video.filePath && !video.filePath.includes('/stream') ? (video.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video bài giảng')))}
+                          </h4>
+                          <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                            <span className="font-mono">{parseUTCDate(video.uploadedAt)!.toLocaleDateString()}</span>
+                            <span>•</span>
+                            <span>{video.duration ? `${Math.round(video.duration)}s` : 'N/A'}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <span className={`px-2.5 py-1 text-[10px] font-black rounded-lg uppercase tracking-wider ${
+                            isDone ? 'bg-emerald-50 text-emerald-600' :
+                            isFailed ? 'bg-red-50 text-red-600' :
+                            'bg-primary/10 text-primary animate-pulse'
+                          }`}>
+                            {isDone ? t('history.status_done') :
+                             isFailed ? t('history.status_failed') :
+                             `${t('history.status_processing')} ${video.progress !== undefined && video.progress !== null ? `(${video.progress}%)` : ''}`}
+                          </span>
+                          {isDone && (
+                            <Link 
+                              to={`/results?videoId=${video.videoId}`} 
+                              className="text-primary hover:text-primary-hover font-bold text-xs inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {t('upload.view_results')}
+                            </Link>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </div>
-          </section>
+
+          </div>
         </div>
-      </main>
+        
+      </div>
     </div>
   );
 };

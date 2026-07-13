@@ -5,13 +5,18 @@ import { CONFIG } from '../config';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
 import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Bot, Play, VideoOff, Filter, Trash2, 
+  Send, Mic, Paperclip, Sparkles, Table, BrainCircuit
+} from 'lucide-react';
 
 interface Message {
+  id: string;
   sender: 'user' | 'bot';
   text: string;
   timestamp?: string;
-  avatarIcon: string;
-  referenceTime?: number; // Time in seconds to seek to
+  referenceTime?: number;
 }
 
 export const QaPage: React.FC = () => {
@@ -25,11 +30,12 @@ export const QaPage: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
   const [messages, setMessages] = useState<Message[]>([
     {
+      id: 'msg-1',
       sender: 'bot',
-      avatarIcon: 'auto_awesome',
-      text: t('qa.welcome_msg'),
+      text: t('qa.welcome_msg') || 'Hi there! I am your AI assistant. Ask me anything about the video.',
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -72,9 +78,7 @@ export const QaPage: React.FC = () => {
       });
     };
 
-    const isValidUuid = (id: string) => {
-      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    };
+    const isValidUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
     if (videoId && isValidUuid(videoId)) {
       loadVideoAndScenes(videoId);
@@ -82,8 +86,7 @@ export const QaPage: React.FC = () => {
       api.getVideos()
         .then(res => {
           if (res.success && res.data && res.data.length > 0) {
-            const firstVideo = res.data[0];
-            loadVideoAndScenes(firstVideo.videoId);
+            loadVideoAndScenes(res.data[0].videoId);
           } else {
             setLoading(false);
             setActiveVideoId(null);
@@ -106,8 +109,8 @@ export const QaPage: React.FC = () => {
 
     const queryText = textToSend;
     const newMsg: Message = {
+      id: `msg-${Date.now()}`,
       sender: 'user',
-      avatarIcon: 'person',
       text: queryText,
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     };
@@ -122,30 +125,27 @@ export const QaPage: React.FC = () => {
       return;
     }
 
-    // Dynamic mock response generation
     setTimeout(() => {
       let responseText = "";
       let refTime: number | undefined = undefined;
       const lowerQuery = queryText.toLowerCase();
 
-      if (lowerQuery.includes("tóm tắt") || lowerQuery.includes("summary") || lowerQuery.includes("nội dung")) {
+      if (lowerQuery.includes("tóm tắt") || lowerQuery.includes("summary")) {
         responseText = "Bài giảng này thảo luận về phương pháp phân tích bài giảng đa phương tiện. Nội dung chính bao gồm giới thiệu mục tiêu bài giảng, phân tích chi tiết dữ liệu hình ảnh/âm thanh và tóm tắt các điểm then chốt ở cuối chương. Bạn có thể xem chi tiết ở các mốc thời gian 01:25 và 05:12.";
-        refTime = 85; // 01:25
-      } else if (lowerQuery.includes("whisper") || lowerQuery.includes("clip") || lowerQuery.includes("gemini") || lowerQuery.includes("ai") || lowerQuery.includes("mô hình")) {
+        refTime = 85; 
+      } else if (lowerQuery.includes("whisper") || lowerQuery.includes("clip") || lowerQuery.includes("ai")) {
         responseText = "Hệ thống sử dụng mô hình WhisperX để bóc băng tiếng nói tiếng Việt chính xác, kết hợp CLIP để trích xuất đặc trưng hình ảnh của slide, và dùng mô hình ngôn ngữ lớn Gemini 1.5 để xâu chuỗi thông tin và trả lời câu hỏi.";
-      } else if (lowerQuery.includes("slide") || lowerQuery.includes("hình ảnh") || lowerQuery.includes("khung hình")) {
-        responseText = "Các slide bài giảng đã được tự động cắt lớp và gán thẻ thời gian dựa trên sự thay đổi khung hình chính (Keyframes). Bạn có thể nhấp trực tiếp vào danh sách 'Analyzed Segments' bên trái để tua nhanh đến slide tương ứng.";
-      } else if (lowerQuery.includes("thời gian") || lowerQuery.includes("mốc") || lowerQuery.includes("khi nào") || lowerQuery.includes("bao lâu")) {
+      } else if (lowerQuery.includes("thời gian") || lowerQuery.includes("khi nào")) {
         responseText = "Mốc thời gian quan trọng của nội dung này nằm ở khoảng 02:40 trong video bài giảng. Hãy bấm vào nút tua nhanh bên cạnh câu trả lời này để di chuyển đến đúng phân đoạn đó.";
-        refTime = 160; // 02:40
+        refTime = 160; 
       } else {
         responseText = `Cám ơn câu hỏi của bạn về chủ đề "${queryText}". Dựa trên tài liệu bóc băng bài giảng, giảng viên giải thích chi tiết rằng cơ chế cốt lõi hoạt động dựa trên các tham số cấu hình hệ thống. Bạn có thể tua đến mốc 03:15 để nghe kỹ hơn phần này.`;
-        refTime = 195; // 03:15
+        refTime = 195;
       }
 
       setMessages(prev => [...prev, {
+        id: `msg-${Date.now() + 1}`,
         sender: 'bot',
-        avatarIcon: 'auto_awesome',
         text: responseText,
         referenceTime: refTime,
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
@@ -163,9 +163,9 @@ export const QaPage: React.FC = () => {
   const clearHistory = () => {
     setMessages([
       {
+        id: `msg-${Date.now()}`,
         sender: 'bot',
-        avatarIcon: 'auto_awesome',
-        text: t('qa.history_cleared_msg'),
+        text: t('qa.history_cleared_msg') || 'History cleared.',
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -173,12 +173,11 @@ export const QaPage: React.FC = () => {
   };
 
   return (
-    <div className="fixed top-16 bottom-0 left-0 right-0 flex flex-col md:flex-row overflow-hidden bg-background text-on-surface">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-64px)] bg-[#FAF5FF] overflow-hidden">
       {/* Left Sidebar: Video & Key Segments */}
-      <section className="w-full md:w-80 lg:w-96 bg-surface border-r border-outline-variant flex flex-col h-[40vh] md:h-full shrink-0 overflow-hidden">
-        {/* Video Player Container */}
-        <div className="p-4 border-b border-outline-variant/30">
-          <div className="relative aspect-video bg-video-background rounded-xl overflow-hidden border border-outline-variant shadow-sm">
+      <section className="w-full md:w-80 lg:w-[400px] bg-slate-100/60 backdrop-blur-xl border-r border-slate-200 flex flex-col h-[40vh] md:h-full shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
+        <div className="p-4 lg:p-6 border-b border-slate-200/50">
+          <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border border-slate-200/50">
             {videoData?.filePath ? (
               <video 
                 ref={videoRef}
@@ -188,62 +187,70 @@ export const QaPage: React.FC = () => {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-secondary p-4 text-center">
-                <span className="material-symbols-outlined text-4xl mb-2 text-slate-400">videocam_off</span>
-                <p className="text-xs">{t('qa.no_video_title')}</p>
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-500 p-4 text-center">
+                <VideoOff size={32} className="mb-2 text-slate-400" />
+                <p className="text-xs font-medium">{t('qa.no_video_title')}</p>
               </div>
             )}
           </div>
-          <div className="mt-4">
-            <h2 className="font-headline-md text-base font-bold text-deep-navy">
+          <div className="mt-5 px-1">
+            <h2 className="font-heading text-lg font-bold text-slate-900 leading-tight">
               {videoData?.title || t('qa.not_selected')}
             </h2>
-            <p className="font-body-sm text-xs text-secondary mt-1">
-              {t('qa.duration')}: {videoData?.duration ? formatTimeText(videoData.duration) : '00:00'} • AI RAG Engine v2.4.0
-            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="font-mono text-xs font-semibold bg-slate-200/50 px-2 py-1 rounded-md text-slate-600">
+                {videoData?.duration ? formatTimeText(videoData.duration) : '00:00'}
+              </span>
+              <span className="text-xs text-primary font-bold flex items-center gap-1 bg-primary/10 px-2 py-1 rounded-md">
+                <Sparkles size={12} /> AI RAG v2.4
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Key Segments List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-          <div className="flex items-center justify-between py-2 border-b border-outline-variant mb-4">
-            <span className="font-label-md text-xs font-bold uppercase tracking-wider text-outline">{t('qa.analyzed_segments')}</span>
-            <span className="material-symbols-outlined text-outline text-lg">filter_list</span>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-6">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{t('qa.analyzed_segments')}</span>
+            <button className="text-slate-400 hover:text-primary transition-colors">
+              <Filter size={16} />
+            </button>
           </div>
           <div className="space-y-3">
             {loading ? (
               Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="p-3 rounded-lg border border-outline-variant space-y-2">
-                  <Skeleton className="h-3 w-16 rounded" />
-                  <Skeleton className="h-4 w-3/4 rounded" />
-                  <Skeleton className="h-3 w-full rounded" />
+                <div key={idx} className="p-4 rounded-2xl border border-slate-200/50 space-y-3 bg-white/50">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-full" />
                 </div>
               ))
             ) : scenesList.length > 0 ? (
               scenesList.map((scene, idx) => (
-                <div 
+                <motion.div 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   key={idx}
                   onClick={() => seekMiniPlayer(scene.startSeconds)}
-                  className="p-3 rounded-lg border border-outline-variant hover:border-vibrant-cyan transition-colors cursor-pointer group"
+                  className="p-4 rounded-2xl border border-slate-200/60 shadow-sm hover:border-primary/50 hover:shadow-md cursor-pointer group bg-white transition-all"
                 >
                   <div className="flex justify-between items-start mb-2">
-                    <span className="bg-surface-container-highest px-2 py-0.5 rounded text-[10px] font-mono-data text-deep-navy">
+                    <span className="bg-slate-100 border border-slate-200/50 px-2 py-1 rounded-lg text-[10px] font-mono font-bold text-slate-700">
                       {formatTimeText(scene.startSeconds)} - {formatTimeText(scene.endSeconds)}
                     </span>
-                    <span className="material-symbols-outlined text-vibrant-cyan text-sm opacity-0 group-hover:opacity-100">shortcut</span>
+                    <Play size={14} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <h4 className="font-label-md text-xs font-bold text-deep-navy mb-1">
+                  <h4 className="font-heading text-sm font-bold text-slate-900 mb-1">
                     {t('qa.segment')} #{scene.sceneIndex !== undefined ? scene.sceneIndex + 1 : idx + 1}
                   </h4>
-                  <p className="text-[11px] text-secondary line-clamp-2">
+                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                     {scene.caption || scene.script || t('qa.processing_segment')}
                   </p>
-                </div>
+                </motion.div>
               ))
             ) : (
-              <div className="p-4 text-center text-secondary border border-dashed border-outline-variant rounded-xl">
-                <span className="material-symbols-outlined text-xl text-slate-400">segment</span>
-                <p className="text-[10px] mt-1">{t('qa.no_segments')}</p>
+              <div className="p-6 text-center text-slate-400 border-2 border-dashed border-slate-200/60 rounded-2xl">
+                <Sparkles size={24} className="mx-auto mb-2 opacity-50" />
+                <p className="text-xs font-medium">{t('qa.no_segments')}</p>
               </div>
             )}
           </div>
@@ -251,109 +258,121 @@ export const QaPage: React.FC = () => {
       </section>
 
       {/* Chat Interface */}
-      <section className="flex-1 flex flex-col relative h-[60vh] md:h-full overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 z-0 opacity-[0.02] pointer-events-none overflow-hidden">
-          <svg height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern height="40" id="grid" patternUnits="userSpaceOnUse" width="40">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"></path>
-              </pattern>
-            </defs>
-            <rect fill="url(#grid)" height="100%" width="100%"></rect>
-          </svg>
-        </div>
-
+      <section className="flex-1 flex flex-col relative h-[60vh] md:h-full bg-white">
+        
         {/* Chat Header */}
-        <div className="z-10 flex items-center justify-between px-6 py-4 glass-panel border-b border-outline-variant shrink-0">
+        <div className="z-20 flex items-center justify-between px-6 py-4 glass border-b border-slate-200/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-deep-navy flex items-center justify-center text-white">
-              <span className="material-symbols-outlined text-sm">auto_awesome</span>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-primary/20">
+              <Bot size={20} />
             </div>
             <div>
-              <h3 className="font-label-md text-sm font-bold text-deep-navy">{t('qa.header_title')}</h3>
-              <span className="text-[10px] text-status-success uppercase font-bold tracking-tighter">AI Engine Online</span>
+              <h3 className="font-heading text-base font-bold text-slate-900">{t('qa.header_title') || 'AI Assistant'}</h3>
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-500 font-bold uppercase tracking-wider">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Online
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={clearHistory}
-              className="px-3 py-1.5 hover:bg-surface-container-high rounded-lg text-secondary hover:text-primary transition-colors flex items-center gap-1.5 text-xs font-semibold"
-              title={t('qa.clear_history')}
-            >
-              <span className="material-symbols-outlined text-sm">delete_outline</span>
-              <span className="hidden sm:inline">{t('qa.clear_history')}</span>
-            </button>
-          </div>
+          <button 
+            onClick={clearHistory}
+            className="p-2 text-slate-400 hover:text-danger hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 text-sm font-semibold"
+            title={t('qa.clear_history')}
+          >
+            <Trash2 size={18} />
+            <span className="hidden sm:inline">{t('qa.clear_history')}</span>
+          </button>
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 z-10">
-          {messages.map((msg, idx) => (
-            <div 
-              key={idx} 
-              className={`flex flex-col max-w-[85%] ${msg.sender === 'user' ? 'items-end ml-auto' : 'items-start'}`}
-            >
-              <div className="flex items-center gap-2 mb-1 px-2">
-                <span className={`font-label-sm text-xs font-semibold ${msg.sender === 'user' ? 'text-secondary' : 'text-deep-navy font-bold'}`}>
-                  {msg.sender === 'user' ? t('qa.role_user') : t('qa.role_ai')}
-                </span>
-                {msg.sender === 'bot' && (
-                  <span className="bg-vibrant-cyan/10 text-vibrant-cyan text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">{t('qa.verified')}</span>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 relative">
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div 
+                key={msg.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className={`flex flex-col max-w-[85%] ${msg.sender === 'user' ? 'items-end ml-auto' : 'items-start'}`}
+              >
+                <div className="flex items-center gap-2 mb-1 px-1">
+                  <span className={`text-[11px] font-bold uppercase tracking-widest ${msg.sender === 'user' ? 'text-slate-400' : 'text-primary'}`}>
+                    {msg.sender === 'user' ? t('qa.role_user') : t('qa.role_ai')}
+                  </span>
+                </div>
+                <div 
+                  className={`p-4 text-sm leading-relaxed shadow-sm ${
+                    msg.sender === 'user' 
+                      ? 'bg-slate-900 text-white rounded-2xl rounded-tr-sm' 
+                      : 'bg-slate-50 border border-slate-200/50 rounded-2xl rounded-tl-sm text-slate-800'
+                  }`}
+                  dangerouslySetInnerHTML={{ __html: msg.text }}
+                />
+                {msg.referenceTime !== undefined && (
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => seekMiniPlayer(msg.referenceTime!)}
+                    className="flex items-center gap-2 bg-white hover:bg-primary hover:text-white hover:border-primary transition-all border border-slate-200 shadow-sm px-4 py-1.5 rounded-full mt-2 group text-xs text-slate-700 font-semibold"
+                  >
+                    <Play size={14} className="text-primary group-hover:text-white" />
+                    <span className="font-mono">{formatTimeText(msg.referenceTime)}</span>
+                    <span className="opacity-0 group-hover:opacity-100 -ml-2 group-hover:ml-0 transition-all overflow-hidden whitespace-nowrap max-w-0 group-hover:max-w-[100px]">
+                      {t('qa.view_segment')}
+                    </span>
+                  </motion.button>
                 )}
-              </div>
-              <div 
-                className={`p-4 text-sm ${
-                  msg.sender === 'user' 
-                    ? 'glass-chat-user rounded-2xl rounded-tr-none text-deep-navy' 
-                    : 'glass-chat-ai rounded-2xl rounded-tl-none text-deep-navy shadow-sm'
-                }`}
-                dangerouslySetInnerHTML={{ __html: msg.text }}
-              />
-              {msg.referenceTime !== undefined && (
-                <button 
-                  onClick={() => seekMiniPlayer(msg.referenceTime!)}
-                  className="flex items-center gap-2 bg-white/60 hover:bg-vibrant-cyan hover:text-white transition-all border border-vibrant-cyan/30 px-3 py-1.5 rounded-full mt-2 group shadow-sm text-xs"
-                >
-                  <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
-                  <span className="font-mono-data font-bold">{formatTimeText(msg.referenceTime)}</span>
-                  <span className="opacity-60 group-hover:opacity-100">{t('qa.view_segment')}</span>
-                </button>
-              )}
-              {msg.timestamp && (
-                <span className={`text-[9px] text-outline mt-1 ${msg.sender === 'user' ? 'mr-2' : 'ml-2'}`}>
-                  {msg.timestamp}
-                </span>
-              )}
-            </div>
-          ))}
+                {msg.timestamp && (
+                  <span className={`text-[10px] font-mono text-slate-400 mt-1.5 ${msg.sender === 'user' ? 'mr-1' : 'ml-1'}`}>
+                    {msg.timestamp}
+                  </span>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
           {isTyping && (
-            <div className="flex flex-col items-start">
-              <div className="flex items-center gap-2 mb-1 px-2">
-                <span className="font-label-sm text-xs text-deep-navy font-bold">{t('qa.role_ai')}</span>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-start">
+              <div className="flex items-center gap-2 mb-1 px-1">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-primary">{t('qa.role_ai')}</span>
               </div>
-              <div className="glass-chat-ai p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce"></div>
-                <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-1.5 h-1.5 bg-vibrant-cyan rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <span className="text-xs text-secondary italic ml-2">{t('qa.analyzing')}</span>
+              <div className="bg-slate-50 border border-slate-200/50 p-4 rounded-2xl rounded-tl-sm flex items-center gap-2">
+                <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                </div>
               </div>
-            </div>
+            </motion.div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Chat Input Area */}
-        <div className="z-10 p-6 glass-panel border-t border-outline-variant shrink-0 bg-surface/50">
+        <div className="z-20 p-4 md:p-6 bg-white/80 backdrop-blur-md border-t border-slate-200/50 shrink-0">
           <div className="relative max-w-4xl mx-auto">
-            <div className="flex items-end gap-3 glass-panel p-2 rounded-[24px] border border-outline focus-within:border-vibrant-cyan focus-within:ring-1 focus-within:ring-vibrant-cyan transition-all shadow-lg bg-white">
-              <button className="p-2 text-secondary hover:text-vibrant-cyan transition-colors ml-2 mb-1">
-                <span className="material-symbols-outlined">attach_file</span>
+            {/* Suggested Questions */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
+              <button onClick={() => handleSendMessage('Giải thích cơ chế Backpropagation trong Deep Learning?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
+                <Sparkles size={12} /> {t('qa.suggest1')}
+              </button>
+              <button onClick={() => handleSendMessage('Tóm tắt các tham số hiệu năng được đề cập trong bài giảng?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
+                <Table size={12} /> {t('qa.suggest2')}
+              </button>
+              <button onClick={() => handleSendMessage('So sánh Transformer và RNN theo phân tích của giảng viên?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
+                <BrainCircuit size={12} /> {t('qa.suggest3')}
+              </button>
+            </div>
+
+            <div className="flex items-end gap-3 bg-white p-2 rounded-3xl border-2 border-slate-200 focus-within:border-primary focus-within:shadow-lg focus-within:shadow-primary/10 transition-all">
+              <button className="p-3 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-50 mb-0.5 ml-1 shrink-0">
+                <Paperclip size={20} />
               </button>
               <textarea 
-                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 px-2 resize-none max-h-32 min-h-[48px] placeholder-outline-variant outline-none" 
-                placeholder={t('qa.input_placeholder')}
+                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-4 px-2 resize-none max-h-32 min-h-[52px] placeholder-slate-400 outline-none text-slate-700" 
+                placeholder={t('qa.input_placeholder') || "Ask a question..."}
                 rows={1}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -364,39 +383,19 @@ export const QaPage: React.FC = () => {
                   }
                 }}
               />
-              <div className="flex items-center gap-1 mr-2 mb-1">
-                <button className="p-2 text-secondary hover:text-vibrant-cyan transition-colors">
-                  <span className="material-symbols-outlined">mic</span>
+              <div className="flex items-center gap-2 mr-1 mb-1 shrink-0">
+                <button className="p-3 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-50 hidden sm:block">
+                  <Mic size={20} />
                 </button>
-                <button 
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => handleSendMessage()}
-                  className="bg-deep-navy text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-vibrant-cyan transition-all shadow-md active:scale-95 shrink-0"
+                  className="bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-primary-hover shadow-md shadow-primary/30 transition-all"
                 >
-                  <span className="material-symbols-outlined">send</span>
-                </button>
+                  <Send size={18} className="ml-1" />
+                </motion.button>
               </div>
-            </div>
-
-            {/* Suggested Questions */}
-            <div className="flex flex-wrap justify-center gap-4 mt-3">
-              <button 
-                onClick={() => handleSendMessage('Giải thích cơ chế Backpropagation trong Deep Learning?')}
-                className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
-              >
-                <span className="material-symbols-outlined text-[14px]">auto_awesome</span> {t('qa.suggest1')}
-              </button>
-              <button 
-                onClick={() => handleSendMessage('Tóm tắt các tham số hiệu năng được đề cập trong bài giảng?')}
-                className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
-              >
-                <span className="material-symbols-outlined text-[14px]">table_chart</span> {t('qa.suggest2')}
-              </button>
-              <button 
-                onClick={() => handleSendMessage('So sánh Transformer và RNN theo phân tích của giảng viên?')}
-                className="text-[10px] font-label-md text-secondary hover:text-vibrant-cyan uppercase tracking-widest flex items-center gap-1 font-semibold"
-              >
-                <span className="material-symbols-outlined text-[14px]">psychology</span> {t('qa.suggest3')}
-              </button>
             </div>
           </div>
         </div>
