@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from faster_whisper import WhisperModel
+
+from ai_workers.core.config import worker_settings
 
 
 class AudioTranscriber:
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
         self.model_size = self.config.get("model_name", "base.en")
+        self.cache_dir = Path(worker_settings.CACHE_DIR)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         import torch
         if torch.cuda.is_available():
@@ -19,6 +24,14 @@ class AudioTranscriber:
         else:
             self.device = "cpu"
             self.compute_type = "int8"
+
+    def _resolve_model_source(self) -> str:
+        """Prefer a pre-downloaded local model directory when available."""
+        local_dir = self.cache_dir / f"faster-whisper-{self.model_size}"
+        if (local_dir / "model.bin").exists():
+            print(f"Using local Faster-Whisper model: {local_dir}")
+            return str(local_dir)
+        return self.model_size
 
     def extract_audio(self, video_path: str, output_path: str) -> str:
         """Extract audio from video using FFmpeg.
@@ -57,8 +70,21 @@ class AudioTranscriber:
         Returns:
             Dict with 'text', 'segments' (word-level timestamps) and 'language'.
         """
-        print(f"Loading Faster-Whisper model ({self.model_size}) on {self.device}...")
-        model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+        model_source = self._resolve_model_source()
+        if model_source == self.model_size:
+            print(
+                f"Loading Faster-Whisper model ({self.model_size}) on {self.device}... "
+                "Lan dau se tai model tu HuggingFace (~150MB), co the mat 2-5 phut. "
+                f"Neu treo lau, dat model vao: {self.cache_dir / f'faster-whisper-{self.model_size}'}"
+            )
+        else:
+            print(f"Loading Faster-Whisper model from {model_source} on {self.device}...")
+        model = WhisperModel(
+            model_source,
+            device=self.device,
+            compute_type=self.compute_type,
+            download_root=str(self.cache_dir),
+        )
 
         print(f"Transcribing audio file: {audio_path} using Faster-Whisper with VAD...")
         segments_gen, info = model.transcribe(

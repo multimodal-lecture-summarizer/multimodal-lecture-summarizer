@@ -10,10 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt ./ai_workers/requirements.txt
+RUN pip install --no-cache-dir -r ./ai_workers/requirements.txt
 
 # Copy application code
-COPY . .
+COPY . ./ai_workers
 
 CMD ["celery", "-A", "ai_workers.core.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
