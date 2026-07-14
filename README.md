@@ -2,7 +2,7 @@
 
 Hệ thống tóm tắt video bài giảng đa phương thức sử dụng AI — kiến trúc microservice với Frontend (ReactJS), Backend API (FastAPI), và AI Workers (Celery).
 
-## Kiến trúc
+## 1. Kiến trúc hệ thống
 
 ```
 VIDEO-SUMMARIZATION-SYSTEM/
@@ -12,7 +12,7 @@ VIDEO-SUMMARIZATION-SYSTEM/
 │   ├── src/pages/                  # Trang Upload, Kết Quả, Admin, Q&A
 │   ├── src/services/               # API client (axios/fetch)
 │   └── src/hooks/                  # Custom hooks (WebSocket)
-├── backend_api/                    # 🟦 FastAPI: xử lý HTTP request
+├── backend/                    # 🟦 FastAPI: xử lý HTTP request
 │   ├── app/api/                    # Endpoints: /upload, /videos, /stats
 │   ├── app/core/                   # Cấu hình hệ thống, JWT security
 │   ├── app/db/                     # PostgreSQL (SQLAlchemy), migrations
@@ -38,7 +38,7 @@ VIDEO-SUMMARIZATION-SYSTEM/
 └── README.md                       # (file này)
 ```
 
-## Tính năng
+## 2. Tính năng cốt lõi
 
 | Tầng | Chức năng | Công nghệ |
 |------|-----------|-----------| 
@@ -49,7 +49,7 @@ VIDEO-SUMMARIZATION-SYSTEM/
 | Timeline | Alignment, chia chương, RAG | ChromaDB, cross-modal matching |
 | Text | Tóm tắt có trích dẫn | GPT-4o / Ollama |
 
-## Cài đặt & Chạy
+## 3. Hướng dẫn Cài đặt & Khởi chạy
 
 ### Docker (Khuyến nghị)
 
@@ -86,27 +86,43 @@ pip install -r requirements.txt
 celery -A ai_workers.core.celery_app worker --loglevel=info
 ```
 
-## Tài liệu
+## 4. Thực nghiệm và Đánh giá hệ thống
+
+### 4.1 Mô tả tập dữ liệu
+
+Quá trình thực nghiệm được tiến hành độc lập trên hai tập dữ liệu khác nhau, phục vụ cho hai bài toán cốt lõi của hệ thống: nhận dạng giọng nói và tóm tắt video.
+
+*   **TEDLIUM**: Đây là một kho dữ liệu âm thanh chuyên dụng được trích xuất từ các bài diễn thuyết thực tế bằng tiếng Anh. Môi trường âm thanh trong tập dữ liệu này rất sát với bài toán thực tế mà đồ án hướng tới: diễn giả nói chuyện trong một hội trường lớn, có tiếng ồn nền, có sự đa dạng về ngữ điệu và tốc độ nói. Việc sử dụng TEDLIUM giúp đo đạc chính xác khả năng bóc tách khoảng lặng và độ chuẩn xác của mô hình giải mã văn bản.
+*   **TVSUM**: Tập dữ liệu này chứa năm mươi video ngắn được thu thập từ YouTube, bao trùm mười chủ đề khác nhau như tin tức, phim tài liệu, bài giảng và hướng dẫn thực hành. Điểm giá trị nhất của TVSUM là mỗi video đều đi kèm với nhãn đánh giá mức độ quan trọng ở cấp độ khung hình do con người gán thủ công. Dữ liệu này đóng vai trò làm tiêu chuẩn vàng để hệ thống đối chiếu và đo lường khả năng trích xuất các khung hình mang tính trọng tâm.
+
+*Chi tiết kết quả Phân tích Khám phá Dữ liệu (EDA) có thể tham khảo tại báo cáo: [docs/DATASET_EDA.md](docs/DATASET_EDA.md)*
+
+## 5. Tài liệu dự án
 
 | Tài liệu | Nội dung |
 |----------|----------|
+| [docs/ROADMAP_EVALUATION.md](docs/ROADMAP_EVALUATION.md) | Đánh giá lộ trình nghiên cứu luận văn & Khảo sát mô hình SOTA |
+| [docs/RESEARCH_DIRECTIONS.md](docs/RESEARCH_DIRECTIONS.md) | Thiết kế đề cương nghiên cứu, câu hỏi khoa học (RQs) và kịch bản thử nghiệm |
+| [docs/POTENTIAL_RESEARCH_TRENDS.md](docs/POTENTIAL_RESEARCH_TRENDS.md) | Phân tích các hướng phát triển tiên phong (cutting-edge) trong tương lai |
+| [docs/HYBRID_MODEL_GUIDE.md](docs/HYBRID_MODEL_GUIDE.md) | Hướng dẫn thiết kế, cài đặt PyTorch và huấn luyện mô hình Hybrid |
 | [docs/setup-guide.md](docs/setup-guide.md) | Hướng dẫn cài đặt, chạy local và reset DB |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc chi tiết, data flow |
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
+| [docs/DATASET_EDA.md](docs/DATASET_EDA.md) | CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG (Phân tích khám phá dữ liệu TEDLIUM & TVSum) |
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | Khung benchmark trên video thực tế |
 | [docs/api_contracts/](docs/api_contracts/) | JSON schema Frontend ↔ Backend |
 
-## Cấu hình stack
+## 6. Cấu hình Stack
 
 AI Workers hỗ trợ 3 stack:
 - **Local GPU** — Full local, cần NVIDIA RTX 4070+
 - **Cloud API** — Full cloud (AssemblyAI, GPT-4o)
 - **Hybrid** (khuyến nghị) — Local ASR/OCR + API summary
 
-## Trạng thái dự án
+## 7. Trạng thái dự án
 
 **v0.2.0 — Microservice Architecture:** Kiến trúc 3 tầng (Frontend, Backend API, AI Workers) đã sẵn sàng. Các module AI stage đang ở dạng stub — triển khai theo lộ trình.
 
-## License
+## 8. License
 
 TBD
