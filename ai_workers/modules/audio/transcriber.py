@@ -11,7 +11,8 @@ import subprocess
 import torch
 import soundfile as sf
 import librosa
-from typing import Any
+from typing import Any, Union
+import numpy as np
 from transformers import pipeline
 
 
@@ -53,20 +54,25 @@ class AudioTranscriber:
         print(f"[OK] Extracted audio WAV file: {output_path}")
         return output_path
 
-    def reduce_noise(self, audio_path: str) -> str:
-        """Apply noise reduction to audio (stub)."""
-        return audio_path
+    def reduce_noise(self, audio_path: str) -> np.ndarray:
+        from ai_workers.modules.common.denoise import get_denoised_audio_array
+        return get_denoised_audio_array(audio_path)
 
-    def transcribe(self, audio_path: str) -> dict[str, Any]:
+    def transcribe(self, audio_input: Union[str, np.ndarray]) -> dict[str, Any]:
         """Run ASR on audio file with word-level timestamps.
 
         Returns:
             Dict with 'text', 'segments' (word-level timestamps) and 'language'.
         """
-        print(f"Transcribing audio file: {audio_path} using Whisper ({self.model_name})...")
+        print(f"Transcribing audio using Whisper ({self.model_name})...")
         
         # 1. Read audio data
-        audio_data, sr = sf.read(audio_path)
+        if isinstance(audio_input, str):
+            audio_data, sr = sf.read(audio_input)
+        else:
+            audio_data = audio_input
+            sr = 16000  # Assume 16kHz for numpy array input
+            
         if len(audio_data.shape) > 1:
             audio_data = audio_data.mean(axis=1)
             
@@ -211,9 +217,15 @@ class AudioTranscriber:
                 torch.cuda.empty_cache()
             print("[OK] Models released successfully.")
 
-    def process(self, video_path: str) -> dict[str, Any]:
+    def process(self, video_path: str, use_denoise: bool = True) -> dict[str, Any]:
         """Full audio pipeline: extract → transcribe."""
         audio_path = video_path.rsplit(".", 1)[0] + ".wav"
         self.extract_audio(video_path, audio_path)
-        result = self.transcribe(audio_path)
+        
+        if use_denoise:
+            audio_input = self.reduce_noise(audio_path)
+        else:
+            audio_input = audio_path
+            
+        result = self.transcribe(audio_input)
         return result

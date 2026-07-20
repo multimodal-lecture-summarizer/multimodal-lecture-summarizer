@@ -108,8 +108,138 @@ class TimelineBuilder:
         Returns:
             List of chapters: [{chapter_id, title, start_sec, end_sec}]
         """
-        # TODO: topic shift detection + LLM title generation
-        return []
+        # Find visual boundaries
+        visual_boundaries = []
+        for slide in slides:
+            v_start = slide.get("start_seconds")
+            if v_start is not None and v_start > 0:
+                visual_boundaries.append(v_start)
+        
+        # Find semantic boundaries
+        semantic_boundaries = []
+        
+        try:
+            from sentence_transformers import SentenceTransformer
+            from sklearn.metrics.pairwise import cosine_similarity
+            import numpy as np
+            
+            # 1. Chunk utterances into windows (~30s windows)
+            windows = []
+            current_window_text = []
+            current_window_start = 0.0
+            
+            if utterances:
+                current_window_start = utterances[0].get("start", 0.0)
+                
+            for u in utterances:
+                u_start = u.get("start", 0.0)
+                u_text = u.get("text", "")
+                
+                if u_start - current_window_start > 30.0 and current_window_text:
+                    windows.append({
+                        "start": current_window_start,
+                        "text": " ".join(current_window_text)
+                    })
+                    current_window_text = [u_text]
+                    current_window_start = u_start
+                else:
+                    current_window_text.append(u_text)
+                    
+            if current_window_text:
+                windows.append({
+                    "start": current_window_start,
+                    "text": " ".join(current_window_text)
+                })
+                
+            if len(windows) > 2:
+                print(f"[Timeline] Calculating semantic shifts using {len(windows)} windows...")
+                model = SentenceTransformer('all-MiniLM-L6-v2')
+                texts = [w["text"] for w in windows]
+                embeddings = model.encode(texts)
+                
+                # Calculate consecutive similarities
+                sims = []
+                for i in range(len(embeddings) - 1):
+                    sim = cosine_similarity([embeddings[i]], [embeddings[i+1]])[0][0]
+                    sims.append(sim)
+                    
+                # Smoothing: Moving Average (window=3)
+                smoothed_sims = []
+                for i in range(len(sims)):
+                    start_idx = max(0, i - 1)
+                    end_idx = min(len(sims), i + 2)
+                    smoothed_sims.append(np.mean(sims[start_idx:end_idx]))
+                    
+                # Dynamic Threshold
+                mean_sim = np.mean(smoothed_sims)
+                std_sim = np.std(smoothed_sims)
+                k = 1.0 # Hyperparameter
+                print(f"[Timeline] Semantic Chaptering: mean_sim={mean_sim:.3f}, std_sim={std_sim:.3f}, k={k}")
+                
+                threshold = mean_sim - k * std_sim
+                
+                # Find local minima below threshold
+                for i in range(1, len(smoothed_sims) - 1):
+                    if smoothed_sims[i] < threshold:
+                        if smoothed_sims[i] < smoothed_sims[i-1] and smoothed_sims[i] < smoothed_sims[i+1]:
+                            semantic_boundaries.append(windows[i+1]["start"])
+                            
+        except Exception as e:
+            print(f"[Timeline] Semantic chaptering failed: {e}")
+            
+        # Merge semantic and visual boundaries
+        all_boundaries = sorted(list(set(semantic_boundaries + visual_boundaries)))
+        
+        # Conflict Resolution and Minimum Chapter Length Enforcement
+        MIN_CHAPTER_LENGTH = 60.0
+        final_boundaries = [0.0]
+        
+        for b in all_boundaries:
+            if b <= 0.0:
+                continue
+                
+            last_b = final_boundaries[-1]
+            if b - last_b < MIN_CHAPTER_LENGTH:
+                # If it's too close, snap to visual if one is visual, else drop the newer one
+                is_b_visual = b in visual_boundaries
+                is_last_visual = last_b in visual_boundaries
+                
+                if is_b_visual and not is_last_visual and last_b != 0.0:
+                    # Snap previous semantic boundary to this visual boundary
+                    final_boundaries[-1] = b
+                # Otherwise ignore b
+            else:
+                final_boundaries.append(b)
+                
+        # Get video end time
+        end_time = 0.0
+        if utterances:
+            end_time = max(end_time, utterances[-1].get("end", 0.0))
+        if slides:
+            end_time = max(end_time, slides[-1].get("end_seconds", 0.0))
+            
+        # Degenerate Fallback: If < 2 chapters, slice by time
+        if len(final_boundaries) < 2 and end_time > 180.0:
+            print("[Timeline] Degenerate case detected. Fallback to time-based chaptering.")
+            final_boundaries = [0.0]
+            curr = 180.0
+            while curr < end_time - 60.0:
+                final_boundaries.append(curr)
+                curr += 180.0
+                
+        # Construct candidate intervals
+        chapters = []
+        for i in range(len(final_boundaries)):
+            start = final_boundaries[i]
+            end = final_boundaries[i+1] if i + 1 < len(final_boundaries) else end_time
+            if end - start > 0:
+                chapters.append({
+                    "startTime": start,
+                    "endTime": end
+                })
+                
+        print(f"[Timeline] Generated {len(chapters)} chapter boundaries.")
+        return chapters
 
     def process(
         self,
