@@ -114,6 +114,27 @@ class Summarizer:
             api_key=self.api_key
         )
 
+        chapter_constraints = ""
+        if chapters:
+            chapter_intervals = "\n        ".join([f"Chapter {i+1}: {c['startTime']:.2f}s -> {c['endTime']:.2f}s" for i, c in enumerate(chapters)])
+            chapter_constraints = f"""
+        CRITICAL CONSTRAINTS FOR CHAPTERS:
+        - We have pre-calculated the exact chapter boundaries using a deterministic algorithm.
+        - You MUST use exactly these {len(chapters)} chapter intervals. Do NOT add, remove, or modify the timestamps.
+        - Your ONLY task is to read the transcript within each specific interval and write a concise title and summary for it.
+        
+        PREDEFINED CHAPTER BOUNDARIES:
+        {chapter_intervals}
+"""
+        else:
+            chapter_constraints = f"""
+        CRITICAL CONSTRAINTS FOR CHAPTERS:
+        - The total duration of this video is {duration} seconds ({formatted_duration}).
+        - You MUST NOT generate any chapters with an endTime greater than {duration}.
+        - The last chapter's endTime MUST be exactly {duration}.
+        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts.
+"""
+
         prompt = f"""
         You are a professional AI assistant tasked with summarizing lecture or informational videos.
         Analyze the following audio transcript AND visual keyframe descriptions. 
@@ -125,18 +146,12 @@ class Summarizer:
         After your analysis, generate:
         1. A detailed video summary in plain text format (around 300-500 words).
         2. A concise, descriptive title for this video (video_title - 5-10 words, in the same language as the content).
-        3. Logical chapters segmented based on slide changes (Visual Context timestamps) and semantic topic transitions. Each chapter must contain:
+        3. Logical chapters for the video. Each chapter must contain:
            - Chapter title (title)
            - Start time (startTime - in seconds)
            - End time (endTime - in seconds)
            - Brief chapter summary (summary - 1-2 sentences)
-
-        CRITICAL CONSTRAINTS FOR CHAPTERS:
-        - The total duration of this video is {duration} seconds ({formatted_duration}).
-        - You MUST NOT generate any chapters with an endTime greater than {duration}.
-        - The last chapter's endTime MUST be exactly {duration}.
-        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts.
-
+{chapter_constraints}
         Audio Transcript (with timestamps):
         {transcript if transcript.strip() else "[No speech detected]"}
 
@@ -178,6 +193,27 @@ class Summarizer:
                     response_text = re.sub(r"\n```$", "", response_text)
                     
                 data = json.loads(response_text)
+                
+                # Validation and Override of Chapter Boundaries
+                if chapters:
+                    llm_chapters = data.get("chapters", [])
+                    if len(llm_chapters) != len(chapters):
+                        print(f"[Warning] LLM returned {len(llm_chapters)} chapters, expected {len(chapters)}. Performing padding/truncation fallback.")
+                        
+                    validated_chapters = []
+                    for i, orig_c in enumerate(chapters):
+                        # Pad with generic titles if LLM returned too few chapters
+                        llm_title = llm_chapters[i].get("title", f"Phần {i+1}") if i < len(llm_chapters) else f"Phần {i+1}"
+                        llm_summary = llm_chapters[i].get("summary", "") if i < len(llm_chapters) else ""
+                        
+                        validated_chapters.append({
+                            "title": llm_title,
+                            "startTime": orig_c["startTime"],
+                            "endTime": orig_c["endTime"],
+                            "summary": llm_summary
+                        })
+                    data["chapters"] = validated_chapters
+                
                 print(f"[OK] Successfully generated summary with model: {model}")
                 return {
                     "video_title": data.get("video_title") or data.get("title") or "Bài giảng chưa đặt tên",
@@ -186,11 +222,11 @@ class Summarizer:
                     "model_used": f"Groq ({model})"
                 }
             except Exception as e:
-                print(f"⚠️ Model {model} failed: {e}. Trying fallback model...")
+                print(f"Model {model} failed: {e}. Trying fallback model...")
                 last_error = e
 
         # Fallback if all models fail
-        print("❌ All Groq models failed. Using offline fallback summary.")
+        print("All Groq models failed. Using offline fallback summary.")
         duration = utterances[-1]["end"] if utterances else 10.0
         return {
             "video_title": "Bài giảng chưa đặt tên (Lỗi AI)",

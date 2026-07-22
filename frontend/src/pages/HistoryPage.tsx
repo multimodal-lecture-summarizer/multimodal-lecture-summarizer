@@ -109,6 +109,7 @@ export const HistoryPage: React.FC = () => {
               title: video.title || (video.originalUrl ? 'YouTube Video' : (video.r2Url ? (video.r2Url.split('?')[0].split('/').pop() || 'video.mp4') : (video.filePath && !video.filePath.includes('/stream') ? (video.filePath.split('?')[0].split('/').pop() || 'video.mp4') : 'Video bài giảng'))),
               duration: durationStr,
               date: dateStr,
+              rawDate: uploadDate.getTime(),
               status: video.status as VideoStatus,
               progress: video.progress,
               stage: video.stage,
@@ -170,9 +171,9 @@ export const HistoryPage: React.FC = () => {
 
   const filteredItems = historyItems
     .filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort(() => {
-      if (sortBy === 'newest') return -1;
-      if (sortBy === 'oldest') return 1;
+    .sort((a, b) => {
+      if (sortBy === 'newest') return b.rawDate - a.rawDate;
+      if (sortBy === 'oldest') return a.rawDate - b.rawDate;
       return 0;
     });
 

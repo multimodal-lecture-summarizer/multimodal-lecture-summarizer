@@ -61,8 +61,9 @@ class AudioTranscriber:
         print(f"[OK] Extracted audio WAV file: {output_path}")
         return output_path
 
-    def reduce_noise(self, audio_path: str) -> str:
-        return audio_path
+    def reduce_noise(self, audio_path: str) -> np.ndarray:
+        from ai_workers.modules.common.denoise import get_denoised_audio_array
+        return get_denoised_audio_array(audio_path)
 
     def transcribe(self, audio_path: str) -> dict[str, Any]:
         """Run ASR on audio file with word-level timestamps using Faster-Whisper.
@@ -87,8 +88,10 @@ class AudioTranscriber:
         )
 
         print(f"Transcribing audio file: {audio_path} using Faster-Whisper with VAD...")
+        audio_input = self.reduce_noise(audio_path)
+        
         segments_gen, info = model.transcribe(
-            audio_path,
+            audio_input,
             beam_size=5,
             vad_filter=True,
             vad_parameters=dict(min_silence_duration_ms=2000),
@@ -108,35 +111,74 @@ class AudioTranscriber:
 
             full_text_list.append(segment_text)
             
-            words = []
-            if segment.words:
-                for word in segment.words:
-                    words.append({
-                        "word": word.word.strip(),
-                        "start": word.start,
-                        "end": word.end
-                    })
+            if not segment.words:
+                if current_merged is None:
+                    current_merged = {
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment_text,
+                        "words": []
+                    }
+                else:
+                    current_merged["end"] = segment.end
+                    current_merged["text"] += " " + segment_text
+                
+                dur = current_merged["end"] - current_merged["start"]
+                if dur > 5.0 and current_merged["text"].endswith(('.', '?', '!')):
+                    segments.append(current_merged)
+                    print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] (Punctuation) {current_merged['text']}")
+                    current_merged = None
+                continue
 
-            if current_merged is None:
-                current_merged = {
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment_text,
-                    "words": words
-                }
-            else:
-                current_merged["end"] = segment.end
-                current_merged["text"] += " " + segment_text
-                current_merged["words"].extend(words)
-            
-            if segment_text.endswith(('.', '?', '!')):
-                segments.append(current_merged)
-                print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] {current_merged['text']}")
-                current_merged = None
-        if current_merged is not None:
+            for w in segment.words:
+                w_text = w.word.strip()
+                if not w_text:
+                    continue
+                    
+                if current_merged is not None:
+                    gap = w.start - current_merged["words"][-1]["end"]
+                    dur = current_merged["end"] - current_merged["start"]
+                    
+                    if dur > 15.0 and gap > 1.0:
+                        segments.append(current_merged)
+                        print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] (Long Gap) {current_merged['text']}")
+                        current_merged = None
+                
+                if current_merged is None:
+                    current_merged = {
+                        "start": w.start,
+                        "end": w.end,
+                        "text": "",
+                        "words": []
+                    }
+                    
+                current_merged["words"].append({
+                    "word": w_text,
+                    "start": w.start,
+                    "end": w.end
+                })
+                current_merged["end"] = w.end
+                
+                if not current_merged["text"]:
+                    current_merged["text"] = w_text
+                else:
+                    current_merged["text"] += " " + w_text
+                    
+                dur = current_merged["end"] - current_merged["start"]
+                
+                if dur > 5.0 and w_text.endswith(('.', '?', '!')):
+                    segments.append(current_merged)
+                    print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] (Punctuation) {current_merged['text']}")
+                    current_merged = None
+                elif dur > 20.0:
+                    segments.append(current_merged)
+                    print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] (Hard Cut) {current_merged['text']}")
+                    current_merged = None
+
+        if current_merged is not None and current_merged["text"]:
             segments.append(current_merged)
-            print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] {current_merged['text']}")
-
+            print(f"[{current_merged['start']:.2f}s -> {current_merged['end']:.2f}s] (End) {current_merged['text']}")
+            
         full_text = " ".join(full_text_list)
         print(f"[OK] Completed transcription. Text length: {len(full_text)} characters.")
         
