@@ -62,6 +62,7 @@ export interface HistoryItem {
   title: string;
   duration: string;
   date: string;
+  rawDate: number;
   status: VideoStatus;
   thumbnailUrl?: string;
   youtubeUrl?: string;
