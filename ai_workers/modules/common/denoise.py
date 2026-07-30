@@ -2,7 +2,16 @@ import os
 import numpy as np
 import torch
 import torchaudio
-from df.enhance import enhance, init_df, load_audio
+import soundfile as sf
+import librosa
+
+try:
+    from df.enhance import enhance, init_df, load_audio
+    DF_AVAILABLE = True
+except Exception as _df_err:
+    DF_AVAILABLE = False
+    print(f"[Warning] DeepFilterNet (df) import skipped ({_df_err}). Denoising will fall back to raw audio.")
+
 
 class DenoiseManager:
     def __init__(self):
@@ -10,6 +19,8 @@ class DenoiseManager:
         self.df_state = None
 
     def initialize(self):
+        if not DF_AVAILABLE:
+            return
         if self.model is None:
             print("[Denoise] Initializing DeepFilterNet model...")
             self.model, self.df_state, _ = init_df()
@@ -18,13 +29,16 @@ class DenoiseManager:
         """
         Denoises the audio using DeepFilterNet and returns a 16kHz 1D numpy array 
         ready for Faster-Whisper or standard Whisper pipeline.
-        
-        Args:
-            audio_path: Path to the input audio file
-            
-        Returns:
-            np.ndarray: 1D numpy array of the denoised audio at 16kHz
         """
+        if not DF_AVAILABLE:
+            print(f"[Denoise] Skipping DeepFilterNet enhancement. Loading raw audio: {os.path.basename(audio_path)}...")
+            data, sr = sf.read(audio_path)
+            if len(data.shape) > 1:
+                data = data.mean(axis=1)
+            if sr != 16000:
+                data = librosa.resample(data, orig_sr=sr, target_sr=16000)
+            return data
+
         self.initialize()
         print(f"[Denoise] Processing {os.path.basename(audio_path)}...")
         

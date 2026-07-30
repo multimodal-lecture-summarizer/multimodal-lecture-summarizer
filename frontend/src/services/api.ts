@@ -58,6 +58,29 @@ export const api = {
     return result; // returns BaseDTO[UserDTO]
   },
 
+  async forgotPassword(email: string) {
+    const response = await customFetch(`${CONFIG.API_BASE_URL}/auth/forgot-password`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ email }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Yêu cầu khôi phục thất bại");
+    return result;
+  },
+
+  async resetPassword(email: string, newPassword: string) {
+    const response = await customFetch(`${CONFIG.API_BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ email, newPassword }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Đặt lại mật khẩu thất bại");
+    return result;
+  },
+
+
   // Videos endpoints
   async uploadVideo(
     file: File | null,
@@ -175,6 +198,32 @@ export const api = {
     if (!response.ok) throw new Error(result.message || "Hỏi đáp thất bại");
     return result; // returns BaseDTO[QAResponseDTO]
   },
+
+  async getQaHistory(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/qa/video/${videoId}/history`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Lấy lịch sử chat thất bại");
+    return result; // returns BaseDTO[List[QALogDTO]]
+  },
+
+  async clearQaHistory(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/qa/video/${videoId}/history`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Xóa lịch sử chat thất bại");
+    return result;
+  },
+
 
   // Video standards config
   async getStandards() {

@@ -206,6 +206,7 @@
     "processing_segment": "Đang xử lý phân đoạn...",
     "no_segments": "Không có phân đoạn nào trong video này.",
     "header_title": "Hỏi đáp Ngữ cảnh Video",
+    "chat_history": "Lịch sử câu hỏi & Chat",
     "clear_history": "Xóa lịch sử",
     "clear_success": "Lịch sử trò chuyện đã được xóa.",
     "clear_success_title": "Đã xóa",
@@ -216,9 +217,14 @@
     "view_segment": "Xem đoạn liên quan",
     "analyzing": "Đang phân tích...",
     "input_placeholder": "Đặt câu hỏi về nội dung video bài giảng (Enter để gửi)...",
-    "suggest1": "Giải thích khái niệm chính",
-    "suggest2": "Thống kê số liệu",
-    "suggest3": "Phân tích logic bài giảng"
+    "suggest1": "💡 Tóm tắt 3 ý chính",
+    "suggest1_q": "Tóm tắt 3 ý quan trọng nhất được đề cập trong bài giảng này?",
+    "suggest2": "🎯 Mục tiêu & Đối tượng",
+    "suggest2_q": "Bài giảng này dành cho ai và giải quyết vấn đề gì?",
+    "suggest3": "📊 Số liệu & Ví dụ",
+    "suggest3_q": "Các ví dụ thực tế và số liệu được giảng viên đưa ra là gì?",
+    "suggest4": "❓ Câu hỏi ôn tập",
+    "suggest4_q": "Đặt 3 câu hỏi ôn tập quan trọng nhất dựa trên nội dung bài giảng này?"
   },
   "docs": {
     "title": "Hướng Dẫn Sử Dụng",

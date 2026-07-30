@@ -297,14 +297,26 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         del timeline
         gc.collect()
 
-        # Stage 6: Summarization
+        # Stage 6: Summarization & RAG Indexing
         check_revoked()
         log_step("Đang yêu cầu mô hình AI (Groq API) sinh bản tóm tắt chi tiết...", "text", 88)
         summarizer = Summarizer()
         text_result = summarizer.process(
             utterances, slides, timeline_result.get("chapters", [])
         )
-        log_step("Đã tạo bản tóm tắt bài giảng thành công.", "text", 95)
+        log_step("Đã tạo bản tóm tắt bài giảng thành công.", "text", 93)
+
+        # Build Multimodal RAG vector index in ChromaDB
+        log_step("Đang tạo chỉ mục RAG đa phương thức vào ChromaDB...", "rag", 96)
+        try:
+            rag_success = summarizer.build_rag_index(job_id, utterances, slides)
+            if rag_success:
+                log_step("Đã lưu chỉ mục RAG vào ChromaDB thành công.", "rag", 98)
+            else:
+                log_step("Cảnh báo: Không thể tạo chỉ mục RAG (Sử dụng Mock Store).", "rag", 98)
+        except Exception as rag_err:
+            print(f"Error building RAG index: {rag_err}")
+            log_step("Lỗi khi tạo chỉ mục RAG.", "rag", 98)
 
         del summarizer
         gc.collect()

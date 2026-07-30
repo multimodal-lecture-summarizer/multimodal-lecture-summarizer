@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ShieldCheck, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface AuthPageProps {
   onLogin?: (userData: { email: string; role: string }) => void;
@@ -16,9 +16,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
+  // Forgot Password Modal States
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,19 +189,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                 <div className="flex justify-between items-center ml-1 mr-1">
                   <label className="text-xs text-slate-700 font-bold">{t('auth.password_label')}</label>
                   {isLogin && (
-                    <a href="#forgot" className="text-[11px] text-primary hover:text-primary-hover font-bold transition-colors">{t('auth.forgot_password')}</a>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setForgotEmail(email);
+                        setForgotStep(1);
+                        setShowForgotModal(true);
+                      }} 
+                      className="text-[11px] text-primary hover:text-primary-hover font-bold transition-colors cursor-pointer"
+                    >
+                      {t('auth.forgot_password')}
+                    </button>
                   )}
                 </div>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     placeholder={t('auth.password_placeholder')} 
-                    className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200/60 rounded-2xl font-body text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-900 outline-none shadow-sm"
+                    className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200/60 rounded-2xl font-body text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-slate-900 outline-none shadow-sm"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required 
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:text-primary transition-colors p-1"
+                    title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
             </div>
@@ -255,6 +282,128 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <span className="text-[11px] text-emerald-700 font-bold uppercase tracking-widest">{t('auth.encrypted_env')}</span>
         </div>
       </motion.div>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {showForgotModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100 relative"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-heading text-lg font-bold text-slate-900">
+                  {forgotStep === 1 ? 'Khôi phục mật khẩu' : 'Đặt mật khẩu mới'}
+                </h3>
+                <button 
+                  onClick={() => setShowForgotModal(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {forgotStep === 1 ? (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!forgotEmail.trim()) return;
+                  setForgotLoading(true);
+                  try {
+                    await api.forgotPassword(forgotEmail);
+                    toast.success("Tài khoản hợp lệ. Vui lòng nhập mật khẩu mới bên dưới.", "Xác thực thành công");
+                    setForgotStep(2);
+                  } catch (err: any) {
+                    toast.error(err.message || "Không tìm thấy email tài khoản", "Lỗi");
+                  } finally {
+                    setForgotLoading(false);
+                  }
+                }} className="space-y-4">
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Nhập email tài khoản của bạn để tiến hành xác thực và cài đặt lại mật khẩu mới.
+                  </p>
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">Email đăng ký</label>
+                    <input 
+                      type="email"
+                      required
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="researcher@institute.edu"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-primary text-slate-900"
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="w-full py-3.5 bg-primary text-white rounded-xl font-bold text-sm shadow-md hover:bg-primary-hover transition-all flex items-center justify-center gap-2"
+                  >
+                    {forgotLoading ? <Loader2 className="animate-spin" size={18} /> : <span>Tiếp tục</span>}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (newPassword.length < 6) {
+                    toast.error("Mật khẩu phải từ 6 ký tự trở lên", "Lỗi");
+                    return;
+                  }
+                  if (newPassword !== confirmNewPassword) {
+                    toast.error("Mật khẩu xác nhận không khớp", "Lỗi");
+                    return;
+                  }
+                  setForgotLoading(true);
+                  try {
+                    await api.resetPassword(forgotEmail, newPassword);
+                    toast.success("Đặt lại mật khẩu thành công! Bạn có thể đăng nhập ngay.", "Thành công");
+                    setEmail(forgotEmail);
+                    setPassword(newPassword);
+                    setShowForgotModal(false);
+                  } catch (err: any) {
+                    toast.error(err.message || "Không thể đặt lại mật khẩu", "Lỗi");
+                  } finally {
+                    setForgotLoading(false);
+                  }
+                }} className="space-y-4">
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Tài khoản: <strong className="text-slate-900">{forgotEmail}</strong>. Nhập mật khẩu mới bên dưới.
+                  </p>
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">Mật khẩu mới</label>
+                    <input 
+                      type="password"
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-primary text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">Xác nhận mật khẩu mới</label>
+                    <input 
+                      type="password"
+                      required
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu mới"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-primary text-slate-900"
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="w-full py-3.5 bg-primary text-white rounded-xl font-bold text-sm shadow-md hover:bg-primary-hover transition-all flex items-center justify-center gap-2"
+                  >
+                    {forgotLoading ? <Loader2 className="animate-spin" size={18} /> : <span>Cập nhật mật khẩu</span>}
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

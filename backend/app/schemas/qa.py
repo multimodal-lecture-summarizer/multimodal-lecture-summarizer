@@ -13,6 +13,14 @@ class QAAskRequest(CamelModel):
     )
 
 
+class QACitationDTO(CamelModel):
+    start_seconds: float = Field(..., description="Timestamp start in seconds")
+    end_seconds: float = Field(..., description="Timestamp end in seconds")
+    timecode: str = Field(..., description="Formated timecode MM:SS")
+    keyframe_url: Optional[str] = Field(default="", description="Keyframe image URL if available")
+    snippet: str = Field(..., description="Text snippet of the chunk")
+
+
 class QALogDTO(CamelModel):
     qa_id: uuid.UUID = Field(
         ..., description="The unique UUID of the Q&A log entry"
@@ -28,6 +36,14 @@ class QALogDTO(CamelModel):
     retrieved_chunks: Optional[List[str]] = Field(
         default=[],
         description="List of transcript context chunks retrieved from ChromaDB",
+    )
+    reference_time: Optional[float] = Field(
+        default=None,
+        description="Primary timestamp in seconds to seek video",
+    )
+    citations: Optional[List[QACitationDTO]] = Field(
+        default=[],
+        description="List of structured citations with timestamps and keyframe URLs",
     )
     asked_at: datetime = Field(
         ..., description="The timestamp when the question was asked"

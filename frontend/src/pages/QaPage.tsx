@@ -7,8 +7,8 @@ import { Skeleton } from '../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Bot, Play, VideoOff, Filter, Trash2, 
-  Send, Mic, Paperclip, Sparkles, Table, BrainCircuit
+  Bot, VideoOff, Trash2, Clock as HistoryIcon, MessageSquare,
+  Send, Sparkles
 } from 'lucide-react';
 
 interface Message {
@@ -41,7 +41,6 @@ export const QaPage: React.FC = () => {
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [scenesList, setScenesList] = useState<any[]>([]);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   const seekMiniPlayer = (secs: number) => {
@@ -55,19 +54,11 @@ export const QaPage: React.FC = () => {
     setLoading(true);
     
     const loadVideoAndScenes = (id: string) => {
-      Promise.all([
-        api.getVideo(id),
-        api.getVideoScenes(id).catch(() => ({ success: false, data: [] }))
-      ])
-      .then(([videoRes, scenesRes]) => {
+      api.getVideo(id)
+      .then((videoRes) => {
         if (videoRes.success && videoRes.data) {
           setVideoData(videoRes.data);
           setActiveVideoId(videoRes.data.videoId);
-        }
-        if (scenesRes.success && scenesRes.data && scenesRes.data.length > 0) {
-          setScenesList(scenesRes.data);
-        } else {
-          setScenesList([]);
         }
         setLoading(false);
       })
@@ -101,10 +92,48 @@ export const QaPage: React.FC = () => {
   }, [videoId]);
 
   useEffect(() => {
+    if (!activeVideoId) return;
+
+    api.getQaHistory(activeVideoId)
+      .then(res => {
+        if (res.success && res.data && res.data.length > 0) {
+          const loadedMsgs: Message[] = [];
+          res.data.forEach((log: any) => {
+            const rawDate = log.askedAt || log.createdAt;
+            const rawDateStr = typeof rawDate === 'string' && !rawDate.endsWith('Z') && !rawDate.includes('+') ? `${rawDate}Z` : rawDate;
+            const timeStr = rawDate 
+              ? new Date(rawDateStr).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) 
+              : '';
+            
+            loadedMsgs.push({
+              id: `user-${log.qaId}`,
+              sender: 'user',
+              text: log.question,
+              timestamp: timeStr
+            });
+
+            loadedMsgs.push({
+              id: `bot-${log.qaId}`,
+              sender: 'bot',
+              text: log.answer,
+              referenceTime: log.referenceTime,
+              timestamp: timeStr
+            });
+          });
+          setMessages(loadedMsgs);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to load past QA chat history:", err);
+      });
+  }, [activeVideoId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSendMessage = (textToSend = inputText) => {
+
+  const handleSendMessage = async (textToSend = inputText) => {
     if (!textToSend.trim()) return;
 
     const queryText = textToSend;
@@ -125,33 +154,35 @@ export const QaPage: React.FC = () => {
       return;
     }
 
-    setTimeout(() => {
-      let responseText = "";
-      let refTime: number | undefined = undefined;
-      const lowerQuery = queryText.toLowerCase();
+    try {
+      const res = await api.askQuestion(activeVideoId, queryText);
+      if (res.success && res.data) {
+        const qaData = res.data;
+        const answerText = qaData.answer || '';
+        const refTime = qaData.referenceTime ?? (qaData.citations && qaData.citations.length > 0 ? qaData.citations[0].startSeconds : undefined);
 
-      if (lowerQuery.includes("tóm tắt") || lowerQuery.includes("summary")) {
-        responseText = "Bài giảng này thảo luận về phương pháp phân tích bài giảng đa phương tiện. Nội dung chính bao gồm giới thiệu mục tiêu bài giảng, phân tích chi tiết dữ liệu hình ảnh/âm thanh và tóm tắt các điểm then chốt ở cuối chương. Bạn có thể xem chi tiết ở các mốc thời gian 01:25 và 05:12.";
-        refTime = 85; 
-      } else if (lowerQuery.includes("whisper") || lowerQuery.includes("clip") || lowerQuery.includes("ai")) {
-        responseText = "Hệ thống sử dụng mô hình WhisperX để bóc băng tiếng nói tiếng Việt chính xác, kết hợp CLIP để trích xuất đặc trưng hình ảnh của slide, và dùng mô hình ngôn ngữ lớn Gemini 1.5 để xâu chuỗi thông tin và trả lời câu hỏi.";
-      } else if (lowerQuery.includes("thời gian") || lowerQuery.includes("khi nào")) {
-        responseText = "Mốc thời gian quan trọng của nội dung này nằm ở khoảng 02:40 trong video bài giảng. Hãy bấm vào nút tua nhanh bên cạnh câu trả lời này để di chuyển đến đúng phân đoạn đó.";
-        refTime = 160; 
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'bot',
+          text: answerText,
+          referenceTime: refTime,
+          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        }]);
       } else {
-        responseText = `Cám ơn câu hỏi của bạn về chủ đề "${queryText}". Dựa trên tài liệu bóc băng bài giảng, giảng viên giải thích chi tiết rằng cơ chế cốt lõi hoạt động dựa trên các tham số cấu hình hệ thống. Bạn có thể tua đến mốc 03:15 để nghe kỹ hơn phần này.`;
-        refTime = 195;
+        throw new Error(res.message || 'Không thể lấy câu trả lời từ AI');
       }
-
+    } catch (err: any) {
+      console.error("QA error:", err);
+      toast.error(err.message || 'Hỏi đáp AI gặp lỗi', 'Lỗi RAG Q&A');
       setMessages(prev => [...prev, {
         id: `msg-${Date.now() + 1}`,
         sender: 'bot',
-        text: responseText,
-        referenceTime: refTime,
+        text: `RAG Q&A: ${err.message || 'Không thể kết nối tới mô hình AI'}. Vui lòng thử lại sau.`,
         timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
       }]);
+    } finally {
       setIsTyping(false);
-    }, 1200);
+    }
   };
 
   const formatTimeText = (secs: number) => {
@@ -160,16 +191,81 @@ export const QaPage: React.FC = () => {
     return `${m}:${s}`;
   };
 
-  const clearHistory = () => {
+  const formatMessageHtml = (rawText: string) => {
+    if (!rawText) return '';
+    
+    let text = rawText;
+
+    // 1. Replace [MM:SS] or [MM:SS - MM:SS] or **[MM:SS]** timestamps with interactive seek buttons FIRST
+    text = text.replace(/(\*\*|\*)?\[(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*-\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?\](\*\*|\*)?/g, (_match, _b1, h1, m1, s1, h2, m2, s2) => {
+      let startSecs = 0;
+      let label = '';
+      if (s1 !== undefined) {
+        startSecs = parseInt(h1, 10) * 3600 + parseInt(m1, 10) * 60 + parseInt(s1, 10);
+        label = `${h1}:${m1}:${s1}`;
+      } else {
+        startSecs = parseInt(h1, 10) * 60 + parseInt(m1, 10);
+        label = `${h1}:${m1}`;
+      }
+
+      if (h2 !== undefined) {
+        if (s2 !== undefined) {
+          label += ` - ${h2}:${m2}:${s2}`;
+        } else {
+          label += ` - ${h2}:${m2}`;
+        }
+      }
+
+      return `<button type="button" data-seek="${startSecs}" class="inline-flex items-center gap-1 font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-primary/15 text-primary hover:bg-primary hover:text-white transition-all shadow-sm mx-1 my-0.5 cursor-pointer border border-primary/20">▶ [${label}]</button>`;
+    });
+
+    // 2. Transform **bold** to <strong>
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>');
+    
+    // 3. Transform Headings
+    text = text.replace(/^### (.*$)/gim, '<h4 class="font-bold text-slate-900 text-base mt-3 mb-1">$1</h4>');
+    text = text.replace(/^## (.*$)/gim, '<h3 class="font-bold text-slate-900 text-lg mt-3 mb-1">$1</h3>');
+
+    // 4. Fix standalone bullets on single lines (e.g. •\nText)
+    text = text.replace(/([•\-\*])\s*\n\s*/g, '$1 ');
+
+    // 5. Clean list items (- item, * item, • item)
+    text = text.replace(/^[\s]*[•\-\*]\s*(.*$)/gim, '<div class="flex items-start gap-2 my-1.5 pl-1"><span class="text-primary font-bold inline-block mt-0.5">•</span><span class="flex-1">$1</span></div>');
+
+    // 6. Line breaks handling
+    text = text.replace(/\n{2,}/g, '<div class="h-2"></div>');
+    text = text.replace(/\n/g, '<br />');
+
+    return text;
+  };
+
+  const handleChatContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = (e.target as HTMLElement).closest('[data-seek]');
+    if (target) {
+      e.preventDefault();
+      const seekSecs = parseFloat(target.getAttribute('data-seek') || '0');
+      seekMiniPlayer(seekSecs);
+    }
+  };
+
+  const clearHistory = async () => {
+    if (activeVideoId) {
+      try {
+        await api.clearQaHistory(activeVideoId);
+      } catch (err) {
+        console.error("Failed to delete QA history on backend:", err);
+      }
+    }
+
     setMessages([
       {
         id: `msg-${Date.now()}`,
         sender: 'bot',
-        text: t('qa.history_cleared_msg') || 'History cleared.',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        text: t('qa.history_cleared_msg') || 'Lịch sử trò chuyện đã được xóa. Tôi sẵn sàng trả lời các câu hỏi mới!',
+        timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
-    toast.success(t('qa.clear_success'), t('qa.clear_success_title'));
+    toast.success(t('qa.clear_success') || 'Lịch sử trò chuyện đã được xóa.', t('qa.clear_success_title') || 'Đã xóa');
   };
 
   return (
@@ -210,10 +306,15 @@ export const QaPage: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-6">
           <div className="flex items-center justify-between mb-4 px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{t('qa.analyzed_segments')}</span>
-            <button className="text-slate-400 hover:text-primary transition-colors">
-              <Filter size={16} />
-            </button>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <HistoryIcon size={14} className="text-primary" />
+              {t('qa.chat_history') || 'Lịch sử câu hỏi & Chat'}
+            </span>
+            {messages.filter(m => m.sender === 'user').length > 0 && (
+              <span className="text-[10px] font-mono font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {messages.filter(m => m.sender === 'user').length} câu hỏi
+              </span>
+            )}
           </div>
           <div className="space-y-3">
             {loading ? (
@@ -224,33 +325,53 @@ export const QaPage: React.FC = () => {
                   <Skeleton className="h-3 w-full" />
                 </div>
               ))
-            ) : scenesList.length > 0 ? (
-              scenesList.map((scene, idx) => (
-                <motion.div 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  key={idx}
-                  onClick={() => seekMiniPlayer(scene.startSeconds)}
-                  className="p-4 rounded-2xl border border-slate-200/60 shadow-sm hover:border-primary/50 hover:shadow-md cursor-pointer group bg-white transition-all"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="bg-slate-100 border border-slate-200/50 px-2 py-1 rounded-lg text-[10px] font-mono font-bold text-slate-700">
-                      {formatTimeText(scene.startSeconds)} - {formatTimeText(scene.endSeconds)}
-                    </span>
-                    <Play size={14} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                  <h4 className="font-heading text-sm font-bold text-slate-900 mb-1">
-                    {t('qa.segment')} #{scene.sceneIndex !== undefined ? scene.sceneIndex + 1 : idx + 1}
-                  </h4>
-                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                    {scene.caption || scene.script || t('qa.processing_segment')}
-                  </p>
-                </motion.div>
-              ))
+            ) : messages.filter(m => m.sender === 'user').length > 0 ? (
+              messages
+                .map((msg, idx) => ({ msg, idx }))
+                .filter(({ msg }) => msg.sender === 'user')
+                .map(({ msg, idx }, qIdx) => {
+                  const botMsg = messages[idx + 1] && messages[idx + 1].sender === 'bot' ? messages[idx + 1] : null;
+                  const cleanBotText = botMsg ? botMsg.text.replace(/<[^>]*>?/gm, '').replace(/▶\s*\[\d{2}:\d{2}\]/g, '').trim() : '';
+
+                  return (
+                    <motion.div 
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      key={msg.id}
+                      onClick={() => {
+                        const el = document.getElementById(msg.id);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="p-3.5 rounded-2xl border border-slate-200/60 shadow-sm hover:border-primary/50 hover:shadow-md cursor-pointer group bg-white transition-all"
+                    >
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-mono font-bold">
+                          #Câu hỏi {qIdx + 1}
+                        </span>
+                        {msg.timestamp && (
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {msg.timestamp}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-heading text-xs font-bold text-slate-900 group-hover:text-primary transition-colors line-clamp-2 leading-snug mb-1">
+                        {msg.text}
+                      </h4>
+                      {cleanBotText && (
+                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed bg-slate-50/80 p-2 rounded-xl border border-slate-100 mt-1.5">
+                          {cleanBotText}
+                        </p>
+                      )}
+                    </motion.div>
+                  );
+                })
             ) : (
               <div className="p-6 text-center text-slate-400 border-2 border-dashed border-slate-200/60 rounded-2xl">
-                <Sparkles size={24} className="mx-auto mb-2 opacity-50" />
-                <p className="text-xs font-medium">{t('qa.no_segments')}</p>
+                <MessageSquare size={24} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-xs font-semibold text-slate-600">Chưa có lịch sử câu hỏi nào</p>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">Hãy nhập câu hỏi ở ô bên phải để bắt đầu trò chuyện RAG với AI</p>
               </div>
             )}
           </div>
@@ -288,11 +409,12 @@ export const QaPage: React.FC = () => {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 relative">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 relative" onClick={handleChatContainerClick}>
           <AnimatePresence initial={false}>
             {messages.map((msg) => (
               <motion.div 
                 key={msg.id}
+                id={msg.id}
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 className={`flex flex-col max-w-[85%] ${msg.sender === 'user' ? 'items-end ml-auto' : 'items-start'}`}
@@ -308,22 +430,8 @@ export const QaPage: React.FC = () => {
                       ? 'bg-slate-900 text-white rounded-2xl rounded-tr-sm' 
                       : 'bg-slate-50 border border-slate-200/50 rounded-2xl rounded-tl-sm text-slate-800'
                   }`}
-                  dangerouslySetInnerHTML={{ __html: msg.text }}
+                  dangerouslySetInnerHTML={{ __html: formatMessageHtml(msg.text) }}
                 />
-                {msg.referenceTime !== undefined && (
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => seekMiniPlayer(msg.referenceTime!)}
-                    className="flex items-center gap-2 bg-white hover:bg-primary hover:text-white hover:border-primary transition-all border border-slate-200 shadow-sm px-4 py-1.5 rounded-full mt-2 group text-xs text-slate-700 font-semibold"
-                  >
-                    <Play size={14} className="text-primary group-hover:text-white" />
-                    <span className="font-mono">{formatTimeText(msg.referenceTime)}</span>
-                    <span className="opacity-0 group-hover:opacity-100 -ml-2 group-hover:ml-0 transition-all overflow-hidden whitespace-nowrap max-w-0 group-hover:max-w-[100px]">
-                      {t('qa.view_segment')}
-                    </span>
-                  </motion.button>
-                )}
                 {msg.timestamp && (
                   <span className={`text-[10px] font-mono text-slate-400 mt-1.5 ${msg.sender === 'user' ? 'mr-1' : 'ml-1'}`}>
                     {msg.timestamp}
@@ -354,24 +462,36 @@ export const QaPage: React.FC = () => {
         <div className="z-20 p-4 md:p-6 bg-white/80 backdrop-blur-md border-t border-slate-200/50 shrink-0">
           <div className="relative max-w-4xl mx-auto">
             {/* Suggested Questions */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
-              <button onClick={() => handleSendMessage('Giải thích cơ chế Backpropagation trong Deep Learning?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
-                <Sparkles size={12} /> {t('qa.suggest1')}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+              <button 
+                onClick={() => handleSendMessage(t('qa.suggest1_q'))} 
+                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {t('qa.suggest1')}
               </button>
-              <button onClick={() => handleSendMessage('Tóm tắt các tham số hiệu năng được đề cập trong bài giảng?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
-                <Table size={12} /> {t('qa.suggest2')}
+              <button 
+                onClick={() => handleSendMessage(t('qa.suggest2_q'))} 
+                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {t('qa.suggest2')}
               </button>
-              <button onClick={() => handleSendMessage('So sánh Transformer và RNN theo phân tích của giảng viên?')} className="px-3 py-1.5 bg-slate-100 hover:bg-primary/10 hover:text-primary text-slate-600 rounded-full text-[11px] font-semibold transition-colors flex items-center gap-1.5">
-                <BrainCircuit size={12} /> {t('qa.suggest3')}
+              <button 
+                onClick={() => handleSendMessage(t('qa.suggest3_q'))} 
+                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {t('qa.suggest3')}
+              </button>
+              <button 
+                onClick={() => handleSendMessage(t('qa.suggest4_q'))} 
+                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {t('qa.suggest4')}
               </button>
             </div>
 
             <div className="flex items-end gap-3 bg-white p-2 rounded-3xl border-2 border-slate-200 focus-within:border-primary focus-within:shadow-lg focus-within:shadow-primary/10 transition-all">
-              <button className="p-3 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-50 mb-0.5 ml-1 shrink-0">
-                <Paperclip size={20} />
-              </button>
               <textarea 
-                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-4 px-2 resize-none max-h-32 min-h-[52px] placeholder-slate-400 outline-none text-slate-700" 
+                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-4 px-4 resize-none max-h-32 min-h-[52px] placeholder-slate-400 outline-none text-slate-700" 
                 placeholder={t('qa.input_placeholder') || "Ask a question..."}
                 rows={1}
                 value={inputText}
@@ -383,17 +503,14 @@ export const QaPage: React.FC = () => {
                   }
                 }}
               />
-              <div className="flex items-center gap-2 mr-1 mb-1 shrink-0">
-                <button className="p-3 text-slate-400 hover:text-primary transition-colors rounded-full hover:bg-slate-50 hidden sm:block">
-                  <Mic size={20} />
-                </button>
+              <div className="flex items-center mr-1 mb-1 shrink-0">
                 <motion.button 
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleSendMessage()}
-                  className="bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-primary-hover shadow-md shadow-primary/30 transition-all"
+                  className="bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-primary-hover shadow-md shadow-primary/30 transition-all cursor-pointer"
                 >
-                  <Send size={18} className="ml-1" />
+                  <Send size={18} className="ml-0.5" />
                 </motion.button>
               </div>
             </div>

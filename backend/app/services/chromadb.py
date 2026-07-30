@@ -133,9 +133,11 @@ class ChromaDBService:
         )
         return True
 
-    def query_similar_chunks(self, video_id: str, query: str, limit: int = 3) -> List[str]:
+    def query_similar_chunks_with_metadata(
+        self, video_id: str, query: str, limit: int = 4
+    ) -> List[Dict[str, Any]]:
         """
-        Queries the vector database for text chunks relevant to the user query.
+        Queries the vector database for text chunks relevant to query, returning document text and metadata.
         """
         self._ensure_connection()
         video_id_str = str(video_id)
@@ -146,41 +148,52 @@ class ChromaDBService:
                     n_results=limit,
                     where={"video_id": video_id_str},
                 )
-                # Parse documents list from results
                 if results and "documents" in results and results["documents"]:
-                    # ChromaDB returns List[List[str]]
-                    flat_docs = results["documents"][0]
-                    logger.info(
-                        f"Retrieved {len(flat_docs)} chunks from ChromaDB for query: '{query}'"
-                    )
-                    return flat_docs
+                    docs = results["documents"][0]
+                    metas = results.get("metadatas", [[]])[0] if results.get("metadatas") else []
+                    items = []
+                    for doc, meta in zip(docs, metas):
+                        items.append({"document": doc, "metadata": meta or {}})
+                    logger.info(f"Retrieved {len(items)} chunks with metadata from ChromaDB for query: '{query}'")
+                    return items
             except Exception as e:
-                logger.error(f"Error querying ChromaDB: {e}")
+                logger.error(f"Error querying ChromaDB with metadata: {e}")
 
-        # In-memory mock retrieval: simple keyword matching logic
-        logger.info(
-            f"[Mock ChromaDB] Querying in-memory store for video {video_id_str} with query: '{query}'"
-        )
+        # In-memory mock retrieval
+        logger.info(f"[Mock ChromaDB] Querying in-memory store for video {video_id_str} with query: '{query}'")
         chunks = self.mock_store.get(video_id_str, [])
         if not chunks:
-            # Return some static defaults if store is empty
             return [
-                "WhisperX provides word-level timestamps (e.g. alignment) using phoneme models.",
-                "PySceneDetect splits video into semantic scene transitions based on pixel changes.",
-                "CLIP extracts semantic keyframe images and measures visual text similarity.",
+                {
+                    "document": "[00:00] Lời giảng: WhisperX cung cấp timestamp mức từ chính xác bằng mô hình ngữ âm.",
+                    "metadata": {"video_id": video_id_str, "start_seconds": 0.0, "end_seconds": 60.0, "timecode": "00:00", "keyframe_url": ""}
+                },
+                {
+                    "document": "[01:00] Lời giảng: PySceneDetect phân tách video dựa trên sự thay đổi màu sắc và pixel.",
+                    "metadata": {"video_id": video_id_str, "start_seconds": 60.0, "end_seconds": 120.0, "timecode": "01:00", "keyframe_url": ""}
+                },
+                {
+                    "document": "[02:00] Lời giảng: CLIP trích xuất đặc trưng hình ảnh slide và đo độ tương đồng văn bản.",
+                    "metadata": {"video_id": video_id_str, "start_seconds": 120.0, "end_seconds": 180.0, "timecode": "02:00", "keyframe_url": ""}
+                }
             ]
 
-        # Simple score based on term frequencies in documents
         query_words = set(query.lower().split())
         scored_chunks = []
         for chunk in chunks:
             doc_lower = chunk["document"].lower()
             score = sum(1 for word in query_words if word in doc_lower)
-            scored_chunks.append((score, chunk["document"]))
+            scored_chunks.append((score, chunk))
 
-        # Sort by score descending
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
-        return [doc for score, doc in scored_chunks[:limit]]
+        return [chunk for score, chunk in scored_chunks[:limit]]
+
+    def query_similar_chunks(self, video_id: str, query: str, limit: int = 3) -> List[str]:
+        """
+        Queries the vector database for text chunks relevant to the user query (plain text).
+        """
+        items = self.query_similar_chunks_with_metadata(video_id, query, limit)
+        return [item["document"] for item in items]
 
     def delete_transcript_chunks(self, video_id: Any) -> bool:
         """

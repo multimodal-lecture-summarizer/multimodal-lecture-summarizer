@@ -14,23 +14,135 @@ from openai import OpenAI
 
 
 class Summarizer:
-    """Grounded LLM summarization with auto fallback models."""
+    """Grounded LLM summarization with auto fallback models (OpenRouter -> Groq)."""
 
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
-        # Get primary API Key (Groq)
         from ai_workers.core.config import worker_settings
-        self.api_key = worker_settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
-        # Fallback models in priority order
-        self.models_list = [
+        self.openrouter_key = worker_settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY", "")
+        self.groq_key = worker_settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+        
+        # Primary API Key
+        self.api_key = self.openrouter_key or self.groq_key
+
+        self.openrouter_models = [
+            worker_settings.OPENROUTER_MODEL or "qwen/qwen-2.5-7b-instruct",
+            "qwen/qwen-2.5-7b-instruct",
+            "meta-llama/llama-3.3-70b-instruct",
+            "deepseek/deepseek-chat",
+        ]
+        self.groq_models = [
             "llama-3.1-8b-instant",
             "llama-3.3-70b-versatile",
             "llama3-70b-8192"
         ]
 
-    def build_rag_index(self, utterances: list[dict], slides: list[dict]) -> None:
+    def build_rag_index(self, video_id: str, utterances: list[dict], slides: list[dict]) -> bool:
         """Build ChromaDB vector index from transcript and slide content."""
-        pass
+        try:
+            from app.services.chromadb import chromadb_service
+        except ImportError:
+            import sys
+            backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../backend"))
+            if backend_dir not in sys.path:
+                sys.path.insert(0, backend_dir)
+            try:
+                from app.services.chromadb import chromadb_service
+            except Exception as e:
+                print(f"[RAG Index] Could not import chromadb_service: {e}")
+                return False
+
+        def format_time(secs: float) -> str:
+            m = int(secs) // 60
+            s = int(secs) % 60
+            return f"{m:02d}:{s:02d}"
+
+        chunks = []
+        metadatas = []
+
+        if utterances:
+            # Chunk speech utterances in ~25s windows to preserve granular timestamps
+            window_size = 25.0
+            max_time = float(utterances[-1].get("end", 0.0))
+            curr_start = float(utterances[0].get("start", 0.0))
+            
+            while curr_start < max_time:
+                curr_end = curr_start + window_size
+                
+                # Find all utterances starting or overlapping with [curr_start, curr_end]
+                matched_utts = [
+                    u for u in utterances
+                    if max(float(u.get("start", 0.0)), curr_start) < min(float(u.get("end", 0.0)), curr_end)
+                    or (curr_start <= float(u.get("start", 0.0)) < curr_end)
+                ]
+                
+                speech_text = " ".join([u.get("text", "").strip() for u in matched_utts if u.get("text", "").strip()]).strip()
+                
+                if speech_text:
+                    # Determine exact start second of first utterance in this chunk
+                    actual_start = float(matched_utts[0].get("start", curr_start))
+                    timecode = format_time(actual_start)
+                    
+                    doc_parts = [f"[{timecode}] Lời giảng: {speech_text}"]
+                    
+                    # Match any slides overlapping this time window
+                    keyframe_url = ""
+                    if slides:
+                        for slide in slides:
+                            s_start = float(slide.get("start_seconds", 0.0))
+                            s_end = float(slide.get("end_seconds", 0.0))
+                            if max(actual_start, s_start) < min(curr_end, s_end):
+                                ocr = slide.get("ocr_text", "").strip()
+                                cap = slide.get("caption", "").strip()
+                                if ocr:
+                                    doc_parts.append(f"Văn bản trên slide: {ocr}")
+                                if cap and cap != "[Nhạc nền / Im lặng]":
+                                    doc_parts.append(f"Mô tả hình ảnh: {cap}")
+                                if not keyframe_url:
+                                    keyframe_url = slide.get("keyframe_url", "")
+                    
+                    full_doc = " | ".join(doc_parts)
+                    chunks.append(full_doc)
+                    metadatas.append({
+                        "video_id": str(video_id),
+                        "start_seconds": actual_start,
+                        "end_seconds": min(curr_end, max_time),
+                        "timecode": timecode,
+                        "keyframe_url": keyframe_url
+                    })
+                
+                curr_start += window_size
+        elif slides:
+            # Fallback if no audio transcript available, chunk by slides
+            for slide in slides:
+                s_start = float(slide.get("start_seconds", 0.0))
+                s_end = float(slide.get("end_seconds", 0.0))
+                timecode = slide.get("start_timecode") or format_time(s_start)
+                ocr_str = slide.get("ocr_text", "").strip()
+                caption_str = slide.get("caption", "").strip()
+
+                doc_parts = [f"[{timecode}]"]
+                if ocr_str:
+                    doc_parts.append(f"Văn bản trên slide: {ocr_str}")
+                if caption_str and caption_str != "[Nhạc nền / Im lặng]":
+                    doc_parts.append(f"Mô tả hình ảnh: {caption_str}")
+
+                full_doc = " | ".join(doc_parts)
+                if full_doc.strip():
+                    chunks.append(full_doc)
+                    metadatas.append({
+                        "video_id": str(video_id),
+                        "start_seconds": s_start,
+                        "end_seconds": s_end,
+                        "timecode": timecode,
+                        "keyframe_url": slide.get("keyframe_url", "")
+                    })
+                    curr_start += window_size
+
+        if chunks:
+            print(f"[RAG Index] Building index for video {video_id} with {len(chunks)} multimodal chunks...")
+            return chromadb_service.add_transcript_chunks(str(video_id), chunks, metadatas)
+        return False
 
     def summarize(
         self,
@@ -96,7 +208,7 @@ class Summarizer:
             duration = utterances[-1]["end"] if utterances else (slides[-1]["end_seconds"] if slides else 10.0)
             return {
                 "video_title": "Video chưa đặt tên (Chưa cấu hình API Key)",
-                "summary": "Nội dung video đã được trích xuất thành công. Vui lòng cấu hình GROQ_API_KEY trong file .env để tạo tóm tắt AI chi tiết.",
+                "summary": "Nội dung video đã được trích xuất thành công. Vui lòng cấu hình OPENROUTER_API_KEY hoặc GROQ_API_KEY trong file .env để tạo tóm tắt AI chi tiết.",
                 "chapters": [
                     {
                         "title": "Nội dung chính",
@@ -108,20 +220,15 @@ class Summarizer:
                 "model_used": "None"
             }
 
-        # Initialize Groq client
-        client = OpenAI(
-            base_url="https://api.groq.com/openai/v1",
-            api_key=self.api_key
-        )
-
         chapter_constraints = ""
         if chapters:
-            chapter_intervals = "\n        ".join([f"Chapter {i+1}: {c['startTime']:.2f}s -> {c['endTime']:.2f}s" for i, c in enumerate(chapters)])
+            chapter_intervals = "\n        ".join([f"Chapter {i+1}: {format_time(c['startTime'])} ({c['startTime']:.2f}s) -> {format_time(c['endTime'])} ({c['endTime']:.2f}s)" for i, c in enumerate(chapters)])
             chapter_constraints = f"""
         CRITICAL CONSTRAINTS FOR CHAPTERS:
         - We have pre-calculated the exact chapter boundaries using a deterministic algorithm.
         - You MUST use exactly these {len(chapters)} chapter intervals. Do NOT add, remove, or modify the timestamps.
         - Your ONLY task is to read the transcript within each specific interval and write a concise title and summary for it.
+        - CRITICAL: In the summary text and any timestamp references, use the exact timecode [MM:SS] corresponding to each chapter or topic's actual start time (e.g., [00:00], [03:15], [07:30]). NEVER output [00:00] for all items!
         
         PREDEFINED CHAPTER BOUNDARIES:
         {chapter_intervals}
@@ -132,7 +239,8 @@ class Summarizer:
         - The total duration of this video is {duration} seconds ({formatted_duration}).
         - You MUST NOT generate any chapters with an endTime greater than {duration}.
         - The last chapter's endTime MUST be exactly {duration}.
-        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript. Do not invent non-existent topics for silent parts.
+        - Base your chapters strictly on the slide/scene transition timestamps and topic shifts in the transcript.
+        - CRITICAL: In the summary text and any timestamp references, use the exact timecode [MM:SS] corresponding to each topic's actual start time. NEVER output [00:00] for all items!
 """
 
         prompt = f"""
@@ -174,9 +282,31 @@ class Summarizer:
         }}
         """
 
+        # Build candidate client & model target list
+        targets = []
+        if self.openrouter_key:
+            or_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.openrouter_key,
+                default_headers={
+                    "HTTP-Referer": "https://github.com/multimodal-lecture-summarizer",
+                    "X-Title": "Multimodal Lecture Summarizer"
+                }
+            )
+            for m in self.openrouter_models:
+                targets.append(("OpenRouter", m, or_client))
+
+        if self.groq_key:
+            groq_client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=self.groq_key
+            )
+            for m in self.groq_models:
+                targets.append(("Groq", m, groq_client))
+
         last_error = None
-        for model in self.models_list:
-            print(f"Trying Groq summarization with model: {model}...")
+        for provider, model, client in targets:
+            print(f"Trying {provider} summarization with model: {model}...")
             try:
                 chat_completion = client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
@@ -214,19 +344,19 @@ class Summarizer:
                         })
                     data["chapters"] = validated_chapters
                 
-                print(f"[OK] Successfully generated summary with model: {model}")
+                print(f"[OK] Successfully generated summary with {provider} ({model})")
                 return {
                     "video_title": data.get("video_title") or data.get("title") or "Bài giảng chưa đặt tên",
                     "summary": data.get("summary", "Tóm tắt bài giảng."),
                     "chapters": data.get("chapters", []),
-                    "model_used": f"Groq ({model})"
+                    "model_used": f"{provider} ({model})"
                 }
             except Exception as e:
-                print(f"Model {model} failed: {e}. Trying fallback model...")
+                print(f"{provider} model {model} failed: {e}. Trying next fallback target...")
                 last_error = e
 
         # Fallback if all models fail
-        print("All Groq models failed. Using offline fallback summary.")
+        print("All LLM providers/models failed. Using offline fallback summary.")
         duration = utterances[-1]["end"] if utterances else 10.0
         return {
             "video_title": "Bài giảng chưa đặt tên (Lỗi AI)",
