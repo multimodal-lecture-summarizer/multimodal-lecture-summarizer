@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.1-8b-instant"
 
+    # OpenRouter API
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "qwen/qwen-2.5-7b-instruct"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    LLM_PROVIDER: str = "openrouter"  # "openrouter", "groq", or "auto"
+
     # ChromaDB
     CHROMADB_HOST: str = "localhost"
     CHROMADB_PORT: Optional[int] = 8000

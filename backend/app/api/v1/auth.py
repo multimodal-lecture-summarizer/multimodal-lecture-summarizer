@@ -3,10 +3,18 @@ from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.exceptions import AlreadyExistsException, AuthException
+from app.core.exceptions import AlreadyExistsException, AuthException, NotFoundException
 from app.core.config import settings
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, UserCreate, UserLogin, UserDTO, Token
+from app.schemas import (
+    BaseDTO,
+    UserCreate,
+    UserLogin,
+    UserDTO,
+    Token,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+)
 from app.api.deps import (
     get_password_hash,
     verify_password,
@@ -104,3 +112,51 @@ def get_me(current_user: User = Depends(get_current_active_user)):
         data=UserDTO.model_validate(current_user),
         message="Profile details retrieved successfully",
     )
+
+
+@router.post(
+    "/forgot-password",
+    response_model=BaseDTO[dict],
+    summary="Request password reset for account",
+)
+def forgot_password(
+    payload: ForgotPasswordRequest, db: Session = Depends(get_db)
+):
+    """Verifies account existence for password reset."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise NotFoundException(
+            message=f"Không tìm thấy tài khoản với email {payload.email}"
+        )
+
+    return BaseDTO(
+        success=True,
+        data={"email": payload.email, "resetAllowed": True},
+        message="Tài khoản hợp lệ. Bạn có thể tiến hành đặt lại mật khẩu mới.",
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=BaseDTO[dict],
+    summary="Reset account password",
+)
+def reset_password(
+    payload: ResetPasswordRequest, db: Session = Depends(get_db)
+):
+    """Resets user account password in PostgreSQL."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise NotFoundException(
+            message=f"Không tìm thấy tài khoản với email {payload.email}"
+        )
+
+    user.password_hash = get_password_hash(payload.new_password)
+    db.commit()
+
+    return BaseDTO(
+        success=True,
+        data={"reset": True},
+        message="Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.",
+    )
+

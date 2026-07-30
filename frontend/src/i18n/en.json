@@ -206,6 +206,7 @@
     "processing_segment": "Processing segment...",
     "no_segments": "No segments in this video.",
     "header_title": "Contextual Video Q&A",
+    "chat_history": "QA & Chat History",
     "clear_history": "Clear History",
     "clear_success": "Chat history has been cleared.",
     "clear_success_title": "Cleared",
@@ -216,9 +217,14 @@
     "view_segment": "View related segment",
     "analyzing": "Analyzing...",
     "input_placeholder": "Ask a question about the lecture video content (Enter to send)...",
-    "suggest1": "Explain the main concept",
-    "suggest2": "Data statistics",
-    "suggest3": "Lecture logic analysis"
+    "suggest1": "💡 Summarize 3 key points",
+    "suggest1_q": "What are the 3 most important key points covered in this lecture?",
+    "suggest2": "🎯 Target & Objectives",
+    "suggest2_q": "Who is this lecture for and what main problem does it address?",
+    "suggest3": "📊 Data & Examples",
+    "suggest3_q": "What real-world examples and statistics are presented by the speaker?",
+    "suggest4": "❓ Review Questions",
+    "suggest4_q": "Generate 3 key review questions based on the content of this lecture."
   },
   "docs": {
     "title": "User Guide",

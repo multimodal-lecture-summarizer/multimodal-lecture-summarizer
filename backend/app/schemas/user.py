@@ -57,3 +57,13 @@ class TokenData(CamelModel):
     role: Optional[UserRole] = Field(
         None, description="The role claims parsed from the token"
     )
+
+
+class ForgotPasswordRequest(CamelModel):
+    email: EmailStr = Field(..., description="The email address of the account to recover")
+
+
+class ResetPasswordRequest(CamelModel):
+    email: EmailStr = Field(..., description="The email address of the account")
+    new_password: str = Field(..., min_length=6, description="The new password to set")
+
