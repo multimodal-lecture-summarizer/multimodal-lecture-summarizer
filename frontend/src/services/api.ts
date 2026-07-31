@@ -103,9 +103,10 @@ export const api = {
     return result; // returns BaseDTO[VideoDTO]
   },
 
-  async getVideos(status?: string, limit = 20, offset = 0) {
-    let url = `${CONFIG.API_BASE_URL}/videos?limit=${limit}&offset=${offset}`;
+  async getVideos(status?: string, limit = 20, offset = 0, searchQuery?: string, sortBy = "newest") {
+    let url = `${CONFIG.API_BASE_URL}/videos?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
     if (status) url += `&status=${status}`;
+    if (searchQuery) url += `&search_query=${encodeURIComponent(searchQuery)}`;
 
     const response = await customFetch(url, {
       headers: getAuthHeaders(),

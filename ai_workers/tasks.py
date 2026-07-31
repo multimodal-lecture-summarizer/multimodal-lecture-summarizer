@@ -6,6 +6,9 @@ Migrated from: src/mls/pipeline.py
 
 from __future__ import annotations
 
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 # Suppress python warnings (deprecation, user warnings from PyTorch/Transformers)
 import warnings
 warnings.filterwarnings("ignore")
@@ -91,6 +94,14 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                     'merge_output_format': 'mp4',
                     'quiet': True,
+                    'retries': 10,
+                    'fragment_retries': 10,
+                    'source_address': '0.0.0.0',  # Ep dung IPv4 de tranh ranh IPv6 bi YouTube block
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web', 'mweb']
+                        }
+                    },
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([video_path])

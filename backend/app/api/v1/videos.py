@@ -229,6 +229,8 @@ def upload_video(
 )
 def list_videos(
     status: Optional[VideoStatus] = None,
+    search_query: Optional[str] = None,
+    sort_by: str = "newest",
     limit: int = 10,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -238,9 +240,17 @@ def list_videos(
     query = db.query(Video).filter(Video.user_id == current_user.user_id)
     if status:
         query = query.filter(Video.status == status)
+    
+    if search_query:
+        query = query.filter(Video.title.ilike(f"%{search_query}%"))
+
+    if sort_by == "oldest":
+        query = query.order_by(Video.uploaded_at.asc())
+    else:
+        query = query.order_by(Video.uploaded_at.desc())
 
     total = query.count()
-    videos = query.options(joinedload(Video.scenes)).order_by(Video.uploaded_at.desc()).offset(offset).limit(limit).all()
+    videos = query.options(joinedload(Video.scenes)).offset(offset).limit(limit).all()
 
     # Sync active job statuses to update progress/status of processing videos
     from app.api.v1.jobs import sync_job_status

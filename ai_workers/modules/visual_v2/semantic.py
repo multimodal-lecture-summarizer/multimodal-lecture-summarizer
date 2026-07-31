@@ -271,6 +271,27 @@ class SemanticAnalyzer:
         try:
             model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
             print(f"[Semantic] Loading Florence-2 model to caption {len(scenes)} frames from {model_dir}...")
+            
+            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
+            import transformers
+            try:
+                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                # Ensure RobertaTokenizer specifically has it just in case
+                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
+                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
+                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
+                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                        )
+            except Exception as e:
+                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+
             processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
                 
             dtype = torch.float16 if torch.cuda.is_available() else torch.float32
