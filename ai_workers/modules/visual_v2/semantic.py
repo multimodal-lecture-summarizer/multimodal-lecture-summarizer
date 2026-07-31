@@ -323,7 +323,18 @@ class SemanticAnalyzer:
                     
                 try:
                     raw_image = Image.open(path).convert("RGB")
-                    inputs = processor(text=task_prompt, images=raw_image, return_tensors="pt").to(self.device, dtype)
+                    
+                    # Pad to square to fix Florence-2 "only support square feature maps for now" error
+                    width, height = raw_image.size
+                    if width != height:
+                        size = max(width, height)
+                        padded_image = Image.new("RGB", (size, size), (0, 0, 0))
+                        padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
+                        proc_image = padded_image
+                    else:
+                        proc_image = raw_image
+
+                    inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt").to(self.device, dtype)
                     
                     with torch.no_grad():
                         generated_ids = model.generate(
