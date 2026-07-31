@@ -78,6 +78,17 @@ class SemanticAnalyzer:
             text_inputs = processor(text=text_prompts, return_tensors="pt", padding=True).to(self.device)
             with torch.no_grad():
                 text_features = model.get_text_features(**text_inputs)
+                # Handle transformers >= 4.45 returning BaseModelOutputWithPooling
+                if not isinstance(text_features, torch.Tensor):
+                    if hasattr(text_features, "text_embeds"):
+                        text_features = text_features.text_embeds
+                    elif hasattr(text_features, "pooler_output"):
+                        text_features = model.text_projection(text_features.pooler_output) if hasattr(model, 'text_projection') else text_features.pooler_output
+                    elif hasattr(text_features, "last_hidden_state"):
+                        text_features = text_features.last_hidden_state
+                    else:
+                        text_features = text_features[0]
+                        
                 text_features = text_features / text_features.norm(dim=-1, keepdim=True)
             
             # Extract embeddings and quality metrics
