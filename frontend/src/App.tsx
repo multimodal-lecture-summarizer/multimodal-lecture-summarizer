@@ -12,6 +12,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { DocsPage } from './pages/DocsPage';
 import { api } from './services/api';
 import { ToastProvider } from './context/ToastContext';
+import { TopProgress } from './components/TopProgress';
 import './App.css';
 
 interface UserState {
@@ -63,6 +64,7 @@ function App() {
 
   return (
     <ToastProvider>
+      <TopProgress />
       <Router>
         <div className="app-container">
           <Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />

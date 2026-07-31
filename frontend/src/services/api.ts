@@ -9,19 +9,24 @@ const getAuthHeaders = (isMultipart = false) => {
 };
 
 const customFetch = async (url: string, options: RequestInit = {}) => {
-  const response = await fetch(url, options);
-  if (response.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    if (
-      typeof window !== "undefined" &&
-      !window.location.hash.includes("/auth")
-    ) {
-      window.location.hash = "#/auth";
-      window.location.reload();
+  window.dispatchEvent(new Event('api-request-start'));
+  try {
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      if (
+        typeof window !== "undefined" &&
+        !window.location.hash.includes("/auth")
+      ) {
+        window.location.hash = "#/auth";
+        window.location.reload();
+      }
     }
+    return response;
+  } finally {
+    window.dispatchEvent(new Event('api-request-end'));
   }
-  return response;
 };
 
 export const api = {
