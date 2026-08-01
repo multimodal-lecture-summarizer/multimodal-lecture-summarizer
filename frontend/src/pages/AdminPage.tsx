@@ -146,7 +146,7 @@ interface UserItem {
 }
 
 export const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'stats' | 'metrics' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
   const toast = useToast();
   const { t } = useTranslation();
 
@@ -709,14 +709,6 @@ export const AdminPage: React.FC = () => {
               >
                 <span className="material-symbols-outlined text-sm">bar_chart</span> {t('admin.stats')}
               </button>
-              <button 
-                onClick={() => setActiveTab('metrics')}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left text-xs font-bold w-full ${
-                  activeTab === 'metrics' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm">insights</span> {t('admin.metrics')}
-              </button>
             </nav>
           </div>
 
@@ -927,82 +919,6 @@ export const AdminPage: React.FC = () => {
                       </tbody>
                     </table>
                   )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: AI METRICS PERFORMANCE */}
-          {activeTab === 'metrics' && (
-            <div className="space-y-6">
-              <h1 className="font-heading text-xl font-bold text-slate-900">Hiệu Suất &amp; Chất Lượng AI Pipeline</h1>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-1">
-                  <h3 className="text-xs text-slate-500 font-bold flex justify-between items-center">Word Error Rate (ASR) <span className="material-symbols-outlined text-indigo-500 text-sm">spellcheck</span></h3>
-                  <div className="text-2xl font-bold text-slate-900">7.8%</div>
-                  <p className="text-[10px] text-slate-500">Độ chính xác nhận diện từ</p>
-                </div>
-                <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-1">
-                  <h3 className="text-xs text-slate-500 font-bold flex justify-between items-center">CLIP Keyframe F1 <span className="material-symbols-outlined text-primary text-sm">crop_free</span></h3>
-                  <div className="text-2xl font-bold text-slate-900">0.52</div>
-                  <p className="text-[10px] text-slate-500">Độ khớp so với giảng viên</p>
-                </div>
-                <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-1">
-                  <h3 className="text-xs text-slate-500 font-bold flex justify-between items-center">LLM Latency (avg) <span className="material-symbols-outlined text-pink-500 text-sm">timer</span></h3>
-                  <div className="text-2xl font-bold text-slate-900">1.4s</div>
-                  <p className="text-[10px] text-slate-500">Thời gian phản hồi tóm tắt</p>
-                </div>
-                <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-1">
-                  <h3 className="text-xs text-slate-500 font-bold flex justify-between items-center">Tổng Chi Phí Token <span className="material-symbols-outlined text-emerald-500 text-sm">payments</span></h3>
-                  <div className="text-2xl font-bold text-slate-900">$12.45</div>
-                  <p className="text-[10px] text-slate-500">Tháng hiện tại</p>
-                </div>
-              </div>
-
-              <div className="bg-white border-2 border-slate-200 rounded-xl p-6 shadow-none space-y-6">
-                <h3 className="font-heading text-xs font-bold text-slate-900">Đánh giá chi tiết các Mô hình</h3>
-                
-                <div className="space-y-4 text-xs font-body">
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between font-bold text-slate-900">
-                      <span>WhisperX ASR (Nhận diện giọng nói)</span>
-                      <span>Độ chính xác: 92.2%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: '92.2%' }}></div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between font-bold text-slate-900">
-                      <span>CLIP Keyframe (Cắt khung ảnh bài giảng)</span>
-                      <span>F1 Score: 85.0%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-primary h-full rounded-full" style={{ width: '85%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between font-bold text-slate-900">
-                      <span>Gemini 1.5 Flash (Tóm tắt RAG &amp; Hỏi đáp)</span>
-                      <span>Độ khớp ý kiến: 89.5%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-pink-500 h-full rounded-full" style={{ width: '89.5%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between font-bold text-slate-900">
-                      <span>Qwen 2.5 14B Local (Tóm tắt bài giảng)</span>
-                      <span>Độ khớp ý kiến: 81.2%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-slate-900 h-full rounded-full" style={{ width: '81.2%' }}></div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

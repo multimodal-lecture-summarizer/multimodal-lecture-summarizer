@@ -9,19 +9,24 @@ const getAuthHeaders = (isMultipart = false) => {
 };
 
 const customFetch = async (url: string, options: RequestInit = {}) => {
-  const response = await fetch(url, options);
-  if (response.status === 401) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    if (
-      typeof window !== "undefined" &&
-      !window.location.hash.includes("/auth")
-    ) {
-      window.location.hash = "#/auth";
-      window.location.reload();
+  window.dispatchEvent(new Event('api-request-start'));
+  try {
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      if (
+        typeof window !== "undefined" &&
+        !window.location.hash.includes("/auth")
+      ) {
+        window.location.hash = "#/auth";
+        window.location.reload();
+      }
     }
+    return response;
+  } finally {
+    window.dispatchEvent(new Event('api-request-end'));
   }
-  return response;
 };
 
 export const api = {
@@ -103,9 +108,10 @@ export const api = {
     return result; // returns BaseDTO[VideoDTO]
   },
 
-  async getVideos(status?: string, limit = 20, offset = 0) {
-    let url = `${CONFIG.API_BASE_URL}/videos?limit=${limit}&offset=${offset}`;
+  async getVideos(status?: string, limit = 20, offset = 0, searchQuery?: string, sortBy = "newest") {
+    let url = `${CONFIG.API_BASE_URL}/videos?limit=${limit}&offset=${offset}&sort_by=${sortBy}`;
     if (status) url += `&status=${status}`;
+    if (searchQuery) url += `&search_query=${encodeURIComponent(searchQuery)}`;
 
     const response = await customFetch(url, {
       headers: getAuthHeaders(),

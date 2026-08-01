@@ -78,6 +78,17 @@ class SemanticAnalyzer:
             text_inputs = processor(text=text_prompts, return_tensors="pt", padding=True).to(self.device)
             with torch.no_grad():
                 text_features = model.get_text_features(**text_inputs)
+                # Handle transformers >= 4.45 returning BaseModelOutputWithPooling
+                if not isinstance(text_features, torch.Tensor):
+                    if hasattr(text_features, "text_embeds"):
+                        text_features = text_features.text_embeds
+                    elif hasattr(text_features, "pooler_output"):
+                        text_features = model.text_projection(text_features.pooler_output) if hasattr(model, 'text_projection') else text_features.pooler_output
+                    elif hasattr(text_features, "last_hidden_state"):
+                        text_features = text_features.last_hidden_state
+                    else:
+                        text_features = text_features[0]
+                        
                 text_features = text_features / text_features.norm(dim=-1, keepdim=True)
             
             # Extract embeddings and quality metrics
@@ -271,6 +282,27 @@ class SemanticAnalyzer:
         try:
             model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
             print(f"[Semantic] Loading Florence-2 model to caption {len(scenes)} frames from {model_dir}...")
+            
+            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
+            import transformers
+            try:
+                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                # Ensure RobertaTokenizer specifically has it just in case
+                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
+                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
+                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
+                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                        )
+            except Exception as e:
+                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+
             processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
                 
             dtype = torch.float16 if torch.cuda.is_available() else torch.float32
@@ -291,7 +323,18 @@ class SemanticAnalyzer:
                     
                 try:
                     raw_image = Image.open(path).convert("RGB")
-                    inputs = processor(text=task_prompt, images=raw_image, return_tensors="pt").to(self.device, dtype)
+                    
+                    # Pad to square to fix Florence-2 "only support square feature maps for now" error
+                    width, height = raw_image.size
+                    if width != height:
+                        size = max(width, height)
+                        padded_image = Image.new("RGB", (size, size), (0, 0, 0))
+                        padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
+                        proc_image = padded_image
+                    else:
+                        proc_image = raw_image
+
+                    inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt").to(self.device, dtype)
                     
                     with torch.no_grad():
                         generated_ids = model.generate(

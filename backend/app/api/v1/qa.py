@@ -148,25 +148,46 @@ def ask_question(
                 visual_keyframe_lines.append(f"Visual Slide [{tc}]: {desc}")
 
     context_str = "\n".join(context_lines)
-    system_prompt = (
-        "You are an intelligent academic assistant for lecture videos.\n"
-        "Answer the student's question based strictly on the provided video context (speech transcript AND visual slide images) and recent conversation history.\n"
-        "CRITICAL RULES:\n"
-        "1. MULTIMODAL INTEGRATION: Pay close attention to both speech transcript and Visual Slide descriptions. If the user asks about an object, slide, or topic shown on screen (e.g. 'cell phones', 'điện thoại', 'máy ảnh', 'slide 3:03'), answer accurately using the Visual Slide content.\n"
-        "2. LANGUAGE MATCHING & NATURAL VIETNAMESE: Always respond in the EXACT SAME LANGUAGE as the student's question. In Vietnamese, use natural terms like 'nội dung bài giảng' or 'video'—NEVER use weird literal translations like 'khuôn khắc' or 'khung bối cảnh'.\n"
-        "3. CONCISENESS & CLARITY: Answer simple or direct questions in a direct, natural 1-2 sentence response. Do NOT dump unnecessary bullet lists unless specifically requested.\n"
-        "4. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes or sections of the video.\n"
-        "5. CONVERSATIONAL CONTINUITY: Use the recent chat history to understand pronouns ('ông ấy', 'ý đó') or meta-feedback.\n"
-        "6. TRUTHFULNESS: If the lecture video does not contain information to answer the question, state politely in natural language (e.g. 'Nội dung bài giảng không đề cập đến thông tin này.')."
-    )
+    
+    # 4. Construct LLM context prompt (combine overall summary, chapters, transcript chunks & visual slides)
+    prompt_parts = []
+    
+    if summary and summary.summary_text:
+        prompt_parts.append(f"Overall Lecture Summary:\n{summary.summary_text}")
 
-    prompt_parts = [f"Video Speech & Text Context:\n{context_str}"]
+    if summary and summary.chapters_json and isinstance(summary.chapters_json, list):
+        ch_lines = []
+        for idx, ch in enumerate(summary.chapters_json):
+            st = float(ch.get("startTime", ch.get("start_time", 0.0)))
+            m = int(st) // 60
+            s = int(st) % 60
+            tc = f"{m:02d}:{s:02d}"
+            c_title = ch.get("title", f"Phân đoạn {idx+1}")
+            c_sum = ch.get("summary", "")
+            ch_lines.append(f"Chapter [{tc}] {c_title}: {c_sum}")
+        if ch_lines:
+            prompt_parts.append("Lecture Chapter Outline:\n" + "\n".join(ch_lines))
+
+    prompt_parts.append(f"Retrieved Specific Video Chunks & Speech:\n{context_str}")
+
     if visual_keyframe_lines:
         prompt_parts.append("Visual Slide Keyframes & Images:\n" + "\n".join(visual_keyframe_lines))
     if history_str:
         prompt_parts.append(f"Recent Chat History:\n{history_str}")
     prompt_parts.append(f"Student Question: {payload.question}")
     prompt_parts.append("Answer (matching the language of question):")
+
+    system_prompt = (
+        "You are an intelligent academic assistant for lecture videos.\n"
+        "Answer the student's question accurately based on the Overall Lecture Summary, Chapter Outline, Specific Transcripts, and Visual Slides provided below.\n"
+        "CRITICAL RULES:\n"
+        "1. OVERVIEW & SUMMARY QUESTIONS: When asked for a summary, key points, main takeaways, or chapter topics (e.g. '10 ý chính', '3 ý quan trọng', 'tóm tắt', 'bài giảng nói về gì'), synthesize the response directly from the Overall Lecture Summary, Chapter Outline, and Transcripts.\n"
+        "2. MULTIMODAL INTEGRATION: Pay close attention to speech transcripts, chapter outlines, and Visual Slide descriptions. Answer accurately using on-screen slide text or speech when asked about specific concepts or objects.\n"
+        "3. LANGUAGE MATCHING & NATURAL VIETNAMESE: Always respond in the EXACT SAME LANGUAGE as the student's question. In Vietnamese, use natural academic phrasing like 'nội dung bài giảng' or 'video'.\n"
+        "4. CONCISENESS & STRUCTURE: Format answers with bullet points or numbered lists when requested (e.g., for '10 ý chính' or '3 ý quan trọng').\n"
+        "5. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes, chapters, or sections of the video.\n"
+        "6. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details."
+    )
 
     prompt = "\n\n".join(prompt_parts)
 

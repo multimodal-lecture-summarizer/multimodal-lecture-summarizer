@@ -87,7 +87,7 @@ export const HistoryPage: React.FC = () => {
   const loadData = () => {
     setLoading(true);
     const statusParam = selectedStatus === 'All' ? undefined : selectedStatus;
-    api.getVideos(statusParam, limit, (currentPage - 1) * limit)
+    api.getVideos(statusParam, limit, (currentPage - 1) * limit, searchQuery, sortBy)
       .then(res => {
         if (res.success && res.data) {
           setTotalItems(res.metadata?.totalResults || res.metadata?.total || res.data.length);
@@ -131,8 +131,11 @@ export const HistoryPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
-  }, [currentPage, selectedStatus]);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentPage, selectedStatus, searchQuery, sortBy]);
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Bạn có chắc chắn muốn xóa video này?")) {
@@ -169,13 +172,7 @@ export const HistoryPage: React.FC = () => {
     return { bgGradient: gradients[index % gradients.length] };
   };
 
-  const filteredItems = historyItems
-    .filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === 'newest') return b.rawDate - a.rawDate;
-      if (sortBy === 'oldest') return a.rawDate - b.rawDate;
-      return 0;
-    });
+  const filteredItems = historyItems;
 
   const queuedCount = historyItems.filter(item => item.status === VideoStatus.PROCESSING).length;
   const processedCount = historyItems.filter(item => item.status === VideoStatus.DONE).length;
