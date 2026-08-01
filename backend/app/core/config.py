@@ -15,7 +15,7 @@ def parse_cors_origins(v: Union[str, List[str]]) -> List[str]:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[".env", "../.env", "../backend/.env", "backend/.env"],
         env_ignore_empty=True,
         extra="ignore",
     )

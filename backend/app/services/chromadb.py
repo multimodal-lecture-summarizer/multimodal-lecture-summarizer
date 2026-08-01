@@ -21,9 +21,11 @@ def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, ap
         with urllib.request.urlopen(req, timeout=timeout) as response:
             if response.getcode() == 200:
                 return True
-    except urllib.error.HTTPError:
-        # If the server returned any HTTP error (like 401, 403, 410), it is responsive.
-        return True
+    except urllib.error.HTTPError as e:
+        # If the server returned auth/deprecation HTTP errors (like 401, 403, 410), it is responsive.
+        if e.code in (401, 403, 410):
+            return True
+        return False
     except Exception:
         pass
     return False
