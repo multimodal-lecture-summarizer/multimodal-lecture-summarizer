@@ -87,13 +87,13 @@ taskkill /FI "WINDOWTITLE eq MLS_Frontend*" /F /T >nul 2>&1
 
 echo Starting services in separate windows...
 echo Starting Backend API...
-start "MLS_Backend_API" /d "%PROJECT_ROOT%backend" cmd /k "..\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000"
+start "MLS_Backend_API" /d "%PROJECT_ROOT%backend" cmd /k "title MLS_Backend_API && ..\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000"
 
 echo Starting Celery AI Worker...
-start "MLS_Celery_Worker" /d "%PROJECT_ROOT%" cmd /k "set PYTHONPATH=. && backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info -P threads --concurrency=2"
+start "MLS_Celery_Worker" /d "%PROJECT_ROOT%" cmd /k "title MLS_Celery_Worker && set PYTHONPATH=. && set CUBLAS_WORKSPACE_CONFIG=:4096:8 && backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1"
 
 echo Starting Frontend...
-start "MLS_Frontend" /d "%PROJECT_ROOT%frontend" cmd /k "npm run dev"
+start "MLS_Frontend" /d "%PROJECT_ROOT%frontend" cmd /k "title MLS_Frontend && npm run dev"
 
 echo.
 echo ===================================================

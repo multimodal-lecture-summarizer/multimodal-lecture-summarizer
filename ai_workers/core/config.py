@@ -23,6 +23,7 @@ class WorkerSettings(BaseSettings):
     # Visual module
     SCENE_THRESHOLD: float = 27.0
     KEYFRAME_STRATEGY: str = "middle"
+    FLORENCE_DEVICE: str = "cpu"
 
     # Fusion module
     LLM_PROVIDER: str = "openai"

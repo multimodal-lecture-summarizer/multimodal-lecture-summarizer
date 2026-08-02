@@ -39,15 +39,23 @@ check_env_files() {
     fi
 }
 
-setup_venv() {
+create_venv() {
     check_python
+    echo -e "${COLOR_YELLOW}Creating virtual environment backend/.venv with $PYTHON_CMD...${COLOR_NC}"
+    $PYTHON_CMD -m venv backend/.venv
+}
+
+install_python_deps() {
+    echo -e "${COLOR_YELLOW}Installing/updating Python requirements...${COLOR_NC}"
+    backend/.venv/bin/python -m pip install --upgrade pip
+    backend/.venv/bin/python -m pip install -r backend/requirements.txt
+    backend/.venv/bin/python -m pip install -r ai_workers/requirements.txt
+}
+
+setup_venv() {
     if [ ! -d "backend/.venv" ]; then
-        echo -e "${COLOR_YELLOW}Creating virtual environment backend/.venv with $PYTHON_CMD...${COLOR_NC}"
-        $PYTHON_CMD -m venv backend/.venv
-        echo -e "${COLOR_YELLOW}Installing Python requirements...${COLOR_NC}"
-        backend/.venv/bin/pip install --upgrade pip
-        backend/.venv/bin/pip install -r backend/requirements.txt
-        backend/.venv/bin/pip install -r ai_workers/requirements.txt
+        create_venv
+        install_python_deps
     fi
 }
 
@@ -58,6 +66,62 @@ setup_frontend() {
     fi
 }
 
+stop_services() {
+    echo -e "${COLOR_YELLOW}Stopping local services...${COLOR_NC}"
+    pkill -f "uvicorn app.main:app" || true
+    pkill -f "celery -A ai_workers.core.celery_app" || true
+    pkill -f "npm run dev" || true
+    pkill -f "vite" || true
+    echo -e "${COLOR_GREEN}Services stopped.${COLOR_NC}"
+}
+
+detect_gui_terminal() {
+    if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        return 1
+    fi
+    # Check for common terminals, especially those used in XRDP (like xfce4-terminal)
+    for term in gnome-terminal xfce4-terminal mate-terminal lxterminal konsole xterm x-terminal-emulator; do
+        if command -v "$term" &>/dev/null; then
+            GUI_TERMINAL="$term"
+            return 0
+        fi
+    done
+    return 1
+}
+
+start_service_terminal() {
+    local title="$1"
+    local working_directory="$2"
+    local service_command="$3"
+    
+    # We want the window to stay open after the command finishes so the user can see any errors
+    local bash_cmd="cd \"$working_directory\" && $service_command ; echo ; echo \"[$title] Process exited. Press Enter to close.\"; read"
+
+    case "$GUI_TERMINAL" in
+        gnome-terminal)
+            gnome-terminal --title="$title" -- bash -c "$bash_cmd" &
+            ;;
+        xfce4-terminal)
+            xfce4-terminal --title="$title" -e "bash -c '$bash_cmd'" &
+            ;;
+        mate-terminal)
+            mate-terminal --title="$title" -e "bash -c '$bash_cmd'" &
+            ;;
+        lxterminal)
+            lxterminal --title="$title" -e "bash -c '$bash_cmd'" &
+            ;;
+        konsole)
+            konsole --title "$title" -e bash -c "$bash_cmd" &
+            ;;
+        xterm)
+            xterm -title "$title" -e bash -c "$bash_cmd" &
+            ;;
+        x-terminal-emulator)
+            x-terminal-emulator -T "$title" -e "bash -c '$bash_cmd'" &
+            ;;
+    esac
+}
+
 run_dev() {
     check_env_files
     setup_venv
@@ -65,8 +129,27 @@ run_dev() {
 
     echo -e "${COLOR_GREEN}Starting Local Development Mode...${COLOR_NC}"
 
-    PIDS=()
+    if detect_gui_terminal; then
+        echo -e "${COLOR_GREEN}Opening Backend, Worker, and Frontend in separate terminals using ${GUI_TERMINAL}...${COLOR_NC}"
+        
+        start_service_terminal "MLS_Backend_API" "$SCRIPT_DIR/backend" \
+            "../backend/.venv/bin/python -m uvicorn app.main:app --reload --port 8000"
+            
+        start_service_terminal "MLS_Celery_Worker" "$SCRIPT_DIR" \
+            "CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=. backend/.venv/bin/python -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1"
+            
+        start_service_terminal "MLS_Frontend" "$SCRIPT_DIR/frontend" "npm run dev"
+        
+        echo -e "${COLOR_GREEN}Three service terminals opened.${COLOR_NC}"
+        echo -e "- Backend API: http://127.0.0.1:8000 (Docs: http://127.0.0.1:8000/docs)"
+        echo -e "- Frontend:    http://localhost:5173"
+        echo -e "${COLOR_YELLOW}Returning to menu...${COLOR_NC}"
+        return
+    fi
 
+    echo -e "${COLOR_YELLOW}No supported graphical terminal detected; using combined terminal mode.${COLOR_NC}"
+    
+    PIDS=()
     cleanup() {
         echo -e "\n${COLOR_YELLOW}Stopping all services...${COLOR_NC}"
         for pid in "${PIDS[@]}"; do
@@ -78,7 +161,6 @@ run_dev() {
         echo -e "${COLOR_GREEN}All services stopped.${COLOR_NC}"
         exit 0
     }
-
     trap cleanup SIGINT SIGTERM EXIT
 
     echo -e "${COLOR_BLUE}[1/3] Starting Backend API (Uvicorn)...${COLOR_NC}"
@@ -86,7 +168,7 @@ run_dev() {
     PIDS+=($!)
 
     echo -e "${COLOR_BLUE}[2/3] Starting Celery AI Worker...${COLOR_NC}"
-    PYTHONPATH=. backend/.venv/bin/python -m celery -A ai_workers.core.celery_app worker --loglevel=info --concurrency=2 &
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=. backend/.venv/bin/python -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1 &
     PIDS+=($!)
 
     echo -e "${COLOR_BLUE}[3/3] Starting Frontend (React)...${COLOR_NC}"
@@ -96,7 +178,7 @@ run_dev() {
     echo -e "${COLOR_GREEN}Services started successfully! Press Ctrl+C to stop all.${COLOR_NC}"
     echo -e "- Backend API: http://127.0.0.1:8000 (Docs: http://127.0.0.1:8000/docs)"
     echo -e "- Frontend:    http://localhost:5173"
-
+    
     wait
 }
 
@@ -121,8 +203,12 @@ reset_system() {
 
 install_deps() {
     check_env_files
-    setup_venv
-    setup_frontend
+    if [ ! -d "backend/.venv" ]; then
+        create_venv
+    fi
+    install_python_deps
+    echo -e "${COLOR_YELLOW}Installing/updating frontend dependencies...${COLOR_NC}"
+    (cd frontend && npm install)
     echo -e "${COLOR_GREEN}Dependencies updated successfully.${COLOR_NC}"
 }
 
@@ -131,18 +217,20 @@ show_menu() {
     echo -e "${COLOR_YELLOW}    MULTIMODAL LECTURE SUMMARIZER - LAUNCHER       ${COLOR_NC}"
     echo -e "${COLOR_BLUE}===================================================${COLOR_NC}"
     echo -e "  ${COLOR_GREEN}1) Local Dev Mode (Backend + Celery Worker + Frontend)${COLOR_NC}"
-    echo -e "  ${COLOR_MAGENTA}2) Docker Compose Mode (All services in Docker)${COLOR_NC}"
-    echo -e "  ${COLOR_RED}3) Reset DB & R2 Storage${COLOR_NC}"
-    echo -e "  ${COLOR_BLUE}4) Install / Update Dependencies${COLOR_NC}"
-    echo -e "  5) Exit"
+    echo -e "  ${COLOR_YELLOW}2) Stop All Local Services${COLOR_NC}"
+    echo -e "  ${COLOR_MAGENTA}3) Docker Compose Mode (All services in Docker)${COLOR_NC}"
+    echo -e "  ${COLOR_RED}4) Reset DB & R2 Storage${COLOR_NC}"
+    echo -e "  ${COLOR_BLUE}5) Install / Update Dependencies${COLOR_NC}"
+    echo -e "  6) Exit (Stop services & Quit)"
     echo -e "${COLOR_BLUE}===================================================${COLOR_NC}"
-    read -p "Select an option (1-5): " CHOICE
+    read -p "Select an option (1-6): " CHOICE
     case "$CHOICE" in
-        1) run_dev ;;
-        2) run_docker ;;
-        3) reset_system ;;
-        4) install_deps ;;
-        5) exit 0 ;;
+        1) run_dev ; show_menu ;;
+        2) stop_services ; show_menu ;;
+        3) run_docker ;;
+        4) reset_system ; show_menu ;;
+        5) install_deps ; show_menu ;;
+        6) stop_services ; exit 0 ;;
         *) echo -e "${COLOR_RED}Invalid option!${COLOR_NC}" ; show_menu ;;
     esac
 }
@@ -151,6 +239,9 @@ show_menu() {
 case "$1" in
     --dev|-d)
         run_dev
+        ;;
+    --stop|-s)
+        stop_services
         ;;
     --docker|-c)
         run_docker

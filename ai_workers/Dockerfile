@@ -1,12 +1,11 @@
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-venv python3-pip \
     ffmpeg libsndfile1 \
-    libgl1-mesa-glx libglib2.0-0 \
+    libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
@@ -16,4 +15,4 @@ RUN pip install --no-cache-dir -r ./ai_workers/requirements.txt
 # Copy application code
 COPY . ./ai_workers
 
-CMD ["celery", "-A", "ai_workers.core.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+CMD ["celery", "-A", "ai_workers.core.celery_app", "worker", "--loglevel=info", "--pool=solo", "--concurrency=1"]
