@@ -245,7 +245,39 @@ Overlay cấp GPU cho các stage tăng tốc. Florence-2 vẫn dùng CPU nếu k
 `FLORENCE_DEVICE=cuda`. CUDA dùng FP32 và deterministic settings nhưng không được cam kết giống
 CPU từng token trên mọi GPU/driver.
 
-## 7. Địa chỉ dịch vụ
+## 7. Chạy với thiết bị có GPU và không có GPU
+
+Dự án được thiết kế để chạy mặc định trên CPU nhằm đảm bảo tính nhất quán của kết quả mô hình (reproducibility). Tuy nhiên, bạn có thể tùy chỉnh để sử dụng GPU nhằm tăng tốc độ xử lý.
+
+### 7.1. Thiết bị không có GPU (Chỉ CPU)
+
+- Đây là **chế độ mặc định**.
+- Không yêu cầu phần cứng hoặc driver đặc biệt, hệ thống sẽ sử dụng CPU.
+- Trạng thái mặc định là `FLORENCE_DEVICE=cpu`.
+- Chạy ổn định trên mọi môi trường (Windows, Linux, macOS, Docker) theo hướng dẫn ở các mục trên.
+
+### 7.2. Thiết bị có GPU (NVIDIA)
+
+Nếu máy tính có GPU NVIDIA và bạn muốn tận dụng GPU để tăng tốc, hãy thực hiện như sau:
+
+1. **Yêu cầu phần cứng/phần mềm:**
+   - Máy phải có card đồ họa NVIDIA.
+   - Đã cài đặt **NVIDIA Driver** và **CUDA Toolkit** (cho chạy local).
+   - Đã cài đặt thêm **NVIDIA Container Toolkit** (nếu chạy Docker).
+
+2. **Cách kích hoạt:**
+   - **Chạy trực tiếp (Windows/Linux):** Thiết lập biến môi trường `FLORENCE_DEVICE=cuda` trước khi chạy AI Worker.
+     - Trên Windows (PowerShell): `$env:FLORENCE_DEVICE="cuda"`
+     - Trên Linux: `export FLORENCE_DEVICE=cuda`
+   - **Chạy qua Docker:** Sử dụng file compose bổ sung overlay GPU:
+     ```bash
+     docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+     ```
+
+> [!NOTE]
+> Mặc dù CUDA được thiết lập chạy deterministic, kết quả sinh ra trên GPU có thể chênh lệch rất nhỏ (ở mức token) so với CPU tùy thuộc vào kiến trúc card hoặc phiên bản driver.
+
+## 8. Địa chỉ dịch vụ
 
 | Dịch vụ | Địa chỉ |
 |---|---|
@@ -255,13 +287,13 @@ CPU từng token trên mọi GPU/driver.
 | Redis | `localhost:6379` |
 | PostgreSQL | Theo `DATABASE_URL` |
 
-## 8. Dừng dịch vụ
+## 9. Dừng dịch vụ
 
 - Windows PowerShell launcher: chọn **2 - Stop All Local Services**.
 - Linux: nhấn `Ctrl+C` tại terminal chạy `run.sh`.
 - Docker: chạy `docker compose down`.
 
-## 9. Reset dữ liệu thử nghiệm
+## 10. Reset dữ liệu thử nghiệm
 
 > [!CAUTION]
 > Reset có thể xóa video, kết quả xử lý, cache và dữ liệu R2 theo cấu hình hiện tại.
@@ -280,7 +312,7 @@ cd backend
 .venv/bin/python reset_r2_and_db.py
 ```
 
-## 10. Xử lý lỗi thường gặp
+## 11. Xử lý lỗi thường gặp
 
 ### Transformers sai phiên bản
 
@@ -320,7 +352,7 @@ redis://localhost:6379/0
 
 Dừng hoàn toàn Celery Worker rồi khởi động lại. Worker đang chạy không tự nạp lại package Python.
 
-## 11. Tài liệu liên quan
+## 12. Tài liệu liên quan
 
 - `docs/florence-2-cpu-reproducibility.md`
 - `docs/ARCHITECTURE.md`
