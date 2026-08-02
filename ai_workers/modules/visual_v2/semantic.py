@@ -9,6 +9,12 @@ from typing import Any
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModelForCausalLM
 from sklearn.metrics.pairwise import cosine_similarity
+from ai_workers.core.config import worker_settings
+from ai_workers.modules.visual_v2.florence_runtime import (
+    FlorenceDeterminism,
+    resolve_florence_runtime,
+    verify_florence_model,
+)
 
 class SemanticAnalyzer:
     """Vision encoding (CLIP), semantic filtering, and captioning (Florence-2) for keyframes."""
@@ -278,10 +284,18 @@ class SemanticAnalyzer:
             
         processor = None
         model = None
+        determinism = None
         
         try:
             model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
-            print(f"[Semantic] Loading Florence-2 model to caption {len(scenes)} frames from {model_dir}...")
+            runtime = resolve_florence_runtime(worker_settings.FLORENCE_DEVICE)
+            verify_florence_model(model_dir)
+            determinism = FlorenceDeterminism(runtime)
+            determinism.enable()
+            print(
+                f"[Semantic] Loading Florence-2 on {runtime.device}/float32/eager "
+                f"to caption {len(scenes)} frames from {model_dir}..."
+            )
             
             # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
             import transformers
@@ -304,13 +318,19 @@ class SemanticAnalyzer:
                 print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
 
             processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
-                
-            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
-                model_dir, 
-                torch_dtype=dtype,
-                trust_remote_code=True
-            ).to(self.device)
+                model_dir,
+                dtype=runtime.dtype,
+                trust_remote_code=True,
+                attn_implementation=runtime.attention_implementation,
+            ).to(runtime.device)
+            model.eval()
+            
+            # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
+            if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
+                model.language_model.tie_weights()
+            elif hasattr(model, "tie_weights"):
+                model.tie_weights()
             
             # <CAPTION> generates a very short, concise sentence focused on the main subject,
             # eliminating unnecessary details like backgrounds or skies.
@@ -334,14 +354,22 @@ class SemanticAnalyzer:
                     else:
                         proc_image = raw_image
 
-                    inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt").to(self.device, dtype)
+                    inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt")
+                    inputs = {key: value.to(runtime.device) for key, value in inputs.items()}
+                    inputs["pixel_values"] = inputs["pixel_values"].to(dtype=runtime.dtype)
                     
                     with torch.no_grad():
                         generated_ids = model.generate(
                             input_ids=inputs["input_ids"],
                             pixel_values=inputs["pixel_values"],
-                            max_new_tokens=1024,
-                            num_beams=3
+                            max_new_tokens=64,
+                            num_beams=3,
+                            do_sample=False,
+                            early_stopping=True,
+                            no_repeat_ngram_size=3,
+                            repetition_penalty=1.2,
+                            eos_token_id=processor.tokenizer.eos_token_id,
+                            pad_token_id=processor.tokenizer.pad_token_id,
                         )
                         
                     generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
@@ -381,6 +409,8 @@ class SemanticAnalyzer:
                 del model
             if processor is not None:
                 del processor
+            if determinism is not None:
+                determinism.restore()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()

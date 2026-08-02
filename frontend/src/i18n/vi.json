@@ -111,6 +111,8 @@
     "stage_semantic": "Đang quét chữ OCR trên hình ảnh bằng CLIP...",
     "stage_timeline": "Đang đồng bộ dòng thời gian và căn lề bài giảng...",
     "stage_text": "Đang sử dụng LLM để tóm tắt và phân chương bài học...",
+    "stage_storage": "Đang tải ảnh slide lên Cloudflare R2...",
+    "stage_rag": "Đang tạo chỉ mục RAG đa phương thức vào ChromaDB...",
     "stage_completed": "Hoàn thành xử lý bài giảng!",
     "stage_failed": "Xử lý thất bại. Vui lòng kiểm tra lại.",
     "stage_default": "Đang xử lý phân tích bài giảng...",

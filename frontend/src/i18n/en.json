@@ -111,6 +111,8 @@
     "stage_semantic": "Scanning text OCR on images with CLIP...",
     "stage_timeline": "Syncing timeline and aligning lecture...",
     "stage_text": "Using LLM to summarize and chapter the lesson...",
+    "stage_storage": "Uploading slide images to Cloudflare R2...",
+    "stage_rag": "Creating multimodal RAG index in ChromaDB...",
     "stage_completed": "Lecture processing completed!",
     "stage_failed": "Processing failed. Please check again.",
     "stage_default": "Processing lecture analysis...",

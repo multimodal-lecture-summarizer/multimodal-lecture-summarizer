@@ -88,7 +88,7 @@ function Start-LocalDev {
     $p1 = Start-Process powershell -WorkingDirectory "$script:RootDir\backend" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle='MLS_Backend_API'; ..\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000" -PassThru
 
     Write-Host "Launching Celery Worker..." -ForegroundColor Green
-    $p2 = Start-Process powershell -WorkingDirectory "$script:RootDir" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle='MLS_Celery_Worker'; `$env:PYTHONPATH='.'; backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info -P threads --concurrency=2" -PassThru
+    $p2 = Start-Process powershell -WorkingDirectory "$script:RootDir" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle='MLS_Celery_Worker'; `$env:PYTHONPATH='.'; `$env:CUBLAS_WORKSPACE_CONFIG=':4096:8'; backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1" -PassThru
 
     Write-Host "Launching Frontend..." -ForegroundColor Green
     $p3 = Start-Process powershell -WorkingDirectory "$script:RootDir\frontend" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle='MLS_Frontend'; npm run dev" -PassThru

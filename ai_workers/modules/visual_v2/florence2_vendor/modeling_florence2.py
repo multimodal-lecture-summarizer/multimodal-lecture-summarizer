@@ -1790,8 +1790,36 @@ class Florence2Decoder(Florence2LanguagePreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
+        # Convert Cache object to tuple for compatibility with this vendor code
+        if past_key_values is not None and not isinstance(past_key_values, tuple):
+            if hasattr(past_key_values, "to_legacy_cache"):
+                past_key_values = past_key_values.to_legacy_cache()
+            elif type(past_key_values).__name__ == "EncoderDecoderCache":
+                sc = past_key_values.self_attention_cache
+                cc = past_key_values.cross_attention_cache
+                if hasattr(sc, "to_legacy_cache"): sc = sc.to_legacy_cache()
+                if hasattr(cc, "to_legacy_cache"): cc = cc.to_legacy_cache()
+                if isinstance(sc, tuple) and isinstance(cc, tuple):
+                    past_key_values = tuple((sc[i][0], sc[i][1], cc[i][0], cc[i][1]) for i in range(len(sc)))
+                else:
+                    past_key_values = tuple(past_key_values)
+            else:
+                past_key_values = tuple(past_key_values)
+
+        # Check if cache is essentially empty (contains None)
+        if past_key_values is not None:
+            if len(past_key_values) > 0 and past_key_values[0] is not None and len(past_key_values[0]) > 0 and past_key_values[0][0] is None:
+                past_key_values = None
+                
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        if past_key_values is not None:
+            try:
+                past_key_values_length = past_key_values[0][0].shape[2]
+            except Exception as e:
+                print(f"DEBUG CACHE ERROR in forward: {e}, type={type(past_key_values)}, past_key_values={past_key_values}")
+                past_key_values_length = 0
+        else:
+            past_key_values_length = 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
@@ -2197,7 +2225,21 @@ class Florence2LanguageForConditionalGeneration(Florence2LanguagePreTrainedModel
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if hasattr(past_key_values, "get_seq_length"):
+                past_length = past_key_values.get_seq_length()
+            elif type(past_key_values).__name__ == "EncoderDecoderCache":
+                sc = past_key_values.self_attention_cache
+                try:
+                    past_length = sc.get_seq_length() if hasattr(sc, "get_seq_length") else sc[0][0].shape[2]
+                except Exception as e:
+                    print(f"DEBUG CACHE ERROR in prepare1: {e}")
+                    past_length = 0
+            else:
+                try:
+                    past_length = past_key_values[0][0].shape[2]
+                except Exception as e:
+                    print(f"DEBUG CACHE ERROR in prepare1 else: {e}")
+                    past_length = 0
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:
@@ -2226,6 +2268,16 @@ class Florence2LanguageForConditionalGeneration(Florence2LanguagePreTrainedModel
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
+        if hasattr(past_key_values, "reorder_cache"):
+            past_key_values.reorder_cache(beam_idx)
+            return past_key_values
+        elif type(past_key_values).__name__ == "EncoderDecoderCache":
+            if hasattr(past_key_values.self_attention_cache, "reorder_cache"):
+                past_key_values.self_attention_cache.reorder_cache(beam_idx)
+            if hasattr(past_key_values.cross_attention_cache, "reorder_cache"):
+                past_key_values.cross_attention_cache.reorder_cache(beam_idx)
+            return past_key_values
+
         reordered_past = ()
         for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
@@ -2819,7 +2871,19 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel):
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if hasattr(past_key_values, "get_seq_length"):
+                past_length = past_key_values.get_seq_length()
+            elif type(past_key_values).__name__ == "EncoderDecoderCache":
+                sc = past_key_values.self_attention_cache
+                try:
+                    past_length = sc.get_seq_length() if hasattr(sc, "get_seq_length") else sc[0][0].shape[2]
+                except Exception:
+                    past_length = 0
+            else:
+                try:
+                    past_length = past_key_values[0][0].shape[2]
+                except Exception:
+                    past_length = 0
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:

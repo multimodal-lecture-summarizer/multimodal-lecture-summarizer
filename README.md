@@ -83,7 +83,7 @@ uvicorn app.main:app --reload   # → http://localhost:8000
 # AI Worker
 cd ai_workers
 pip install -r requirements.txt
-celery -A ai_workers.core.celery_app worker --loglevel=info
+celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1
 ```
 
 ## 4. Thực nghiệm và Đánh giá hệ thống
@@ -110,6 +110,7 @@ Quá trình thực nghiệm được tiến hành độc lập trên hai tập d
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
 | [docs/DATASET_EDA.md](docs/DATASET_EDA.md) | CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG (Phân tích khám phá dữ liệu TEDLIUM & TVSum) |
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | Khung benchmark trên video thực tế |
+| [docs/florence-2-cpu-reproducibility.md](docs/florence-2-cpu-reproducibility.md) | Nguyên nhân Florence-2 sinh text rác trên CPU và giải pháp tái lập Windows/Linux |
 | [docs/api_contracts/](docs/api_contracts/) | JSON schema Frontend ↔ Backend |
 
 ## 6. Cấu hình Stack

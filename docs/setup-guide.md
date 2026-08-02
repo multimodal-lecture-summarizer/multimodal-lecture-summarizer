@@ -1,196 +1,359 @@
-# Guide to Setup, Run, and Reset the System
+# Hướng dẫn chạy dự án trên Windows và Linux
 
-Tài liệu này hướng dẫn chi tiết cách chuẩn bị môi trường, chạy các dịch vụ (Backend, Frontend, AI Worker) và cách khởi tạo lại (reset) cơ sở dữ liệu cùng Cloudflare R2 cho dự án **Multimodal Lecture Summarizer**.
+Tài liệu này hướng dẫn cài mới, cập nhật dependency và chạy **Multimodal Lecture Summarizer**
+trên Windows, Linux hoặc Docker. Thực hiện lệnh từ thư mục gốc có `run.bat`, `run.sh`,
+`backend/`, `ai_workers/` và `frontend/`.
 
----
+## 1. Yêu cầu chung
 
-## 1. Chuẩn bị môi trường & Biến môi trường (.env)
-
-Hệ thống sử dụng các tệp `.env` riêng biệt cho Backend và AI Worker để quản lý cấu hình bảo mật.
-
-### Cấu hình Backend:
-1. Sao chép file cấu hình mẫu trong thư mục `backend/`:
-   * **Windows (PowerShell):**
-     ```powershell
-     cd backend
-     cp .env.example .env
-     ```
-   * **Linux/Ubuntu (Bash):**
-     ```bash
-     cd backend
-     cp .env.example .env
-     ```
-2. Mở file `backend/.env` và điền đầy đủ các thông tin:
-   * **Database**: `DATABASE_URL` (kết nối PostgreSQL hoặc SQLite dự phòng).
-   * **Vector DB**: `CHROMA_HOST` và `CHROMA_PORT` (để kết nối tới ChromaDB RAG).
-   * **Cloudflare R2**: `CF_R2_ACCESS_KEY_ID`, `CF_R2_SECRET_ACCESS_KEY`, `CF_R2_BUCKET_NAME`, và `CF_R2_PUBLIC_URL` (dùng để lưu trữ video và keyframe).
-   * **AI API Key**: `GROQ_API_KEY` (Sử dụng để chạy mô hình ngôn ngữ lớn tóm tắt và hỏi đáp RAG).
-
----
-
-## 2. Chuẩn bị và Chạy Backend (FastAPI)
-
-API Backend quản lý các luồng dữ liệu chính, giao tiếp cơ sở dữ liệu và kích hoạt công việc xử lý video.
+| Thành phần | Phiên bản hoặc yêu cầu |
+|---|---|
+| Git và Git LFS | Bắt buộc để tải checkpoint Florence-2 |
+| Python | 3.10 hoặc 3.11 |
+| Node.js và npm | Node.js LTS |
+| Redis | Cổng `6379` nếu chạy local |
+| PostgreSQL | Theo `DATABASE_URL` nếu không dùng SQLite |
+| Docker | Chỉ cần khi chạy bằng container |
+| NVIDIA driver/Container Toolkit | Chỉ cần khi chủ động chạy GPU |
 
 > [!IMPORTANT]
-> **Yêu cầu phiên bản Python:** Dự án hoạt động tốt nhất trên **Python 3.10 hoặc Python 3.11** (đặc biệt đối với các thư viện AI như WhisperX, PyTorch, và PaddleOCR). Tránh dùng Python 3.12+ hoặc các bản quá cũ.
->
-> **Cách xử lý trên Linux/Ubuntu nếu phiên bản Python mặc định không phù hợp:**
-> 1. Cài đặt Python 3.10 thông qua `deadsnakes` PPA:
->    ```bash
->    sudo apt update
->    sudo apt install software-properties-common -y
->    sudo add-apt-repository ppa:deadsnakes/ppa -y
->    sudo apt update
->    sudo apt install python3.10 python3.10-venv python3.10-dev -y
->    ```
-> 2. Sử dụng `python3.10` để tạo môi trường ảo ở bước tiếp theo thay vì `python3`.
+> Florence-2 mặc định chạy CPU/FP32/eager trên mọi máy. Đây là chế độ chuẩn để giữ kết quả ổn định
+> giữa Windows và Linux. Python 3.12 trở lên chưa nằm trong runtime đã xác minh.
 
-### Windows (PowerShell):
-1. Di chuyển vào thư mục `backend/` và tạo môi trường ảo Python:
-   ```powershell
-   cd backend
-   python -m venv .venv
-   ```
-2. Kích hoạt và cài đặt các thư viện phụ thuộc:
-   ```powershell
-   .venv\Scripts\pip.exe install -r requirements.txt
-   ```
-3. Chạy Uvicorn Web Server ở chế độ phát triển (reload tự động):
-   ```powershell
-   .venv\Scripts\python.exe -m uvicorn app.main:app --reload
-   ```
+## 2. Chuẩn bị chung
 
-### Linux/Ubuntu (Bash):
-1. Di chuyển vào thư mục `backend/` và tạo môi trường ảo Python (sử dụng python3 hoặc python3.10 đã cài ở trên):
-   ```bash
-   cd backend
-   # Nếu phiên bản mặc định hệ thống là 3.10 hoặc 3.11:
-   python3 -m venv .venv
+### 2.1. Tải đầy đủ model
 
-   # HOẶC nếu bạn đã cài đặt python3.10 riêng biệt:
-   python3.10 -m venv .venv
-   ```
-2. Kích hoạt và cài đặt các thư viện phụ thuộc:
-   ```bash
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-   Hoặc chạy trực tiếp không cần kích hoạt:
-   ```bash
-   .venv/bin/pip install -r requirements.txt
-   ```
-3. Chạy Uvicorn Web Server ở chế độ phát triển (reload tự động):
-   ```bash
-   source .venv/bin/activate
-   uvicorn app.main:app --reload
-   ```
-   Hoặc chạy trực tiếp không cần kích hoạt:
-   ```bash
-   .venv/bin/python -m uvicorn app.main:app --reload
-   ```
+Sau khi clone hoặc pull repository:
 
-* *Địa chỉ API*: `http://127.0.0.1:8000`
-* *Tài liệu API Swagger*: `http://127.0.0.1:8000/docs`
+```bash
+git lfs install
+git lfs pull
+```
+
+Nếu `model.safetensors` chỉ là Git LFS pointer, AI Worker sẽ từ chối khởi động.
+
+### 2.2. Tạo file môi trường
+
+**Windows PowerShell:**
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
+
+**Linux Bash:**
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Cấu hình `backend/.env` theo môi trường thực tế:
+
+- `DATABASE_URL`
+- `CELERY_BROKER_URL` và `CELERY_RESULT_BACKEND`
+- Thông tin Cloudflare R2 nếu lưu video trên R2
+- API key của LLM nếu chạy tóm tắt hoặc hỏi đáp
+
+Khi chạy Docker, tạo thêm file `.env` ở thư mục gốc từ `.env.example`.
+
+## 3. Chạy trên Windows
+
+### 3.1. Dùng launcher PowerShell
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\run_win.ps1
+```
+
+Trong menu:
+
+1. Chọn **5 - Install / Update Dependencies**.
+2. Chờ cài xong Python và frontend dependencies.
+3. Chọn **1 - Local Dev Mode**.
+4. Giữ các cửa sổ Backend, Celery Worker và Frontend đang mở.
+
+Windows luôn chạy lại cả hai file requirements:
+
+```powershell
+backend\.venv\Scripts\pip.exe install -r backend\requirements.txt
+backend\.venv\Scripts\pip.exe install -r ai_workers\requirements.txt
+```
+
+Do `ai_workers/requirements.txt` khóa `transformers==4.57.6`, pip sẽ tự nâng hoặc hạ
+Transformers về đúng phiên bản nếu quá trình cài thành công.
+
+### 3.2. Dùng launcher CMD
+
+```powershell
+.\run.bat
+```
+
+Chọn **5 - Install / Update Dependencies**, sau đó chọn **1 - Local Dev Mode**.
+
+### 3.3. Cài và chạy thủ công
+
+```powershell
+python -m venv backend\.venv
+backend\.venv\Scripts\python.exe -m pip install --upgrade pip
+backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+backend\.venv\Scripts\python.exe -m pip install -r ai_workers\requirements.txt
+npm --prefix frontend install
+```
+
+Mở ba PowerShell riêng.
+
+**Backend:**
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+**AI Worker, chạy từ thư mục gốc:**
+
+```powershell
+$env:PYTHONPATH="."
+$env:CUBLAS_WORKSPACE_CONFIG=":4096:8"
+backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1
+```
+
+**Frontend:**
+
+```powershell
+Set-Location frontend
+npm run dev
+```
+
+## 4. Chạy trên Linux
+
+### 4.1. Dùng launcher
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+Chọn **4 - Install / Update Dependencies** khi cài lần đầu, sau đó chọn
+**1 - Local Dev Mode**.
+
+Trên Linux desktop có giao diện đồ họa, launcher tự mở ba terminal riêng:
+
+- `MLS_Backend_API`
+- `MLS_Celery_Worker`
+- `MLS_Frontend`
+
+Launcher hỗ trợ `gnome-terminal` và `x-terminal-emulator`. Khi chạy qua SSH, trên server
+headless hoặc không tìm thấy terminal tương thích, ba dịch vụ chạy nền trong terminal hiện tại và
+log được gộp lại. Có thể dùng các lệnh thủ công tại mục 4.3 nếu muốn tự quản lý từng terminal.
+
+Tùy chọn **4 - Install / Update Dependencies** luôn chạy lại hai file requirements và
+`npm install`, kể cả khi `backend/.venv` và `frontend/node_modules` đã tồn tại. Có thể gọi
+trực tiếp cùng chức năng bằng:
+
+```bash
+./run.sh --install
+```
+
+### 4.2. Cài mới hoặc cập nhật dependency
+
+```bash
+python3 -m venv backend/.venv
+backend/.venv/bin/python -m pip install --upgrade pip
+backend/.venv/bin/python -m pip install -r backend/requirements.txt
+backend/.venv/bin/python -m pip install -r ai_workers/requirements.txt
+npm --prefix frontend install
+```
+
+Nếu `backend/.venv` đã tồn tại, bỏ qua lệnh tạo venv nhưng vẫn chạy lại hai lệnh
+`pip install -r`. Nếu cần, thay `python3` bằng `python3.10` hoặc `python3.11`.
+
+### 4.3. Chạy thủ công
+
+Mở ba terminal riêng.
+
+**Backend:**
+
+```bash
+cd backend
+.venv/bin/python -m uvicorn app.main:app --reload --port 8000
+```
+
+**AI Worker, chạy từ thư mục gốc:**
+
+```bash
+export PYTHONPATH=.
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+backend/.venv/bin/python -m celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concurrency=1
+```
+
+**Frontend:**
+
+```bash
+cd frontend
+npm run dev
+```
+
+## 5. Kiểm tra sau khi cài
+
+**Windows:**
+
+```powershell
+backend\.venv\Scripts\python.exe -m pip show transformers
+backend\.venv\Scripts\python.exe -m pip check
+backend\.venv\Scripts\python.exe -m unittest ai_workers.tests.test_florence_runtime -v
+```
+
+**Linux:**
+
+```bash
+backend/.venv/bin/python -m pip show transformers
+backend/.venv/bin/python -m pip check
+backend/.venv/bin/python -m unittest ai_workers.tests.test_florence_runtime -v
+```
+
+Transformers phải có đúng phiên bản:
+
+```text
+Version: 4.57.6
+```
+
+Worker hợp lệ phải in:
+
+```text
+[Startup] Florence-2 runtime verified: cpu/float32/eager, all asset SHA-256 checks OK.
+```
+
+Nếu không có dòng này, chưa gửi video vào hàng đợi.
+
+## 6. Chạy bằng Docker
+
+### CPU mặc định
+
+```bash
+docker compose up --build
+```
+
+Không cần NVIDIA GPU; Florence-2 dùng `FLORENCE_DEVICE=cpu`.
+
+### Cho phép container truy cập GPU
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+Overlay cấp GPU cho các stage tăng tốc. Florence-2 vẫn dùng CPU nếu không đặt rõ
+`FLORENCE_DEVICE=cuda`. CUDA dùng FP32 và deterministic settings nhưng không được cam kết giống
+CPU từng token trên mọi GPU/driver.
+
+## 7. Chạy với thiết bị có GPU và không có GPU
+
+Dự án được thiết kế để chạy mặc định trên CPU nhằm đảm bảo tính nhất quán của kết quả mô hình (reproducibility). Tuy nhiên, bạn có thể tùy chỉnh để sử dụng GPU nhằm tăng tốc độ xử lý.
+
+### 7.1. Thiết bị không có GPU (Chỉ CPU)
+
+- Đây là **chế độ mặc định**.
+- Không yêu cầu phần cứng hoặc driver đặc biệt, hệ thống sẽ sử dụng CPU.
+- Trạng thái mặc định là `FLORENCE_DEVICE=cpu`.
+- Chạy ổn định trên mọi môi trường (Windows, Linux, macOS, Docker) theo hướng dẫn ở các mục trên.
+
+### 7.2. Thiết bị có GPU (NVIDIA)
+
+Nếu máy tính có GPU NVIDIA và bạn muốn tận dụng GPU để tăng tốc, hãy thực hiện như sau:
+
+1. **Yêu cầu phần cứng/phần mềm:**
+   - Máy phải có card đồ họa NVIDIA.
+   - Đã cài đặt **NVIDIA Driver** và **CUDA Toolkit** (cho chạy local).
+   - Đã cài đặt thêm **NVIDIA Container Toolkit** (nếu chạy Docker).
+
+2. **Cách kích hoạt:**
+   - **Chạy trực tiếp (Windows/Linux):** Thiết lập biến môi trường `FLORENCE_DEVICE=cuda` trước khi chạy AI Worker.
+     - Trên Windows (PowerShell): `$env:FLORENCE_DEVICE="cuda"`
+     - Trên Linux: `export FLORENCE_DEVICE=cuda`
+   - **Chạy qua Docker:** Sử dụng file compose bổ sung overlay GPU:
+     ```bash
+     docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+     ```
 
 > [!NOTE]
-> Khi khởi động, Backend sẽ chạy một luồng ngầm tự động quét cơ sở dữ liệu mỗi 10 giây để kiểm tra và đồng bộ trạng thái các công việc Celery từ Redis vào PostgreSQL, giúp lưu kết quả tự động ngay cả khi người dùng đóng tab trình duyệt.
+> Mặc dù CUDA được thiết lập chạy deterministic, kết quả sinh ra trên GPU có thể chênh lệch rất nhỏ (ở mức token) so với CPU tùy thuộc vào kiến trúc card hoặc phiên bản driver.
 
----
+## 8. Địa chỉ dịch vụ
 
-## 3. Chuẩn bị và Chạy AI Worker (Celery)
+| Dịch vụ | Địa chỉ |
+|---|---|
+| Frontend | URL do Vite in ra, thường là `http://localhost:5173` |
+| Backend API | `http://127.0.0.1:8000` |
+| Swagger UI | `http://127.0.0.1:8000/docs` |
+| Redis | `localhost:6379` |
+| PostgreSQL | Theo `DATABASE_URL` |
 
-AI Worker thực hiện các công việc nặng về tính toán: Nhận diện giọng nói, tách giọng nói, phân tích hình ảnh/slide, và tóm tắt bằng LLM.
+## 9. Dừng dịch vụ
 
-### 3.1. Cài đặt thư viện phụ thuộc cho AI Worker:
-Trước khi chạy AI Worker, bạn bắt buộc phải cài đặt các gói thư viện phụ thuộc của `ai_workers` vào môi trường ảo chung:
-* **Windows (PowerShell):**
-  ```powershell
-  backend\.venv\Scripts\pip.exe install -r ai_workers\requirements.txt
-  ```
-* **Linux/Ubuntu (Bash):**
-  ```bash
-  backend/.venv/bin/pip install -r ai_workers/requirements.txt
-  ```
+- Windows PowerShell launcher: chọn **2 - Stop All Local Services**.
+- Linux: nhấn `Ctrl+C` tại terminal chạy `run.sh`.
+- Docker: chạy `docker compose down`.
 
-### 3.2. Chạy bằng CPU (Mặc định):
-1. Đứng ở thư mục gốc của dự án, thiết lập `PYTHONPATH` và khởi chạy Celery Worker:
-   * **Windows (PowerShell):** (chạy bằng chế độ luồng threads)
-     ```powershell
-     # Tại thư mục gốc (multimodal-lecture-summarizer):
-     $env:PYTHONPATH="."
-     backend\.venv\Scripts\python.exe -m celery -A ai_workers.core.celery_app worker --loglevel=info -P threads --concurrency=2
-     ```
-   * **Linux/Ubuntu (Bash):**
-     ```bash
-     # Tại thư mục gốc (multimodal-lecture-summarizer):
-     export PYTHONPATH="."
-     backend/.venv/bin/python -m celery -A ai_workers.core.celery_app worker --loglevel=info --concurrency=2
-     ```
+## 10. Reset dữ liệu thử nghiệm
 
-### 3.3. Chạy bằng GPU CUDA (Tăng tốc gấp 10-20 lần - Khuyên dùng):
-Nếu máy tính của bạn có card đồ họa NVIDIA CUDA, bạn có thể tăng tốc đáng kể tiến trình xử lý bằng cách cài đặt phiên bản PyTorch CUDA 12.1 đè lên phiên bản mặc định:
-1. Cài đặt phiên bản PyTorch CUDA 12.1 và cập nhật các thư viện bổ trợ:
-   * **Windows (PowerShell):**
-     ```powershell
-     backend\.venv\Scripts\pip.exe install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
-     backend\.venv\Scripts\pip.exe install --upgrade typing-extensions
-     ```
-   * **Linux/Ubuntu (Bash):**
-     ```bash
-     backend/.venv/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
-     backend/.venv/bin/pip install --upgrade typing-extensions
-     ```
-2. Khởi chạy lại Celery Worker. Bạn sẽ thấy dòng log xác nhận đã nhận diện GPU thành công:
-   ```text
-   Device set to use cuda:0
-   ```
+> [!CAUTION]
+> Reset có thể xóa video, kết quả xử lý, cache và dữ liệu R2 theo cấu hình hiện tại.
 
----
+**Windows:**
 
-## 4. Chuẩn bị và Chạy Frontend (ReactJS)
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe reset_r2_and_db.py
+```
 
-Giao diện người dùng cho phép tải lên video bài giảng, theo dõi tiến trình thực tế và hiển thị kết quả trực quan (tóm tắt, chương, slide keyframe, hỏi đáp RAG).
+**Linux:**
 
-1. Di chuyển vào thư mục `frontend/` và cài đặt các gói NPM:
-   ```bash
-   cd frontend
-   npm install
-   ```
-2. Chạy Frontend server ở chế độ Development:
-   ```bash
-   npm run dev
-   ```
-   * *Địa chỉ ứng dụng Web*: `http://localhost:5173` (hoặc cổng được hiển thị trên console).
+```bash
+cd backend
+.venv/bin/python reset_r2_and_db.py
+```
 
----
+## 11. Xử lý lỗi thường gặp
 
-## 5. Khởi tạo lại Hệ thống & Reset Cơ sở dữ liệu
+### Transformers sai phiên bản
 
-Khi bạn muốn xóa sạch dữ liệu chạy thử để chuẩn bị cho lượt xử lý mới, hệ thống cung cấp một script dọn dẹp toàn diện.
+Cài lại requirements rồi khởi động lại Celery.
 
-### Windows (PowerShell):
-1. Di chuyển vào thư mục `backend/`:
-   ```powershell
-   cd backend
-   ```
-2. Chạy tệp script reset an toàn:
-   ```powershell
-   .venv\Scripts\python.exe reset_r2_and_db.py
-   ```
+**Windows:**
 
-### Linux/Ubuntu (Bash):
-1. Di chuyển vào thư mục `backend/`:
-   ```bash
-   cd backend
-   ```
-2. Chạy tệp script reset an toàn:
-   ```bash
-   .venv/bin/python reset_r2_and_db.py
-   ```
+```powershell
+backend\.venv\Scripts\python.exe -m pip install -r ai_workers\requirements.txt
+```
 
-### Tác vụ tự động của script:
-* **Relational DB**: Xóa sạch toàn bộ video tải lên, tóm tắt, chương và phân cảnh nhưng **giữ lại tài khoản người dùng mẫu** (admin/user mặc định) để tránh việc phải đăng ký lại tài khoản mới.
-* **Cloudflare R2**: Tự động dọn sạch các tệp video và keyframe đã lưu trữ trên đám mây R2.
-* **ChromaDB**: Xóa và khởi tạo lại collection vector để chuẩn bị nạp tài liệu RAG mới.
-* **Storage cục bộ**: Xóa toàn bộ file cache/temp được tạo ra trong quá trình xử lý video trước đó.
+**Linux:**
+
+```bash
+backend/.venv/bin/python -m pip install -r ai_workers/requirements.txt
+```
+
+Nếu pip báo conflict, không dùng `--no-deps` để bỏ qua. Xử lý conflict rồi chạy lại `pip check`.
+
+### Thiếu hoặc sai Florence-2 asset
+
+```bash
+git lfs pull
+```
+
+Nếu vẫn sai SHA-256, khôi phục đúng model checkout thay vì sửa checksum thủ công.
+
+### Worker không kết nối Redis
+
+Kiểm tra Redis và `CELERY_BROKER_URL`. Giá trị local mặc định:
+
+```text
+redis://localhost:6379/0
+```
+
+### Đã cập nhật package nhưng worker vẫn dùng code cũ
+
+Dừng hoàn toàn Celery Worker rồi khởi động lại. Worker đang chạy không tự nạp lại package Python.
+
+## 12. Tài liệu liên quan
+
+- `docs/florence-2-cpu-reproducibility.md`
+- `docs/ARCHITECTURE.md`
+- `docs/BENCHMARK.md`

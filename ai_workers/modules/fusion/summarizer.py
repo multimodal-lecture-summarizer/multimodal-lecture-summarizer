@@ -254,11 +254,7 @@ class Summarizer:
         After your analysis, generate:
         1. A detailed video summary in plain text format (around 300-500 words).
         2. A concise, descriptive title for this video (video_title - 5-10 words, in the same language as the content).
-        3. Logical chapters for the video. Each chapter must contain:
-           - Chapter title (title)
-           - Start time (startTime - in seconds)
-           - End time (endTime - in seconds)
-           - Brief chapter summary (summary - 1-2 sentences)
+        3. Logical chapters for the video.
 {chapter_constraints}
         Audio Transcript (with timestamps):
         {transcript if transcript.strip() else "[No speech detected]"}
@@ -266,20 +262,29 @@ class Summarizer:
         Visual Context (Descriptions & OCR of key scenes at specific timestamps):
         {visual_text if visual_text else "[No visual descriptions available]"}
 
-        Please return the result in the following STRICT JSON format:
+        You must return ONLY valid JSON.
+        
+        Required schema:
         {{
-            "analysis": "Keep this concise (max 150 words). Step-by-step reasoning and mapping of audio to visual concepts...",
+            "analysis": "Keep this concise (max 150 words). Step-by-step reasoning...",
             "video_title": "Concise Descriptive Video Title Here",
             "summary": "Plain text summary content here...",
             "chapters": [
                 {{
-                    "title": "Chapter 1 Title",
+                    "title": "Chapter title",
                     "startTime": 0.0,
-                    "endTime": 60.0,
-                    "summary": "Brief summary of chapter 1..."
+                    "endTime": 80.0,
+                    "summary": "Chapter summary"
                 }}
             ]
         }}
+        
+        Rules:
+        - The chapters array must contain exactly {len(chapters) if chapters else 1} items.
+        - Preserve the supplied chapter start and end times.
+        - Do not add markdown fences like ```json.
+        - Do not add commentary before or after the JSON.
+        - Every chapter must have a non-empty title and summary.
         """
 
         # Build candidate client & model target list
@@ -317,6 +322,8 @@ class Summarizer:
                 
                 response_text = chat_completion.choices[0].message.content.strip()
                 
+                print(f"[LLM RAW RESPONSE]\n{response_text}")
+                
                 # Clean up markdown codeblocks if LLM wraps the JSON
                 if response_text.startswith("```"):
                     response_text = re.sub(r"^```(?:json)?\n", "", response_text)
@@ -324,23 +331,42 @@ class Summarizer:
                     
                 data = json.loads(response_text)
                 
-                # Validation and Override of Chapter Boundaries
+                print(f"[LLM PARSED] type={type(data).__name__} keys={list(data.keys()) if isinstance(data, dict) else None}")
+                
+                # Validation
+                if not isinstance(data, dict):
+                    raise ValueError("LLM response is not a JSON object")
+
+                video_title = data.get("video_title") or data.get("title")
+                llm_chapters = data.get("chapters", [])
+                
+                if not isinstance(video_title, str) or not video_title.strip():
+                    raise ValueError("Missing or empty video_title")
+
+                if not isinstance(llm_chapters, list):
+                    raise ValueError("chapters must be a list")
+
+                print(f"[LLM CHAPTERS] expected={len(chapters) if chapters else 1} actual={len(llm_chapters)}")
+
                 if chapters:
-                    llm_chapters = data.get("chapters", [])
                     if len(llm_chapters) != len(chapters):
-                        print(f"[Warning] LLM returned {len(llm_chapters)} chapters, expected {len(chapters)}. Performing padding/truncation fallback.")
+                        raise ValueError(f"Expected {len(chapters)} chapters, got {len(llm_chapters)}")
+                        
+                    for index, chapter in enumerate(llm_chapters):
+                        if not isinstance(chapter, dict):
+                            raise ValueError(f"Chapter {index} is not an object")
+                        if not chapter.get("title"):
+                            raise ValueError(f"Chapter {index} missing title")
+                        if not chapter.get("summary"):
+                            raise ValueError(f"Chapter {index} missing summary")
                         
                     validated_chapters = []
                     for i, orig_c in enumerate(chapters):
-                        # Pad with generic titles if LLM returned too few chapters
-                        llm_title = llm_chapters[i].get("title", f"Phần {i+1}") if i < len(llm_chapters) else f"Phần {i+1}"
-                        llm_summary = llm_chapters[i].get("summary", "") if i < len(llm_chapters) else ""
-                        
                         validated_chapters.append({
-                            "title": llm_title,
+                            "title": llm_chapters[i]["title"],
                             "startTime": orig_c["startTime"],
                             "endTime": orig_c["endTime"],
-                            "summary": llm_summary
+                            "summary": llm_chapters[i]["summary"]
                         })
                     data["chapters"] = validated_chapters
                 

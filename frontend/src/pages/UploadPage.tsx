@@ -102,8 +102,10 @@ export const UploadPage: React.FC = () => {
       case 'speaker': return t('upload.stage_speaker');
       case 'visual': return t('upload.stage_visual');
       case 'semantic': return t('upload.stage_semantic');
+      case 'storage': return t('upload.stage_storage');
       case 'timeline': return t('upload.stage_timeline');
       case 'text': return t('upload.stage_text');
+      case 'rag': return t('upload.stage_rag');
       case 'completed': return t('upload.stage_completed');
       case 'failed': return t('upload.stage_failed');
       default: return t('upload.stage_default');
@@ -165,7 +167,7 @@ export const UploadPage: React.FC = () => {
                 step = 3;
               } else if (stage === 'semantic' || stage === 'storage' || stage === 'timeline') {
                 step = 4;
-              } else if (stage === 'text' || stage === 'completed') {
+              } else if (stage === 'text' || stage === 'rag' || stage === 'completed') {
                 step = 5;
               }
               setCurrentStep(step);
