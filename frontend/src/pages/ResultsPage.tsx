@@ -332,7 +332,7 @@ export const ResultsPage: React.FC = () => {
   }, [activeLineIdx]);
 
   // Export actions
-  const handleExport = async (format: 'txt' | 'pdf' | 'srt') => {
+  const handleExport = async (format: 'txt' | 'pdf' | 'srt' | 'docx') => {
     if (!videoId) return;
     try {
       const blob = await api.exportSummary(videoId, format);
@@ -431,9 +431,15 @@ export const ResultsPage: React.FC = () => {
             <span className="material-symbols-outlined text-sm">history</span> {t('results.history')}
           </Link>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => handleExport('docx')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
+            <span className="material-symbols-outlined text-sm">article</span> {t('results.export_docx')}
+          </button>
           <button onClick={() => handleExport('pdf')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">picture_as_pdf</span> {t('results.export_pdf')}
+          </button>
+          <button onClick={() => handleExport('srt')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
+            <span className="material-symbols-outlined text-sm">subtitles</span> {t('results.export_srt')}
           </button>
           <button onClick={() => handleExport('txt')} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-200/50 text-xs font-bold transition-all flex items-center gap-1.5 text-slate-900">
             <span className="material-symbols-outlined text-sm">description</span> {t('results.export_txt')}
@@ -679,10 +685,15 @@ export const ResultsPage: React.FC = () => {
       {/* Keyframes Gallery Section */}
       {summaryData?.keyframes && summaryData.keyframes.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
-          <h2 className="font-headline-md text-md font-bold text-slate-900 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">image_search</span>
-            {t('results.keyframes')}
-          </h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="font-headline-md text-md font-bold text-slate-900 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">image_search</span>
+              {t('results.keyframes')}
+            </h2>
+            <p className="text-[11px] text-slate-500 italic mt-1">
+              {t('results.importance_desc', '* Độ quan trọng: Mức độ tương đồng ngữ nghĩa, hành động và chất lượng hình ảnh do AI đánh giá')}
+            </p>
+          </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {summaryData.keyframes.map((kf, idx) => {

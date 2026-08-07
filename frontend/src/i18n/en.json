@@ -38,6 +38,8 @@
     "history": "History",
     "export_pdf": "Export PDF",
     "export_txt": "Export TXT",
+    "export_srt": "Export SRT",
+    "export_docx": "Export Word",
     "qa_rag": "QA RAG",
     "original_video": "Original Video & Transcript",
     "search_keyword": "Search keywords...",
@@ -45,7 +47,8 @@
     "content_summary": "Lecture Content Summary",
     "auto_chapters": "Auto-generated Chapters",
     "keyframes": "Extracted Keyframes",
-    "importance": "Importance"
+    "importance": "Importance",
+    "importance_desc": "* Importance: AI (CLIP) evaluation based on semantic action matching, image quality, and temporal representation."
   },
   "common": {
     "success": "Success",

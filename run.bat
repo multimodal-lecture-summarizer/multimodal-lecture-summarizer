@@ -33,8 +33,11 @@ goto MENU
 echo.
 echo Stopping all running local services (MLS_Backend, MLS_Worker, MLS_Frontend)...
 taskkill /FI "WINDOWTITLE eq MLS_Backend_API*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Backend_API%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Celery_Worker*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Celery_Worker%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Frontend*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Frontend%%'" call terminate >nul 2>&1
 echo Services stopped successfully.
 timeout /t 2 >nul
 goto MENU
@@ -43,8 +46,11 @@ goto MENU
 echo.
 echo Stopping all running services before exit...
 taskkill /FI "WINDOWTITLE eq MLS_Backend_API*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Backend_API%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Celery_Worker*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Celery_Worker%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Frontend*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Frontend%%'" call terminate >nul 2>&1
 echo Goodbye!
 exit /b 0
 
@@ -82,8 +88,11 @@ if not exist "frontend\node_modules" (
 echo.
 echo Stopping any existing service instances first...
 taskkill /FI "WINDOWTITLE eq MLS_Backend_API*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Backend_API%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Celery_Worker*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Celery_Worker%%'" call terminate >nul 2>&1
 taskkill /FI "WINDOWTITLE eq MLS_Frontend*" /F /T >nul 2>&1
+wmic process where "name='cmd.exe' and commandline like '%%MLS_Frontend%%'" call terminate >nul 2>&1
 
 echo Starting services in separate windows...
 echo Starting Backend API...

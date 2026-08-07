@@ -176,7 +176,7 @@ export const api = {
     return result; // returns BaseDTO[SummaryDTO]
   },
 
-  async exportSummary(videoId: string, format: "txt" | "srt" | "pdf") {
+  async exportSummary(videoId: string, format: "txt" | "srt" | "docx" | "pdf") {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/summaries/video/${videoId}/export?format=${format}`,
       {

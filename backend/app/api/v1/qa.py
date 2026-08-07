@@ -175,7 +175,17 @@ def ask_question(
     if history_str:
         prompt_parts.append(f"Recent Chat History:\n{history_str}")
     prompt_parts.append(f"Student Question: {payload.question}")
-    prompt_parts.append("Answer (matching the language of question):")
+    prompt_parts.append(
+        "Response Language Policy:\n"
+        "- First detect the dominant language of the Student Question.\n"
+        "- If the question is in Vietnamese, answer entirely in natural Vietnamese.\n"
+        "- If the question is in English, answer entirely in natural English.\n"
+        "- If the question mixes languages, use the user's dominant language unless they explicitly request another language.\n"
+        "- Translate ordinary concepts from the transcript/context into the answer language.\n"
+        "- Keep proper nouns, organization names, product names, acronyms, model names, and technical terms unchanged when translation would be unnatural.\n"
+        "- Do not introduce Korean, Japanese, Chinese, Arabic, Cyrillic, or any unrelated-script words unless they appear in a proper noun from the question or source context."
+    )
+    prompt_parts.append("Answer in the detected response language:")
 
     system_prompt = (
         "You are an intelligent academic assistant for lecture videos.\n"
@@ -183,10 +193,14 @@ def ask_question(
         "CRITICAL RULES:\n"
         "1. OVERVIEW & SUMMARY QUESTIONS: When asked for a summary, key points, main takeaways, or chapter topics (e.g. '10 ý chính', '3 ý quan trọng', 'tóm tắt', 'bài giảng nói về gì'), synthesize the response directly from the Overall Lecture Summary, Chapter Outline, and Transcripts.\n"
         "2. MULTIMODAL INTEGRATION: Pay close attention to speech transcripts, chapter outlines, and Visual Slide descriptions. Answer accurately using on-screen slide text or speech when asked about specific concepts or objects.\n"
-        "3. LANGUAGE MATCHING & NATURAL VIETNAMESE: Always respond in the EXACT SAME LANGUAGE as the student's question. In Vietnamese, use natural academic phrasing like 'nội dung bài giảng' or 'video'.\n"
-        "4. CONCISENESS & STRUCTURE: Format answers with bullet points or numbered lists when requested (e.g., for '10 ý chính' or '3 ý quan trọng').\n"
-        "5. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes, chapters, or sections of the video.\n"
-        "6. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details."
+        "3. LANGUAGE MATCHING: Always answer in the dominant language of the student's question. A Vietnamese question requires Vietnamese output. An English question requires English output. If the question explicitly asks for another language, follow that requested language.\n"
+        "4. LANGUAGE PURITY: The source transcript, retrieved chunks, OCR text, or chat history may be multilingual. Use them only as evidence. Do not let their language leak into the final answer. Translate ordinary words and phrases into the answer language.\n"
+        "5. ALLOWED UNTRANSLATED TERMS: Keep proper nouns, organization names, place names, product names, model names, acronyms, and widely used technical terms unchanged when appropriate, such as 'Dubai Future Foundation', 'AI', 'FinTech', 'ChromaDB', or 'OpenRouter'.\n"
+        "6. FORBIDDEN SCRIPT MIXING: Do not output Korean, Japanese, Chinese, Arabic, Cyrillic, or other unrelated-script words unless they are part of a proper noun present in the provided context or explicitly requested by the user. For example, in Vietnamese use 'thách thức' instead of Korean '도전'.\n"
+        "7. NATURAL VIETNAMESE: In Vietnamese, use natural academic phrasing like 'nội dung bài giảng', 'video', 'điểm chính', 'thách thức', and 'hợp tác toàn cầu'.\n"
+        "8. CONCISENESS & STRUCTURE: Format answers with bullet points or numbered lists when requested (e.g., for '10 ý chính' or '3 ý quan trọng').\n"
+        "9. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes, chapters, or sections of the video.\n"
+        "10. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details."
     )
 
     prompt = "\n\n".join(prompt_parts)
