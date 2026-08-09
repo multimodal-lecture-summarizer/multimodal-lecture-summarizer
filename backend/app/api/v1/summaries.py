@@ -44,28 +44,45 @@ def get_video_summary(
         )
 
     # In PostgreSQL, JSON fields might be automatically parsed into Python structures
-    # We construct the response DTO manually to map the correct keyframe/chapter names
+    # We construct the response DTO manually to map the correct keyframe/chapter names.
+    # Accept both camelCase (worker/sprint output) and snake_case for resilience.
     from app.schemas.summary import ChapterDTO, KeyframeDTO
 
-    chapters = [
-        ChapterDTO(
-            title=c["title"],
-            start_time=c["startTime"],
-            end_time=c["endTime"],
-            summary=c["summary"],
-        )
-        for c in summary.chapters_json
-    ]
+    def _pick(obj: dict, *keys, default=None):
+        for key in keys:
+            if key in obj and obj[key] is not None:
+                return obj[key]
+        return default
 
-    keyframes = [
-        KeyframeDTO(
-            timestamp=k["timestamp"],
-            image_url=k["imageUrl"],
-            description=k["description"],
-            importance_score=k["importanceScore"],
+    chapters = []
+    for idx, c in enumerate(summary.chapters_json or []):
+        if not isinstance(c, dict):
+            continue
+        start = float(_pick(c, "startTime", "start_time", "start_seconds", default=0.0) or 0.0)
+        end = float(_pick(c, "endTime", "end_time", "end_seconds", default=start) or start)
+        chapters.append(
+            ChapterDTO(
+                title=str(_pick(c, "title", default=f"Chapter {idx + 1}") or f"Chapter {idx + 1}"),
+                start_time=start,
+                end_time=end,
+                summary=str(_pick(c, "summary", default="") or ""),
+            )
         )
-        for k in summary.keyframes_json
-    ]
+
+    keyframes = []
+    for k in summary.keyframes_json or []:
+        if not isinstance(k, dict):
+            continue
+        keyframes.append(
+            KeyframeDTO(
+                timestamp=float(_pick(k, "timestamp", default=0.0) or 0.0),
+                image_url=str(_pick(k, "imageUrl", "image_url", default="") or ""),
+                description=str(_pick(k, "description", "caption", default="") or ""),
+                importance_score=float(
+                    _pick(k, "importanceScore", "importance_score", default=0.5) or 0.5
+                ),
+            )
+        )
 
     # Parse transcript_text to check if it's stored as a JSON list of segments
     import json
@@ -179,9 +196,15 @@ def export_summary(
             f"{summary.summary_text}\n\n"
             f"=== SEGMENTED CHAPTERS ===\n"
         )
-        for idx, c in enumerate(summary.chapters_json, 1):
-            content += f"Chapter {idx}: {c['title']} ({c['startTime']}s - {c['endTime']}s)\n"
-            content += f"Summary: {c['summary']}\n\n"
+        for idx, c in enumerate(summary.chapters_json or [], 1):
+            if not isinstance(c, dict):
+                continue
+            title = c.get("title") or f"Chapter {idx}"
+            start = c.get("startTime", c.get("start_time", c.get("start_seconds", 0)))
+            end = c.get("endTime", c.get("end_time", c.get("end_seconds", start)))
+            ch_summary = c.get("summary") or ""
+            content += f"Chapter {idx}: {title} ({start}s - {end}s)\n"
+            content += f"Summary: {ch_summary}\n\n"
 
         file_stream.write(content.encode("utf-8"))
         file_stream.seek(0)

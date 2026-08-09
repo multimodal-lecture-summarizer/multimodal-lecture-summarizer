@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.venv-florence/
+*.egg-info/
+.mypy_cache/
+cache/
+outputs/
+uploads/
+storage/
+*.mp4
+*.wav
+*.pt
+*.bin
+.git/

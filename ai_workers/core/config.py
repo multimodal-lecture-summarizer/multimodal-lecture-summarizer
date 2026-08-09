@@ -30,6 +30,12 @@ class WorkerSettings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     CHROMADB_PERSIST_DIR: str = "./cache/chroma"
 
+    # Quality post-process (sprint stack after summarizer)
+    # recommended = S1+S3+S4v2+S7; sprint10/full = +S5+S8soft+S9+S10
+    ENABLE_SPRINT_STACK: bool = True
+    SPRINT_STACK: str = "recommended"
+    MIN_CHAPTER_SEC: float = 45.0
+
     # API Keys (injected from .env)
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
