@@ -14,6 +14,10 @@ class WorkerSettings(BaseSettings):
 
     # GPU
     CUDA_VISIBLE_DEVICES: str = "0"
+    PROCESS_MIN_AVAILABLE_MEMORY_MB: int = 4096
+    PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB: int = 3072
+    PROCESS_MEMORY_RETRY_SECONDS: int = 30
+    PROCESS_MEMORY_RETRY_INTERVAL_SECONDS: int = 5
 
     # Audio module
     WHISPERX_MODEL: str = "large-v3"
@@ -24,6 +28,14 @@ class WorkerSettings(BaseSettings):
     SCENE_THRESHOLD: float = 27.0
     KEYFRAME_STRATEGY: str = "middle"
     FLORENCE_DEVICE: str = "cpu"
+    ENABLE_FLORENCE_CAPTIONING: bool = True
+    FLORENCE_MAX_CAPTIONS: int = 4
+    FLORENCE_MIN_AVAILABLE_MEMORY_MB: int = 6144
+    FLORENCE_MIN_AVAILABLE_VRAM_MB: int = 4096
+    FLORENCE_CPU_NUM_BEAMS: int = 1
+    FLORENCE_CUDA_NUM_BEAMS: int = 1
+    SEMANTIC_CLIP_DEVICE: str = "auto"
+    PADDLEOCR_USE_GPU: bool = False
 
     # Fusion module
     LLM_PROVIDER: str = "openai"

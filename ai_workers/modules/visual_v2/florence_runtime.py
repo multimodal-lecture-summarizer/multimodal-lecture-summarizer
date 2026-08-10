@@ -16,6 +16,8 @@ import numpy as np
 import torch
 from packaging.version import Version
 
+from ai_workers.core.resource_cleanup import get_available_memory_mb as get_system_available_memory_mb
+
 
 FLORENCE_ASSET_SHA256 = {
     "model.safetensors": "03075d2d2d2bbd3e180b9ba0afae4aa8563226e2d32911656966e05b2f2ee060",
@@ -43,10 +45,16 @@ SUPPORTED_PACKAGES = {
     "timm": "1.0.27",
     "torchvision": "0.20.1",
 }
+DEFAULT_MIN_AVAILABLE_MEMORY_MB = 6144
+DEFAULT_MIN_AVAILABLE_VRAM_MB = 4096
 
 
 class FlorenceRuntimeError(RuntimeError):
     """Raised when the runtime cannot satisfy the Florence reproducibility contract."""
+
+
+class FlorenceResourceError(RuntimeError):
+    """Raised when Florence inference would exceed local machine resource limits."""
 
 
 @dataclass(frozen=True)
@@ -85,7 +93,7 @@ def validate_florence_environment() -> None:
 
 
 def resolve_florence_runtime(requested_device: str) -> FlorenceRuntime:
-    """Resolve an explicit Florence device; CPU is the reproducible default."""
+    """Resolve Florence device; CPU is the reproducible and portable fallback."""
     validate_florence_environment()
     device = requested_device.strip().lower()
     if device not in {"cpu", "cuda"}:
@@ -93,15 +101,69 @@ def resolve_florence_runtime(requested_device: str) -> FlorenceRuntime:
             f"FLORENCE_DEVICE must be 'cpu' or 'cuda', received {requested_device!r}."
         )
     if device == "cuda" and not torch.cuda.is_available():
-        raise FlorenceRuntimeError(
-            "FLORENCE_DEVICE=cuda was requested, but CUDA is not available. "
-            "Use FLORENCE_DEVICE=cpu for portable deterministic inference."
+        print(
+            "[Florence Runtime] FLORENCE_DEVICE=cuda was requested, but CUDA is not available. "
+            "Falling back to CPU so the worker can run on CPU-only hosts."
         )
-    if device == "cuda" and os.environ.get("CUBLAS_WORKSPACE_CONFIG") != ":4096:8":
-        raise FlorenceRuntimeError(
-            "CUDA Florence requires CUBLAS_WORKSPACE_CONFIG=:4096:8 before worker startup."
-        )
+        device = "cpu"
+    if device == "cuda":
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     return FlorenceRuntime(device=device)
+
+
+def get_available_memory_mb() -> int | None:
+    """Return available system memory in MB when the platform exposes it."""
+    return get_system_available_memory_mb()
+
+
+def assert_florence_memory_available(
+    min_available_mb: int = DEFAULT_MIN_AVAILABLE_MEMORY_MB,
+) -> int | None:
+    """Fail before loading Florence when available RAM is below the configured floor."""
+    available_mb = get_available_memory_mb()
+    if available_mb is not None and available_mb < min_available_mb:
+        raise FlorenceResourceError(
+            f"Skipping Florence-2 captioning: only {available_mb} MB RAM available "
+            f"(requires at least {min_available_mb} MB before model load)."
+        )
+    return available_mb
+
+
+def get_cuda_memory_mb(device: str = "cuda") -> tuple[int, int] | None:
+    """Return free and total CUDA memory in MB for the selected device."""
+    if not torch.cuda.is_available():
+        return None
+
+    try:
+        free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+    except TypeError:
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+    except Exception:
+        return None
+
+    return int(free_bytes / (1024 * 1024)), int(total_bytes / (1024 * 1024))
+
+
+def assert_florence_cuda_memory_available(
+    runtime: FlorenceRuntime,
+    min_available_vram_mb: int = DEFAULT_MIN_AVAILABLE_VRAM_MB,
+) -> tuple[int, int] | None:
+    """Fail before loading Florence on CUDA when free VRAM is below the configured floor."""
+    if runtime.device != "cuda":
+        return None
+
+    torch.cuda.empty_cache()
+    cuda_memory = get_cuda_memory_mb(runtime.device)
+    if cuda_memory is None:
+        return None
+
+    free_mb, total_mb = cuda_memory
+    if free_mb < min_available_vram_mb:
+        raise FlorenceResourceError(
+            f"Skipping Florence-2 CUDA captioning: only {free_mb}/{total_mb} MB VRAM free "
+            f"(requires at least {min_available_vram_mb} MB before model load)."
+        )
+    return cuda_memory
 
 
 def verify_florence_model(model_dir: str | Path) -> None:

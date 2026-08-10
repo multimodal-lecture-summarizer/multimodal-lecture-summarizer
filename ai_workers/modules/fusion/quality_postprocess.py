@@ -256,7 +256,7 @@ def sprint7_transcript_caption_fallback(keyframes: list, max_chars: int = 100) -
                 if len(transcript) > max_chars
                 else transcript
             )
-            item["description"] = f"Slide context: {snippet}"
+            item["description"] = snippet
             item["caption"] = item["description"]
             item["caption_enriched"] = True
             item["enrich_source"] = "transcript_fallback"

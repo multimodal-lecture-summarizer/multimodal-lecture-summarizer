@@ -6,7 +6,13 @@ import soundfile as sf
 import librosa
 
 try:
-    from df.enhance import enhance, init_df, load_audio
+    import importlib
+
+    _df_enhance = importlib.import_module("df.enhance")
+    _df_enhance.get_device = lambda: torch.device("cpu")
+    enhance = _df_enhance.enhance
+    init_df = _df_enhance.init_df
+    load_audio = _df_enhance.load_audio
     DF_AVAILABLE = True
 except Exception as _df_err:
     DF_AVAILABLE = False
