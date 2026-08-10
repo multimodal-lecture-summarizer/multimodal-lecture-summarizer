@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Suppress python warnings (deprecation, user warnings from PyTorch/Transformers)
 import warnings
@@ -26,12 +27,14 @@ except Exception:
     pass
 
 from ai_workers.core.celery_app import app
+from ai_workers.core.config import worker_settings
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
 from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
 from ai_workers.modules.visual_v2.scene_detector import SceneDetector
 from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
 from ai_workers.modules.fusion.timeline import TimelineBuilder
 from ai_workers.modules.fusion.summarizer import Summarizer
+from ai_workers.modules.fusion.quality_postprocess import apply_quality_postprocess
 
 
 
@@ -400,15 +403,46 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             "imageUrl": scene["keyframe_url"],
             "description": scene.get("caption", f"Slide at {scene['start_timecode']}"),
             "transcript": scene.get("script", ""),
-            "importanceScore": scene.get("importanceScore", 0.8)
+            "ocr_text": scene.get("ocr_text", ""),
+            "blur_score": scene.get("blur_score"),
+            "importanceScore": scene.get("importanceScore", 0.8),
         })
 
-    return {
+    chapters = text_result.get("chapters", [])
+    sprint_stats = None
+    export_meta = None
+    if worker_settings.ENABLE_SPRINT_STACK:
+        log_step(
+            f"Đang chạy quality sprint stack ({worker_settings.SPRINT_STACK})...",
+            "quality",
+            99,
+        )
+        try:
+            qp = apply_quality_postprocess(
+                chapters=chapters,
+                keyframes=keyframes,
+                utterances=utterances,
+                stack_name=worker_settings.SPRINT_STACK,
+                min_chapter_sec=worker_settings.MIN_CHAPTER_SEC,
+            )
+            chapters = qp["chapters"]
+            keyframes = qp["keyframes"]
+            sprint_stats = qp.get("sprint_stats")
+            export_meta = qp.get("export_meta")
+            log_step(
+                f"Sprint stack xong: {len(chapters)} chapters, {len(keyframes)} keyframes.",
+                "quality",
+                99,
+            )
+        except Exception as qp_err:
+            print(f"[Quality] Sprint stack failed, keeping baseline outputs: {qp_err}")
+
+    result = {
         "job_id": job_id,
         "status": "done",
         "video_title": text_result.get("video_title", "Untitled Lecture Video"),
         "summary": text_result.get("summary", ""),
-        "chapters": text_result.get("chapters", []),
+        "chapters": chapters,
         "keyframes": keyframes,
         "transcript_text": audio_result.get("text", ""),
         "transcript_segments": utterances,
@@ -416,8 +450,13 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         "duration": duration,
         "model_used": text_result.get("model_used", "Groq"),
         "processing_time": elapsed_time,
-        "video_file_path": video_file_url
+        "video_file_path": video_file_url,
     }
+    if sprint_stats is not None:
+        result["sprint_stats"] = sprint_stats
+    if export_meta is not None:
+        result["export_meta"] = export_meta
+    return result
 
 
 

@@ -57,11 +57,15 @@ services:
         condition: service_healthy
 
   # ──────────────────────────────────────────
-  # AI Worker (Celery + GPU)
+  # AI Worker (Celery) — intended Docker service for local hybrid setup
+  # Backend/frontend run on host; Redis is broker-only for this worker.
   # ──────────────────────────────────────────
   ai_worker:
     build: ./ai_workers
+    env_file:
+      - ./backend/.env
     environment:
+      # Override host Redis URLs from backend/.env with in-compose service name
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
@@ -70,11 +74,16 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       HF_TOKEN: ${HF_TOKEN:-}
+      ENABLE_SPRINT_STACK: ${ENABLE_SPRINT_STACK:-1}
+      SPRINT_STACK: ${SPRINT_STACK:-recommended}
+      MIN_CHAPTER_SEC: ${MIN_CHAPTER_SEC:-45}
     volumes:
       - ./uploads:/app/uploads
       - ./outputs:/app/outputs
       - ./cache:/app/cache
       - ./storage:/app/storage
+      # Live code so host edits to quality_postprocess/tasks apply without rebuild
+      - ./ai_workers:/app/ai_workers
     depends_on:
       redis:
         condition: service_healthy
