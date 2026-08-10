@@ -14,27 +14,25 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import warnings
 warnings.filterwarnings("ignore")
 
-# Monkey-patch Hugging Face transformers torch.load security check
-# to avoid ValueError when loading CLIP/BLIP models on torch < 2.6
-try:
-    import transformers.utils.import_utils
-    import transformers.modeling_utils
-    import transformers.utils
-    transformers.utils.import_utils.check_torch_load_is_safe = lambda: None
-    transformers.utils.check_torch_load_is_safe = lambda: None
-    transformers.modeling_utils.check_torch_load_is_safe = lambda: None
-except Exception:
-    pass
-
 from ai_workers.core.celery_app import app
-from ai_workers.core.config import worker_settings
-from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
-from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
-from ai_workers.modules.visual_v2.scene_detector import SceneDetector
-from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
-from ai_workers.modules.fusion.timeline import TimelineBuilder
-from ai_workers.modules.fusion.summarizer import Summarizer
-from ai_workers.modules.fusion.quality_postprocess import apply_quality_postprocess
+from ai_workers.core.resource_cleanup import (
+    ensure_process_memory_available,
+    release_worker_resources,
+)
+
+
+def _patch_transformers_torch_load_check() -> None:
+    """Patch Transformers lazily so Celery startup does not import the full AI stack."""
+    try:
+        import transformers.modeling_utils
+        import transformers.utils
+        import transformers.utils.import_utils
+
+        transformers.utils.import_utils.check_torch_load_is_safe = lambda: None
+        transformers.utils.check_torch_load_is_safe = lambda: None
+        transformers.modeling_utils.check_torch_load_is_safe = lambda: None
+    except Exception:
+        pass
 
 
 
@@ -54,6 +52,35 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     Stages 1-2 and 3-4 run in parallel where possible.
     """
     import time
+    from ai_workers.core.config import worker_settings
+
+    try:
+        available_mb = ensure_process_memory_available(
+            worker_settings.PROCESS_MIN_AVAILABLE_MEMORY_MB,
+            soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
+            retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
+            retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
+        )
+        if available_mb is not None:
+            print(f"[Preflight] RAM available before video processing: {available_mb} MB")
+    except RuntimeError as preflight_err:
+        message = str(preflight_err)
+        print(f"[Preflight] {message}")
+        self.update_state(
+            state="PROGRESS",
+            meta={"stage": "preflight", "progress": 0, "error": message},
+        )
+        raise
+
+    _patch_transformers_torch_load_check()
+    from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+    from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
+    from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+    from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
+    from ai_workers.modules.fusion.timeline import TimelineBuilder
+    from ai_workers.modules.fusion.summarizer import Summarizer
+    from ai_workers.modules.fusion.quality_postprocess import apply_quality_postprocess
+
     start_time = time.time()
     output_dir = f"./outputs/{job_id}"
 
@@ -207,8 +234,8 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         timestamp = datetime.utcnow().strftime("%H:%M:%S")
         log_line = f"[{timestamp}] {message}"
         logs.append(log_line)
-        del logs[:-15]  # Keep only the last 15 items
-        print(f"[{stage.upper()}] {message}")
+        del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
+        print(f"[{stage.upper()}] {message}", flush=True)
         self.update_state(
             state="PROGRESS",
             meta={
@@ -229,8 +256,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
         # Stage-level VRAM cleanup
         del audio
-        import gc
-        gc.collect()
+        release_worker_resources("audio stage")
 
         # Stage 2: Speaker diarization
         check_revoked()
@@ -243,7 +269,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         log_step(f"Hoàn thành phân tích người nói. Tìm thấy {len(utterances)} phân đoạn thoại.", "speaker", 35)
 
         del speaker
-        gc.collect()
+        release_worker_resources("speaker stage")
 
         # Stage 3: Visual
         check_revoked()
@@ -253,7 +279,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         log_step(f"Đã trích xuất xong {len(visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
 
         del visual
-        gc.collect()
+        release_worker_resources("visual stage")
 
         # Stage 4: Semantic
         check_revoked()
@@ -261,13 +287,17 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         semantic = SemanticAnalyzer()
         # semantic.process now takes the list of scene dicts, filters them, and adds captions
         log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
-        filtered_scenes = semantic.process(visual_result.get("scenes", []))
+        filtered_scenes = semantic.filter_scenes_clip(visual_result.get("scenes", []))
+        log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
+        semantic.caption_scenes_florence2(filtered_scenes)
+        log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
+        semantic.extract_ocr_paddleocr(filtered_scenes)
         visual_result["scenes"] = filtered_scenes
         slides = filtered_scenes
-        log_step(f"Đã hoàn thành mô tả slide bằng BLIP. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
+        log_step(f"Đã hoàn thành phân tích nội dung slide. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
 
         del semantic
-        gc.collect()
+        release_worker_resources("semantic stage")
 
         # Upload keyframes to R2 if configured
         from ai_workers.core.config import worker_settings
@@ -309,7 +339,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         log_step(f"Đã ánh xạ xong {len(timeline_result.get('chapters', []))} chương bài giảng.", "timeline", 85)
 
         del timeline
-        gc.collect()
+        release_worker_resources("timeline stage")
 
         # Stage 6: Summarization & RAG Indexing
         check_revoked()
@@ -333,7 +363,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             log_step("Lỗi khi tạo chỉ mục RAG.", "rag", 98)
 
         del summarizer
-        gc.collect()
+        release_worker_resources("summarization stage")
     finally:
         # Cleanup temporary files
         if is_temp_file:
@@ -351,6 +381,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     print(f"Cleaned up temporary audio file: {wav_path}")
                 except Exception as err:
                     print(f"Failed to clean up temporary audio file {wav_path}: {err}")
+        release_worker_resources("process_video pipeline")
 
     elapsed_time = time.time() - start_time
     duration = 0.0
@@ -456,6 +487,11 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         result["sprint_stats"] = sprint_stats
     if export_meta is not None:
         result["export_meta"] = export_meta
+    log_step("Hoàn tất xử lý video và lưu kết quả.", "completed", 100)
+    result["stage"] = "completed"
+    result["progress"] = 100
+    result["logs"] = list(logs)
+    release_worker_resources("process_video result assembly")
     return result
 
 
@@ -463,12 +499,38 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 @app.task(name="ai_workers.process_audio")
 def process_audio(job_id: str, video_path: str):
     """Subtask: audio extraction + ASR only."""
-    audio = AudioTranscriber()
-    return audio.process(video_path)
+    from ai_workers.core.config import worker_settings
+
+    available_mb = ensure_process_memory_available(
+        worker_settings.PROCESS_MIN_AVAILABLE_MEMORY_MB,
+        soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
+        retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
+        retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
+    )
+    if available_mb is not None:
+        print(f"[Preflight] RAM available before audio processing: {available_mb} MB")
+
+    _patch_transformers_torch_load_check()
+    from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+
+    audio = None
+    try:
+        audio = AudioTranscriber()
+        return audio.process(video_path)
+    finally:
+        audio = None
+        release_worker_resources("process_audio task")
 
 
 @app.task(name="ai_workers.process_visual")
 def process_visual(job_id: str, video_path: str, output_dir: str):
     """Subtask: scene detection + keyframe extraction only."""
-    visual = SceneDetector()
-    return visual.process(video_path, output_dir)
+    from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+
+    visual = None
+    try:
+        visual = SceneDetector()
+        return visual.process(video_path, output_dir)
+    finally:
+        visual = None
+        release_worker_resources("process_visual task")

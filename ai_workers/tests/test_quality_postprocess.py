@@ -58,7 +58,7 @@ class QualityPostprocessTests(unittest.TestCase):
         ]
         out, stats = sprint7_transcript_caption_fallback(keyframes)
         self.assertEqual(stats["enriched_from_transcript"], 1)
-        self.assertIn("Slide context:", out[0]["description"])
+        self.assertEqual(out[0]["description"], "Today we discuss backpropagation in deep networks")
         self.assertEqual(out[0]["enrich_source"], "transcript_fallback")
 
     def test_recommended_stack_end_to_end(self):

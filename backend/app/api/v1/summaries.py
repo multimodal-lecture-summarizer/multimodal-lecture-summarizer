@@ -153,16 +153,16 @@ def get_video_summary(
 
 @router.get(
     "/video/{video_id}/export",
-    summary="Export summary results to TXT, SRT, or PDF files",
+    summary="Export summary results to TXT, SRT, DOCX, or PDF files",
     description="Generates and streams a downloadable file of the summarization.",
 )
 def export_summary(
     video_id: uuid.UUID,
-    format: str = Query("txt", description="File format to export: txt, srt, pdf"),
+    format: str = Query("txt", description="File format to export: txt, srt, docx, pdf"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Generates downloadable summary files (TXT, SRT, PDF Mock) as StreamingResponse."""
+    """Generates downloadable summary files as StreamingResponse."""
     video = (
         db.query(Video)
         .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
@@ -176,15 +176,53 @@ def export_summary(
         raise NotFoundException(message="Summarization results not found.")
 
     format = format.lower().strip()
-    if format not in ["txt", "srt", "pdf"]:
+    if format not in ["txt", "srt", "docx", "pdf"]:
         raise ValidationException(
-            message="Invalid format. Supported formats are: txt, srt, pdf"
+            message="Invalid format. Supported formats are: txt, srt, docx, pdf"
         )
 
     file_stream = io.BytesIO()
+    
+    # Parse transcript segments for export formats
+    import json
+    import re
+    parsed_segments = []
+    clean_transcript_text = summary.transcript_text
+    
+    try:
+        parsed = json.loads(summary.transcript_text)
+        if isinstance(parsed, list):
+            parsed_segments = parsed
+            text_parts = []
+            for seg in parsed:
+                if seg.get("text") and seg.get("text") != "[Nhạc nền / Im lặng]":
+                    text_parts.append(seg["text"])
+            clean_transcript_text = " ".join(text_parts)
+    except Exception:
+        pass
+
+    if not parsed_segments and clean_transcript_text:
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', clean_transcript_text) if s.strip()]
+        total_dur = video.duration or 10.0
+        sec_per_sentence = total_dur / len(sentences) if sentences else 10.0
+        
+        for idx, sentence in enumerate(sentences):
+            s_start = idx * sec_per_sentence
+            s_end = (idx + 1) * sec_per_sentence
+            parsed_segments.append({
+                "start": s_start,
+                "end": s_end,
+                "text": sentence
+            })
+
+    def _chapter_export_fields(chapter: dict, idx: int) -> tuple[str, float, float, str]:
+        title = chapter.get("title") or f"Chapter {idx}"
+        start = chapter.get("startTime", chapter.get("start_time", chapter.get("start_seconds", 0)))
+        end = chapter.get("endTime", chapter.get("end_time", chapter.get("end_seconds", start)))
+        ch_summary = chapter.get("summary") or ""
+        return title, start, end, ch_summary
 
     if format == "txt":
-        # Formulate pure text summary
         content = (
             f"=== VIDEO SUMMARY REPORT ===\n"
             f"Video ID: {video_id}\n"
@@ -193,76 +231,135 @@ def export_summary(
             f"Model Used: {summary.model_used}\n"
             f"Processing Time: {summary.processing_time}s\n"
             f"============================\n\n"
-            f"{summary.summary_text}\n\n"
-            f"=== SEGMENTED CHAPTERS ===\n"
+            f"SUMMARY:\n{summary.summary_text}\n\n"
+            f"=== CHAPTERS ===\n"
         )
         for idx, c in enumerate(summary.chapters_json or [], 1):
             if not isinstance(c, dict):
                 continue
-            title = c.get("title") or f"Chapter {idx}"
-            start = c.get("startTime", c.get("start_time", c.get("start_seconds", 0)))
-            end = c.get("endTime", c.get("end_time", c.get("end_seconds", start)))
-            ch_summary = c.get("summary") or ""
+            title, start, end, ch_summary = _chapter_export_fields(c, idx)
             content += f"Chapter {idx}: {title} ({start}s - {end}s)\n"
             content += f"Summary: {ch_summary}\n\n"
+
+        content += f"=== TRANSCRIPT ===\n{clean_transcript_text or ''}\n"
 
         file_stream.write(content.encode("utf-8"))
         file_stream.seek(0)
         return StreamingResponse(
             file_stream,
             media_type="text/plain",
-            headers={
-                "Content-Disposition": f"attachment; filename=summary_{video_id}.txt"
-            },
+            headers={"Content-Disposition": f"attachment; filename=summary_{video_id}.txt"},
         )
 
     elif format == "srt":
-        # Formulate subtitle file structure
-        content = (
-            "1\n"
-            "00:00:00,000 --> 00:00:10,000\n"
-            "Welcome to this lecture on Web Application Architectures.\n\n"
-            "2\n"
-            "00:00:10,000 --> 00:00:30,000\n"
-            "Today, we will discuss Microservices versus Monolithic systems.\n\n"
-            "3\n"
-            "00:00:30,000 --> 00:01:00,000\n"
-            "In the first part, we examine why companies shift to Microservices to solve scaling problems.\n"
-        )
-        file_stream.write(content.encode("utf-8"))
+        def format_srt_time(seconds: float) -> str:
+            if not isinstance(seconds, (int, float)): return "00:00:00,000"
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            millis = int(round((seconds - int(seconds)) * 1000))
+            return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+        srt_content = ""
+        for i, seg in enumerate(parsed_segments, 1):
+            start_str = format_srt_time(seg.get("start", 0))
+            end_str = format_srt_time(seg.get("end", 0))
+            text = seg.get("text", "")
+            srt_content += f"{i}\n{start_str} --> {end_str}\n{text}\n\n"
+
+        file_stream.write(srt_content.encode("utf-8"))
         file_stream.seek(0)
         return StreamingResponse(
             file_stream,
             media_type="text/srt",
-            headers={
-                "Content-Disposition": f"attachment; filename=subtitles_{video_id}.srt"
-            },
+            headers={"Content-Disposition": f"attachment; filename=subtitles_{video_id}.srt"},
+        )
+
+    elif format == "docx":
+        try:
+            from docx import Document
+        except ImportError:
+            raise ValidationException(message="DOCX export is not supported on this server.")
+            
+        doc = Document()
+        doc.add_heading("Video Summary Report", 0)
+        doc.add_paragraph(f"Video ID: {video_id}")
+        doc.add_paragraph(f"Duration: {video.duration} seconds")
+        
+        doc.add_heading("Summary", level=1)
+        doc.add_paragraph(summary.summary_text)
+        
+        doc.add_heading("Chapters", level=1)
+        for idx, c in enumerate(summary.chapters_json or [], 1):
+            if not isinstance(c, dict):
+                continue
+            title, start, end, ch_summary = _chapter_export_fields(c, idx)
+            doc.add_heading(f"Chapter {idx}: {title} ({start}s - {end}s)", level=2)
+            doc.add_paragraph(ch_summary)
+            
+        doc.add_heading("Transcript", level=1)
+        doc.add_paragraph(clean_transcript_text)
+        
+        doc.save(file_stream)
+        file_stream.seek(0)
+        return StreamingResponse(
+            file_stream,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename=summary_{video_id}.docx"},
         )
 
     elif format == "pdf":
-        # Formulate simple layout representation in a PDF file
-        # To avoid external heavy PDF libraries, we stream a standard text-based PDF format
-        # or markdown representation formatted as PDF bytes. Here we stream a simple PDF stream.
-        pdf_header = (
-            f"%PDF-1.4\n"
-            f"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
-            f"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
-            f"3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n"
-            f"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
-            f"5 0 obj\n<< /Length 120 >>\nstream\n"
-            f"BT\n/F1 14 Tf\n50 700 Td\n(AI Video Summarizer Report) Tj\n"
-            f"/F1 10 Tf\n0 -30 Td\n(Video UUID: {video_id}) Tj\n"
-            f"0 -20 Td\n(This document certifies the successful extraction of audio summary and keyframes.) Tj\n"
-            f"ET\nendstream\nendobj\n"
-            f"xref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000212 00000 n\n0000000293 00000 n\n"
-            f"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n462\n%%EOF"
-        )
-        file_stream.write(pdf_header.encode("latin1"))
+        try:
+            from fpdf import FPDF
+        except ImportError:
+            raise ValidationException(message="PDF export is not supported on this server.")
+            
+        import os
+        
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Load font for Vietnamese support
+        font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "Roboto-Regular.ttf")
+        font_name = "Arial"
+        if os.path.exists(font_path):
+            pdf.add_font("Roboto", "", font_path, uni=True)
+            font_name = "Roboto"
+            
+        pdf.set_font(font_name, size=16)
+        pdf.cell(0, 10, "Video Summary Report", ln=True, align='C')
+        pdf.set_font(font_name, size=12)
+        pdf.cell(0, 10, f"Video ID: {video_id}", ln=True)
+        pdf.cell(0, 10, f"Duration: {video.duration} seconds", ln=True)
+        pdf.ln(5)
+        
+        pdf.set_font(font_name, size=14)
+        pdf.cell(0, 10, "Summary", ln=True)
+        pdf.set_font(font_name, size=11)
+        pdf.multi_cell(0, 8, summary.summary_text)
+        pdf.ln(5)
+        
+        pdf.set_font(font_name, size=14)
+        pdf.cell(0, 10, "Chapters", ln=True)
+        for idx, c in enumerate(summary.chapters_json or [], 1):
+            if not isinstance(c, dict):
+                continue
+            title, start, end, ch_summary = _chapter_export_fields(c, idx)
+            pdf.set_font(font_name, size=12)
+            pdf.cell(0, 8, f"Chapter {idx}: {title} ({start}s - {end}s)", ln=True)
+            pdf.set_font(font_name, size=11)
+            pdf.multi_cell(0, 8, ch_summary)
+            pdf.ln(3)
+            
+        pdf_bytes = pdf.output(dest='S')
+        # fpdf2 dest='S' returns a bytearray
+        if isinstance(pdf_bytes, str):
+            pdf_bytes = pdf_bytes.encode('latin1')
+            
+        file_stream.write(pdf_bytes)
         file_stream.seek(0)
         return StreamingResponse(
             file_stream,
             media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=report_{video_id}.pdf"
-            },
+            headers={"Content-Disposition": f"attachment; filename=report_{video_id}.pdf"},
         )

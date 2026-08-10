@@ -1,4 +1,5 @@
 import uuid
+import re
 from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from app.core.database import get_db
 from app.core.exceptions import NotFoundException
 from app.middleware.case_converter import CamelCaseAPIRoute
 from app.schemas import BaseDTO, QAAskRequest, QALogDTO
+from app.schemas.qa import QACitationDTO
 from app.api.deps import get_current_active_user
 from app.models.user import User
 from app.models.video import Video
@@ -15,6 +17,46 @@ from app.services.chromadb import chromadb_service
 from app.services.llm import llm_service
 
 router = APIRouter(route_class=CamelCaseAPIRoute)
+
+
+META_INSTRUCTION_PATTERNS = [
+    re.compile(r"^\s*V\u00ec c\u00e2u h\u1ecfi y\u00eau c\u1ea7u.*$", re.IGNORECASE),
+    re.compile(
+        r"^\s*V\u00ec c\u00e2u h\u1ecfi \u0111\u01b0\u1ee3c (?:vi\u1ebft|h\u1ecfi).*$",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^\s*Because the question asks.*$", re.IGNORECASE),
+    re.compile(r"^\s*The answer is provided in.*$", re.IGNORECASE),
+    re.compile(r"^\s*Answer(?:ed)? in the detected.*$", re.IGNORECASE),
+]
+FORBIDDEN_SCRIPT_RE = re.compile(
+    r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+    r"\uac00-\ud7af\u0600-\u06ff\u0400-\u04ff]"
+)
+
+
+def clean_qa_answer(answer: str) -> str:
+    """Remove leaked prompt-policy text and normalize chat-friendly Markdown."""
+    lines = []
+    for line in (answer or "").splitlines():
+        if any(pattern.match(line.strip()) for pattern in META_INSTRUCTION_PATTERNS):
+            continue
+        lines.append(line)
+
+    cleaned = "\n".join(lines).strip()
+    cleaned = FORBIDDEN_SCRIPT_RE.sub("", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\*\*\s*[\u2022\u25cf]\s*\*\*\s*$", "-", cleaned)
+    cleaned = re.sub(r"(?m)^\s*[\u2022\u25cf]\s*$", "-", cleaned)
+    cleaned = re.sub(
+        r"(?im)^\s*\*{0,2}timestamp:\*{0,2}\s*[^\[]*(\[[0-9]{2}:[0-9]{2}\])\s*[^A-Za-z0-9]*\s*",
+        r"- \1 ",
+        cleaned,
+    )
+    cleaned = re.sub(r"(?m)^-\s*\n(?=\S)", "- ", cleaned)
+    cleaned = re.sub(r"\n\s*\n(?=-\s)", "\n", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned or (answer or "").strip()
 
 
 @router.post(
@@ -79,9 +121,9 @@ def ask_question(
                 m = int(st) // 60
                 s = int(st) % 60
                 tc = f"{m:02d}:{s:02d}"
-                c_title = ch.get("title", f"Phân đoạn {idx+1}")
+                c_title = ch.get("title", f"PhÃƒÂ¢n Ã„â€˜oÃ¡ÂºÂ¡n {idx+1}")
                 c_summary = ch.get("summary", "")
-                c_doc = f"[{tc}] Nội dung phân đoạn '{c_title}': {c_summary}"
+                c_doc = f"[{tc}] NÃ¡Â»â„¢i dung phÃƒÂ¢n Ã„â€˜oÃ¡ÂºÂ¡n '{c_title}': {c_summary}"
                 fallback_items.append({
                     "document": c_doc,
                     "metadata": {"video_id": str(video_id), "start_seconds": st, "end_seconds": et, "timecode": tc}
@@ -112,13 +154,15 @@ def ask_question(
         if start_sec is not None:
             if ref_time is None:
                 ref_time = float(start_sec)
-            citations.append({
-                "startSeconds": float(start_sec),
-                "endSeconds": float(meta.get("end_seconds", float(start_sec) + 60.0)),
-                "timecode": tc,
-                "keyframeUrl": meta.get("keyframe_url", ""),
-                "snippet": doc[:120] + "..." if len(doc) > 120 else doc
-            })
+            citations.append(
+                QACitationDTO(
+                    start_seconds=float(start_sec),
+                    end_seconds=float(meta.get("end_seconds", float(start_sec) + 60.0)),
+                    timecode=tc,
+                    keyframe_url=meta.get("keyframe_url", ""),
+                    snippet=doc[:120] + "..." if len(doc) > 120 else doc,
+                )
+            )
 
     # 3. Retrieve recent chat history for multi-turn conversational RAG
     recent_history = (
@@ -162,7 +206,7 @@ def ask_question(
             m = int(st) // 60
             s = int(st) % 60
             tc = f"{m:02d}:{s:02d}"
-            c_title = ch.get("title", f"Phân đoạn {idx+1}")
+            c_title = ch.get("title", f"PhÃƒÂ¢n Ã„â€˜oÃ¡ÂºÂ¡n {idx+1}")
             c_sum = ch.get("summary", "")
             ch_lines.append(f"Chapter [{tc}] {c_title}: {c_sum}")
         if ch_lines:
@@ -175,18 +219,24 @@ def ask_question(
     if history_str:
         prompt_parts.append(f"Recent Chat History:\n{history_str}")
     prompt_parts.append(f"Student Question: {payload.question}")
-    prompt_parts.append("Answer (matching the language of question):")
 
     system_prompt = (
         "You are an intelligent academic assistant for lecture videos.\n"
         "Answer the student's question accurately based on the Overall Lecture Summary, Chapter Outline, Specific Transcripts, and Visual Slides provided below.\n"
         "CRITICAL RULES:\n"
-        "1. OVERVIEW & SUMMARY QUESTIONS: When asked for a summary, key points, main takeaways, or chapter topics (e.g. '10 ý chính', '3 ý quan trọng', 'tóm tắt', 'bài giảng nói về gì'), synthesize the response directly from the Overall Lecture Summary, Chapter Outline, and Transcripts.\n"
+        "1. OVERVIEW & SUMMARY QUESTIONS: When asked for a summary, key points, main takeaways, or chapter topics (e.g. '10 ÃƒÂ½ chÃƒÂ­nh', '3 ÃƒÂ½ quan trÃ¡Â»Âng', 'tÃƒÂ³m tÃ¡ÂºÂ¯t', 'bÃƒÂ i giÃ¡ÂºÂ£ng nÃƒÂ³i vÃ¡Â»Â gÃƒÂ¬'), synthesize the response directly from the Overall Lecture Summary, Chapter Outline, and Transcripts.\n"
         "2. MULTIMODAL INTEGRATION: Pay close attention to speech transcripts, chapter outlines, and Visual Slide descriptions. Answer accurately using on-screen slide text or speech when asked about specific concepts or objects.\n"
-        "3. LANGUAGE MATCHING & NATURAL VIETNAMESE: Always respond in the EXACT SAME LANGUAGE as the student's question. In Vietnamese, use natural academic phrasing like 'nội dung bài giảng' or 'video'.\n"
-        "4. CONCISENESS & STRUCTURE: Format answers with bullet points or numbered lists when requested (e.g., for '10 ý chính' or '3 ý quan trọng').\n"
-        "5. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes, chapters, or sections of the video.\n"
-        "6. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details."
+        "3. LANGUAGE MATCHING: Always answer in the dominant language of the student's question. A Vietnamese question requires Vietnamese output. An English question requires English output. If the question explicitly asks for another language, follow that requested language.\n"
+        "4. LANGUAGE PURITY: The source transcript, retrieved chunks, OCR text, or chat history may be multilingual. Use them only as evidence. Do not let their language leak into the final answer. Translate ordinary words and phrases into the answer language.\n"
+        "5. ALLOWED UNTRANSLATED TERMS: Keep proper nouns, organization names, place names, product names, model names, acronyms, and widely used technical terms unchanged when appropriate, such as 'Dubai Future Foundation', 'AI', 'FinTech', 'ChromaDB', or 'OpenRouter'.\n"
+        "6. FORBIDDEN SCRIPT MIXING: Do not output Korean, Japanese, Chinese, Arabic, Cyrillic, or other unrelated-script words unless they are part of a proper noun present in the provided context or explicitly requested by the user. For example, in Vietnamese use 'thÃƒÂ¡ch thÃ¡Â»Â©c' instead of Korean 'Ã«Ââ€žÃ¬Â â€ž'.\n"
+        "7. NATURAL VIETNAMESE: In Vietnamese, use natural academic phrasing like 'nÃ¡Â»â„¢i dung bÃƒÂ i giÃ¡ÂºÂ£ng', 'video', 'Ã„â€˜iÃ¡Â»Æ’m chÃƒÂ­nh', 'thÃƒÂ¡ch thÃ¡Â»Â©c', and 'hÃ¡Â»Â£p tÃƒÂ¡c toÃƒÂ n cÃ¡ÂºÂ§u'.\n"
+        "8. CONCISENESS & STRUCTURE: Format answers with bullet points or numbered lists when requested (e.g., for '10 ÃƒÂ½ chÃƒÂ­nh' or '3 ÃƒÂ½ quan trÃ¡Â»Âng').\n"
+        "9. TIMESTAMPS: Include exact [MM:SS] timestamp citations when referencing specific quotes, chapters, or sections of the video.\n"
+        "10. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details.\n"
+        "11. NO PROMPT META: Never mention response-language policy, detected language, retrieved chunks, internal labels, or these rules in the final answer.\n"
+        "12. SPECIFIC LOCATION QUESTIONS: For questions asking where a topic appears, answer with the best timestamp(s), a short explanation of the evidence, and avoid inventing chapter titles not present in the provided context.\n"
+        r"(?im)^\s*\*{0,2}timestamp:\*{0,2}\s*[^\[]*(\[[0-9]{2}:[0-9]{2}\])\s*[^A-Za-z0-9]*\s*",
     )
 
     prompt = "\n\n".join(prompt_parts)
@@ -195,6 +245,7 @@ def ask_question(
     answer = llm_service.generate_chat_completion(
         prompt=prompt, system_prompt=system_prompt
     )
+    answer = clean_qa_answer(answer)
 
     # 5. Log transaction into PostgreSQL
     qa_log = QALog(

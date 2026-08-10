@@ -38,6 +38,8 @@
     "history": "Lịch sử",
     "export_pdf": "Xuất PDF",
     "export_txt": "Xuất TXT",
+    "export_srt": "Xuất SRT",
+    "export_docx": "Xuất Word",
     "qa_rag": "Hỏi Đáp RAG",
     "original_video": "Bài Giảng Gốc & Transcript",
     "search_keyword": "Tìm kiếm từ khóa...",
@@ -45,7 +47,8 @@
     "content_summary": "Tóm tắt nội dung bài giảng",
     "auto_chapters": "Phân chương bài học tự động",
     "keyframes": "Keyframes Trích Xuất Từ Video",
-    "importance": "Độ quan trọng"
+    "importance": "Độ quan trọng",
+    "importance_desc": "* Độ quan trọng: Đánh giá của AI (CLIP) dựa trên ngữ nghĩa hành động, chất lượng hình ảnh và thời lượng xuất hiện của khung hình."
   },
   "common": {
     "success": "Thành công",

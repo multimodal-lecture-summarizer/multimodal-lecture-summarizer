@@ -13,8 +13,11 @@ import torch
 from ai_workers.modules.visual_v2.florence_runtime import (
     FlorenceDeterminism,
     FLORENCE_ASSET_SHA256,
+    FlorenceResourceError,
     FlorenceRuntime,
     FlorenceRuntimeError,
+    assert_florence_cuda_memory_available,
+    assert_florence_memory_available,
     resolve_florence_runtime,
     SUPPORTED_PACKAGES,
     validate_florence_environment,
@@ -44,14 +47,71 @@ class FlorenceRuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.dtype, torch.float32)
         self.assertEqual(runtime.attention_implementation, "eager")
 
-    def test_cuda_request_fails_when_cuda_is_unavailable(self):
+    def test_cuda_request_falls_back_to_cpu_when_cuda_is_unavailable(self):
         with patch("torch.cuda.is_available", return_value=False):
-            with self.assertRaisesRegex(FlorenceRuntimeError, "CUDA is not available"):
-                resolve_florence_runtime("cuda")
+            runtime = resolve_florence_runtime("cuda")
+
+        self.assertEqual(runtime.device, "cpu")
+        self.assertEqual(runtime.dtype, torch.float32)
+        self.assertEqual(runtime.attention_implementation, "eager")
+
+    def test_cuda_request_uses_cuda_when_available(self):
+        with patch("torch.cuda.is_available", return_value=True):
+            runtime = resolve_florence_runtime("cuda")
+
+        self.assertEqual(runtime.device, "cuda")
 
     def test_invalid_device_fails_fast(self):
         with self.assertRaisesRegex(FlorenceRuntimeError, "FLORENCE_DEVICE"):
             resolve_florence_runtime("auto")
+
+    def test_low_available_memory_blocks_model_load(self):
+        with patch(
+            "ai_workers.modules.visual_v2.florence_runtime.get_available_memory_mb",
+            return_value=2048,
+        ):
+            with self.assertRaisesRegex(FlorenceResourceError, "Skipping Florence-2 captioning"):
+                assert_florence_memory_available(min_available_mb=4096)
+
+    def test_unknown_available_memory_does_not_block_model_load(self):
+        with patch(
+            "ai_workers.modules.visual_v2.florence_runtime.get_available_memory_mb",
+            return_value=None,
+        ):
+            self.assertIsNone(assert_florence_memory_available(min_available_mb=4096))
+
+    def test_sufficient_available_memory_allows_model_load(self):
+        with patch(
+            "ai_workers.modules.visual_v2.florence_runtime.get_available_memory_mb",
+            return_value=8192,
+        ):
+            self.assertEqual(assert_florence_memory_available(min_available_mb=4096), 8192)
+
+    def test_low_cuda_memory_blocks_cuda_model_load(self):
+        runtime = FlorenceRuntime(device="cuda")
+        with patch("torch.cuda.is_available", return_value=True), patch("torch.cuda.empty_cache"), patch(
+            "ai_workers.modules.visual_v2.florence_runtime.get_cuda_memory_mb",
+            return_value=(2048, 8192),
+        ):
+            with self.assertRaisesRegex(FlorenceResourceError, "Skipping Florence-2 CUDA captioning"):
+                assert_florence_cuda_memory_available(runtime, min_available_vram_mb=4096)
+
+    def test_sufficient_cuda_memory_allows_cuda_model_load(self):
+        runtime = FlorenceRuntime(device="cuda")
+        with patch("torch.cuda.is_available", return_value=True), patch("torch.cuda.empty_cache"), patch(
+            "ai_workers.modules.visual_v2.florence_runtime.get_cuda_memory_mb",
+            return_value=(6144, 8192),
+        ):
+            self.assertEqual(
+                assert_florence_cuda_memory_available(runtime, min_available_vram_mb=4096),
+                (6144, 8192),
+            )
+
+    def test_cuda_memory_check_is_skipped_for_cpu_runtime(self):
+        runtime = FlorenceRuntime(device="cpu")
+        with patch("ai_workers.modules.visual_v2.florence_runtime.get_cuda_memory_mb") as get_cuda_memory:
+            self.assertIsNone(assert_florence_cuda_memory_available(runtime))
+        get_cuda_memory.assert_not_called()
 
     def test_verified_checkout_matches_asset_manifest(self):
         model_dir = Path(__file__).resolve().parents[1] / "modules" / "visual_v2" / "florence2_vendor"

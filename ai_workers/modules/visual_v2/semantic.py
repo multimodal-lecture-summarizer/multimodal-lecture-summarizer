@@ -11,7 +11,10 @@ from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModelForCa
 from sklearn.metrics.pairwise import cosine_similarity
 from ai_workers.core.config import worker_settings
 from ai_workers.modules.visual_v2.florence_runtime import (
+    FlorenceResourceError,
     FlorenceDeterminism,
+    assert_florence_cuda_memory_available,
+    assert_florence_memory_available,
     resolve_florence_runtime,
     verify_florence_model,
 )
@@ -22,7 +25,17 @@ class SemanticAnalyzer:
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
         self.keep_ratio = self.config.get("keep_ratio", 0.7)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = self._resolve_clip_device()
+
+    def _resolve_clip_device(self) -> str:
+        requested = str(worker_settings.SEMANTIC_CLIP_DEVICE).strip().lower()
+        if requested == "cpu":
+            return "cpu"
+        if requested == "cuda":
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        if worker_settings.FLORENCE_DEVICE.strip().lower() == "cuda":
+            return "cpu"
+        return "cuda" if torch.cuda.is_available() else "cpu"
 
     def filter_scenes_clip(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Extract CLIP embeddings, perform zero-shot filtering, cluster, and score (V3)."""
@@ -281,6 +294,13 @@ class SemanticAnalyzer:
         """Generate detailed captions for scenes using Florence-2."""
         if not scenes:
             return
+
+        for scene in scenes:
+            scene.setdefault("caption", f"Keyframe for Scene {scene.get('scene_index', '')}".strip())
+
+        if not worker_settings.ENABLE_FLORENCE_CAPTIONING:
+            print("[Semantic] Florence-2 captioning disabled by ENABLE_FLORENCE_CAPTIONING=0.")
+            return
             
         processor = None
         model = None
@@ -289,13 +309,32 @@ class SemanticAnalyzer:
         try:
             model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
             runtime = resolve_florence_runtime(worker_settings.FLORENCE_DEVICE)
+            available_mb = assert_florence_memory_available(
+                worker_settings.FLORENCE_MIN_AVAILABLE_MEMORY_MB
+            )
+            cuda_memory_mb = assert_florence_cuda_memory_available(
+                runtime,
+                worker_settings.FLORENCE_MIN_AVAILABLE_VRAM_MB,
+            )
             verify_florence_model(model_dir)
             determinism = FlorenceDeterminism(runtime)
             determinism.enable()
+            caption_scenes = self._select_florence_caption_scenes(scenes)
+            skipped_count = len(scenes) - len(caption_scenes)
+            if not caption_scenes:
+                print("[Semantic] No scenes selected for Florence-2 captioning.")
+                return
             print(
                 f"[Semantic] Loading Florence-2 on {runtime.device}/float32/eager "
-                f"to caption {len(scenes)} frames from {model_dir}..."
+                f"to caption {len(caption_scenes)}/{len(scenes)} frames from {model_dir}..."
             )
+            if available_mb is not None:
+                print(f"[Semantic] Available RAM before Florence-2 load: {available_mb} MB.")
+            if cuda_memory_mb is not None:
+                free_mb, total_mb = cuda_memory_mb
+                print(f"[Semantic] Available VRAM before Florence-2 load: {free_mb}/{total_mb} MB.")
+            if skipped_count > 0:
+                print(f"[Semantic] Skipping Florence-2 for {skipped_count} lower-priority frames.")
             
             # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
             import transformers
@@ -317,7 +356,14 @@ class SemanticAnalyzer:
             except Exception as e:
                 print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
 
-            processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
+            print("[Semantic] Loading Florence-2 processor...", flush=True)
+            processor = AutoProcessor.from_pretrained(
+                model_dir,
+                trust_remote_code=True,
+                use_fast=False,
+            )
+            print("[Semantic] Florence-2 processor loaded.", flush=True)
+            print("[Semantic] Loading Florence-2 model weights...", flush=True)
             model = AutoModelForCausalLM.from_pretrained(
                 model_dir,
                 dtype=runtime.dtype,
@@ -325,6 +371,7 @@ class SemanticAnalyzer:
                 attn_implementation=runtime.attention_implementation,
             ).to(runtime.device)
             model.eval()
+            print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
             
             # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
             if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
@@ -335,45 +382,58 @@ class SemanticAnalyzer:
             # <CAPTION> generates a very short, concise sentence focused on the main subject,
             # eliminating unnecessary details like backgrounds or skies.
             task_prompt = "<CAPTION>"
+            num_beams = (
+                worker_settings.FLORENCE_CUDA_NUM_BEAMS
+                if runtime.device == "cuda"
+                else worker_settings.FLORENCE_CPU_NUM_BEAMS
+            )
             
-            for scene in scenes:
+            for scene in caption_scenes:
                 path = scene.get("keyframe_path")
                 if not path or not os.path.exists(path):
                     continue
                     
                 try:
-                    raw_image = Image.open(path).convert("RGB")
-                    
-                    # Pad to square to fix Florence-2 "only support square feature maps for now" error
-                    width, height = raw_image.size
-                    if width != height:
-                        size = max(width, height)
-                        padded_image = Image.new("RGB", (size, size), (0, 0, 0))
-                        padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
-                        proc_image = padded_image
-                    else:
-                        proc_image = raw_image
+                    with Image.open(path) as image:
+                        raw_image = image.convert("RGB")
 
-                    inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt")
-                    inputs = {key: value.to(runtime.device) for key, value in inputs.items()}
-                    inputs["pixel_values"] = inputs["pixel_values"].to(dtype=runtime.dtype)
-                    
-                    with torch.no_grad():
-                        generated_ids = model.generate(
-                            input_ids=inputs["input_ids"],
-                            pixel_values=inputs["pixel_values"],
-                            max_new_tokens=64,
-                            num_beams=3,
-                            do_sample=False,
-                            early_stopping=True,
-                            no_repeat_ngram_size=3,
-                            repetition_penalty=1.2,
-                            eos_token_id=processor.tokenizer.eos_token_id,
-                            pad_token_id=processor.tokenizer.pad_token_id,
+                        # Pad to square to fix Florence-2 "only support square feature maps for now" error
+                        width, height = raw_image.size
+                        if width != height:
+                            size = max(width, height)
+                            padded_image = Image.new("RGB", (size, size), (0, 0, 0))
+                            padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
+                            proc_image = padded_image
+                        else:
+                            proc_image = raw_image
+
+                        inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt")
+                        inputs = {key: value.to(runtime.device) for key, value in inputs.items()}
+                        inputs["pixel_values"] = inputs["pixel_values"].to(dtype=runtime.dtype)
+
+                        with torch.no_grad():
+                            generated_ids = model.generate(
+                                input_ids=inputs["input_ids"],
+                                pixel_values=inputs["pixel_values"],
+                                max_new_tokens=64,
+                                num_beams=num_beams,
+                                do_sample=False,
+                                early_stopping=True,
+                                no_repeat_ngram_size=3,
+                                repetition_penalty=1.2,
+                                eos_token_id=processor.tokenizer.eos_token_id,
+                                pad_token_id=processor.tokenizer.pad_token_id,
+                            )
+
+                        generated_text = processor.batch_decode(
+                            generated_ids,
+                            skip_special_tokens=False,
+                        )[0]
+                        parsed_answer = processor.post_process_generation(
+                            generated_text,
+                            task=task_prompt,
+                            image_size=(raw_image.width, raw_image.height),
                         )
-                        
-                    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-                    parsed_answer = processor.post_process_generation(generated_text, task=task_prompt, image_size=(raw_image.width, raw_image.height))
                     
                     # The answer is a dict, we extract the task value
                     caption = parsed_answer.get(task_prompt, "")
@@ -403,6 +463,8 @@ class SemanticAnalyzer:
                     print(f"[Semantic] Error generating Florence-2 caption for {path}: {e}")
                     if "caption" not in scene:
                         scene["caption"] = "Image"
+        except FlorenceResourceError as e:
+            print(f"[Semantic] {e}")
         finally:
             print("[Semantic] Releasing Florence-2 model from memory...")
             if model is not None:
@@ -415,6 +477,25 @@ class SemanticAnalyzer:
                 torch.cuda.empty_cache()
             gc.collect()
             print("[Semantic] Florence-2 model released successfully.")
+
+    def _select_florence_caption_scenes(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        max_captions = max(0, worker_settings.FLORENCE_MAX_CAPTIONS)
+        candidates = [
+            scene
+            for scene in scenes
+            if scene.get("keyframe_path") and os.path.exists(scene["keyframe_path"])
+        ]
+        if max_captions == 0 or not candidates:
+            return []
+        if len(candidates) <= max_captions:
+            return candidates
+
+        ranked = sorted(
+            enumerate(candidates),
+            key=lambda item: item[1].get("importanceScore", 0.0),
+            reverse=True,
+        )[:max_captions]
+        return [scene for _, scene in sorted(ranked, key=lambda item: item[0])]
         
     def extract_ocr_paddleocr(self, scenes: list[dict[str, Any]]):
         """Extract text from scenes using PaddleOCR."""
@@ -429,7 +510,11 @@ class SemanticAnalyzer:
             logging.getLogger("ppocr").setLevel(logging.WARNING) # Suppress noisy logs
             
             try:
-                ocr = PaddleOCR(use_angle_cls=True, lang='vi', use_gpu=torch.cuda.is_available())
+                ocr = PaddleOCR(
+                    use_angle_cls=True,
+                    lang='vi',
+                    use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
+                )
             except Exception as init_err:
                 print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
                 ocr = PaddleOCR(lang='vi')

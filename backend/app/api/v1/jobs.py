@@ -14,13 +14,20 @@ from app.models.video import Video
 router = APIRouter(route_class=CamelCaseAPIRoute)
 
 
+def _apply_job_runtime_meta(job: Job, meta: dict, *, default_stage: str, default_progress: int) -> None:
+    job.stage = meta.get("stage", default_stage)
+    job.progress = meta.get("progress", default_progress)
+    if "logs" in meta and isinstance(meta["logs"], list):
+        job.logs = meta["logs"]
+
+
 def sync_job_status(job: Job, db: Session):
     from app.core.constants import JobStatus, VideoStatus
     from app.models.video import Video
     import datetime as dt
     
     # Initialize default attributes
-    job.logs = []
+    job.logs = getattr(job, "logs", None) or []
     if job.status == JobStatus.COMPLETED:
         job.progress = 100
         job.stage = "completed"
@@ -31,25 +38,44 @@ def sync_job_status(job: Job, db: Session):
         job.progress = 0
         job.stage = "queued"
 
-    if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
-        return
-        
     try:
         from app.core.celery_app import celery_app
         from celery.result import AsyncResult
         
         async_res = AsyncResult(str(job.job_id), app=celery_app)
+
+        if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
+            runtime_payload = async_res.result if async_res.state == "SUCCESS" else async_res.info
+            if isinstance(runtime_payload, dict):
+                _apply_job_runtime_meta(
+                    job,
+                    runtime_payload,
+                    default_stage=job.stage,
+                    default_progress=job.progress,
+                )
+            return
+
         if async_res.state == "PROGRESS":
             meta = async_res.info or {}
-            job.stage = meta.get("stage", "processing")
-            job.progress = meta.get("progress", 0)
-            job.logs = meta.get("logs", [])
+            _apply_job_runtime_meta(
+                job,
+                meta,
+                default_stage="processing",
+                default_progress=0,
+            )
         elif async_res.state == "SUCCESS":
             job.stage = "completed"
             job.progress = 100
             result = async_res.result
             if not result:
                 return
+            if isinstance(result, dict):
+                _apply_job_runtime_meta(
+                    job,
+                    result,
+                    default_stage="completed",
+                    default_progress=100,
+                )
                 
             # Update video
             video = db.query(Video).filter(Video.video_id == job.video_id).first()
@@ -126,8 +152,23 @@ def sync_job_status(job: Job, db: Session):
             job.completed_at = dt.datetime.utcnow()
             db.commit()
             db.refresh(job)
+            if isinstance(result, dict):
+                _apply_job_runtime_meta(
+                    job,
+                    result,
+                    default_stage="completed",
+                    default_progress=100,
+                )
             
         elif async_res.state == "FAILURE":
+            failure_payload = async_res.info
+            if isinstance(failure_payload, dict):
+                _apply_job_runtime_meta(
+                    job,
+                    failure_payload,
+                    default_stage="failed",
+                    default_progress=100,
+                )
             video = db.query(Video).filter(Video.video_id == job.video_id).first()
             if video:
                 video.status = VideoStatus.FAILED
