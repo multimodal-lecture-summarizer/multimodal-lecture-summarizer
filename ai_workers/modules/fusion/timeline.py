@@ -6,6 +6,9 @@ NGƯỜI 3: Cross-modal alignment, chapter segmentation.
 
 from __future__ import annotations
 
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 from typing import Any
 
 
@@ -119,7 +122,7 @@ class TimelineBuilder:
         semantic_boundaries = []
         
         try:
-            from sentence_transformers import SentenceTransformer
+            from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
             import numpy as np
             
@@ -152,15 +155,17 @@ class TimelineBuilder:
                 })
                 
             if len(windows) > 2:
-                print(f"[Timeline] Calculating semantic shifts using {len(windows)} windows...")
-                model = SentenceTransformer('all-MiniLM-L6-v2')
+                print(
+                    f"[Timeline] Calculating semantic shifts using lightweight TF-IDF "
+                    f"for {len(windows)} windows..."
+                )
                 texts = [w["text"] for w in windows]
-                embeddings = model.encode(texts)
+                vectors = TfidfVectorizer(stop_words=None).fit_transform(texts)
                 
                 # Calculate consecutive similarities
                 sims = []
-                for i in range(len(embeddings) - 1):
-                    sim = cosine_similarity([embeddings[i]], [embeddings[i+1]])[0][0]
+                for i in range(vectors.shape[0] - 1):
+                    sim = cosine_similarity(vectors[i], vectors[i + 1])[0][0]
                     sims.append(sim)
                     
                 # Smoothing: Moving Average (window=3)

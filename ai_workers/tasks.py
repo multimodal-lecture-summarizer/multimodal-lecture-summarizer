@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Suppress python warnings (deprecation, user warnings from PyTorch/Transformers)
 import warnings
