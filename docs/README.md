@@ -14,7 +14,9 @@ Thư mục này chứa tất cả các tài liệu kỹ thuật, nghiên cứu, 
 | ⚖️ **[STACK_COMPARISON.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/STACK_COMPARISON.md)** | So sánh chi phí, hiệu năng, yêu cầu phần cứng giữa các stack chạy: Local GPU vs Cloud API vs Hybrid. |
 | 📊 **[DATASET_EDA.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/DATASET_EDA.md)** | **CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG** — Báo cáo phân tích khám phá dữ liệu (EDA) chi tiết cho hai tập dữ liệu TED-LIUM và TVSum. |
 | 🧪 **[BENCHMARK.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/BENCHMARK.md)** | Quy trình và các chỉ số đo lường hiệu năng của hệ thống (WER, ROUGE, F1, BERTScore) trên các video bài giảng thực tế. |
+| 📋 **[EVAL_TABLES.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/EVAL_TABLES.md)** | **TTTN/DATN — bảng pipeline (không RAG):** metric, runner, GT templates và script điền bảng đánh giá. |
 | 🛠️ **[setup-guide.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/setup-guide.md)** | Hướng dẫn cài đặt chi tiết môi trường phát triển (Frontend, Backend API, AI Workers) và Docker. |
+| ✅ **[SPRINT_QUALITY_DEPLOYMENT.md](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/SPRINT_QUALITY_DEPLOYMENT.md)** | Báo cáo Quality Gates & Sprint 1–10: vấn đề giải quyết, thuật toán, kết quả offline/GPU, và hướng triển khai vào `tasks.py`. |
 | 🔌 **[api_contracts/](file:///c:/Users/admin/multimodal-lecture-summarizer/docs/api_contracts/)** | Định nghĩa chi tiết các JSON contract trao đổi API giữa Frontend và Backend. |
 
 ---

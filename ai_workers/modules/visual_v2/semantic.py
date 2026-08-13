@@ -360,7 +360,7 @@ class SemanticAnalyzer:
             processor = AutoProcessor.from_pretrained(
                 model_dir,
                 trust_remote_code=True,
-                use_fast=False,
+                use_fast=True,
             )
             print("[Semantic] Florence-2 processor loaded.", flush=True)
             print("[Semantic] Loading Florence-2 model weights...", flush=True)
