@@ -5,7 +5,7 @@ from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Enum, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
-from app.core.constants import VideoStatus
+from app.core.constants import VideoStatus, RagStatus
 
 
 class Video(Base):
@@ -32,6 +32,9 @@ class Video(Base):
     language: Mapped[str] = mapped_column(String(50), default="en")
     status: Mapped[VideoStatus] = mapped_column(
         Enum(VideoStatus), default=VideoStatus.PENDING, nullable=False
+    )
+    rag_status: Mapped[RagStatus] = mapped_column(
+        Enum(RagStatus), default=RagStatus.PENDING, nullable=False
     )
     title: Mapped[Optional[str]] = mapped_column(
         String(256), nullable=True

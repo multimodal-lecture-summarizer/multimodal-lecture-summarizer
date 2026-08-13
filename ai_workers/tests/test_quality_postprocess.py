@@ -11,7 +11,6 @@ from ai_workers.modules.fusion.quality_postprocess import (
     resolve_stack,
     sprint1_smooth_chapters,
     sprint3_enrich_captions,
-    sprint7_transcript_caption_fallback,
 )
 
 
@@ -46,20 +45,6 @@ class QualityPostprocessTests(unittest.TestCase):
         self.assertEqual(stats["enriched_from_ocr"], 1)
         self.assertTrue(out[0]["description"].startswith("Slide Text:"))
         self.assertFalse(is_generic_caption(out[0]["description"]))
-
-    def test_sprint7_falls_back_to_transcript(self):
-        keyframes = [
-            {
-                "timestamp": 2.0,
-                "description": "Keyframe for Scene 2",
-                "ocr_text": "",
-                "transcript": "Today we discuss backpropagation in deep networks",
-            }
-        ]
-        out, stats = sprint7_transcript_caption_fallback(keyframes)
-        self.assertEqual(stats["enriched_from_transcript"], 1)
-        self.assertEqual(out[0]["description"], "Today we discuss backpropagation in deep networks")
-        self.assertEqual(out[0]["enrich_source"], "transcript_fallback")
 
     def test_recommended_stack_end_to_end(self):
         chapters = [

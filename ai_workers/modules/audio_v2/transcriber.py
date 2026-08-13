@@ -17,6 +17,19 @@ class AudioTranscriber:
         self.cache_dir = Path(worker_settings.CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
+        # Inject cuDNN 8 and cuBLAS 11 DLL paths for CTranslate2 (Faster-Whisper)
+        import sys
+        site_packages = Path(sys.executable).parent.parent / "Lib" / "site-packages"
+        cudnn_bin = site_packages / "nvidia" / "cudnn" / "bin"
+        cublas_bin = site_packages / "nvidia" / "cublas" / "bin"
+        
+        paths_to_add = []
+        if cudnn_bin.exists(): paths_to_add.append(str(cudnn_bin))
+        if cublas_bin.exists(): paths_to_add.append(str(cublas_bin))
+        
+        if paths_to_add:
+            os.environ["PATH"] = ";".join(paths_to_add) + ";" + os.environ.get('PATH', '')
+
         import torch
         if torch.cuda.is_available():
             self.device = "cuda"

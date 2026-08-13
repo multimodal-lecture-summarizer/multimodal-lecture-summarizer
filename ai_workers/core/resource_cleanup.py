@@ -98,6 +98,14 @@ def release_worker_resources(label: str) -> None:
                 torch.cuda.reset_peak_memory_stats()
             except Exception:
                 pass
+            
+        if sys.platform.startswith("linux"):
+            import ctypes
+            try:
+                libc = ctypes.CDLL("libc.so.6")
+                libc.malloc_trim(0)
+            except Exception as malloc_err:
+                pass
     except Exception as cleanup_err:
         print(f"[Cleanup] Resource cleanup warning after {label}: {cleanup_err}", flush=True)
 

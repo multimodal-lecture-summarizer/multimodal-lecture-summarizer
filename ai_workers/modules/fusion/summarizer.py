@@ -181,9 +181,13 @@ class Summarizer:
         # Format visual descriptions from slides
         visual_descriptions = []
         for slide in slides:
-            timecode = slide.get("start_timecode", "00:00:00")
-            caption = slide.get("caption", "").strip()
+            # Handle both 'slides' format and 'keyframes' format
+            ts = slide.get("start_seconds") if "start_seconds" in slide else slide.get("timestamp", 0.0)
+            timecode = slide.get("start_timecode") or format_time(ts)
+            caption = slide.get("caption") if "caption" in slide else slide.get("description", "")
+            caption = caption.strip() if caption else ""
             ocr_text = slide.get("ocr_text", "").strip()
+
             
             desc_parts = []
             if caption and caption != "[Nhạc nền / Im lặng]":

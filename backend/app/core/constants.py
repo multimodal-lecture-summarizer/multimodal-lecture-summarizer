@@ -25,6 +25,13 @@ class JobStatus(str, Enum):
     FAILED = "failed"
 
 
+class RagStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class SystemLimits(int, Enum):
     MIN_PASSWORD_LENGTH = 6
     TOKEN_EXPIRY_DAYS = 8
