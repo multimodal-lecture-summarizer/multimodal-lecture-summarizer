@@ -29,7 +29,7 @@ class WorkerSettings(BaseSettings):
     KEYFRAME_STRATEGY: str = "middle"
     FLORENCE_DEVICE: str = "cpu"
     ENABLE_FLORENCE_CAPTIONING: bool = True
-    FLORENCE_MAX_CAPTIONS: int = 4
+    FLORENCE_MAX_BATCH_SIZE: int = 4
     FLORENCE_MIN_AVAILABLE_MEMORY_MB: int = 6144
     FLORENCE_MIN_AVAILABLE_VRAM_MB: int = 4096
     FLORENCE_CPU_NUM_BEAMS: int = 1

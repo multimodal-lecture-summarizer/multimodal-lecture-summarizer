@@ -129,23 +129,28 @@ def sync_job_status(job: Job, db: Session):
                 )
                 db.add(db_scene)
                 
-            # Add to ChromaDB vector index
-            chunks = []
-            metadatas = []
-            for idx, seg in enumerate(result.get("transcript_segments", [])):
-                chunks.append(seg["text"])
-                metadatas.append({
-                    "video_id": str(job.video_id),
-                    "chunk_index": idx,
-                    "timestamp_start": float(seg["start"])
-                })
-            if chunks:
-                from app.services.chromadb import chromadb_service
-                try:
-                    chromadb_service.add_transcript_chunks(job.video_id, chunks, metadatas)
-                except Exception as inner_e:
-                    import logging
-                    logging.getLogger(__name__).error(f"Failed to add to ChromaDB: {inner_e}")
+            # Trigger Background RAG Indexing
+            from app.core.constants import RagStatus
+            if video.rag_status == RagStatus.PENDING:
+                # Atomic compare-and-set to ensure only one worker claims the transition
+                updated_rows = db.query(Video).filter(
+                    Video.video_id == job.video_id,
+                    Video.rag_status == RagStatus.PENDING
+                ).update({"rag_status": RagStatus.PROCESSING}, synchronize_session=False)
+                
+                db.commit()
+                if updated_rows > 0:
+                    try:
+                        from app.core.celery_app import celery_app
+                        celery_app.send_task("ai_workers.build_rag_index", args=[str(job.video_id)])
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).error(f"Failed to enqueue RAG task: {e}")
+                        # Safe recovery strategy: set to FAILED so it can be retried later, instead of blindly resetting to PENDING
+                        db.query(Video).filter(Video.video_id == job.video_id).update(
+                            {"rag_status": RagStatus.FAILED}, synchronize_session=False
+                        )
+                        db.commit()
                     
             # Complete Job
             job.status = JobStatus.COMPLETED

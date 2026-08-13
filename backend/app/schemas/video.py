@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import Field, HttpUrl, model_validator
 from app.schemas.base import CamelModel
-from app.core.constants import VideoStatus
+from app.core.constants import VideoStatus, RagStatus
 
 
 class VideoMetadataBase(CamelModel):
@@ -75,6 +75,10 @@ class VideoBase(CamelModel):
     status: VideoStatus = Field(
         VideoStatus.PENDING,
         description="The current processing status of the video",
+    )
+    rag_status: RagStatus = Field(
+        RagStatus.PENDING,
+        description="The RAG index building status",
     )
     progress: Optional[int] = Field(
         None, description="The processing progress percentage (0-100)"
