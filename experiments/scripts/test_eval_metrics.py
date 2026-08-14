@@ -106,6 +106,30 @@ def test_caption_and_rag_and_rouge():
     assert rouge_l_f1("the quick brown fox", "the quick brown fox") == 1.0
 
 
+def test_factuality_coverage():
+    from experiments.evaluation.metrics import factuality_coverage, human_score_from_caption
+
+    fc = factuality_coverage("the cat sat on mat", "the cat sat", "the cat sat on the mat")
+    assert fc["factuality"] == 1.0
+    assert fc["coverage"] > 0.5
+    hs = human_score_from_caption({"hallucinated": False, "grounding_score": 0.5})
+    assert 3.0 <= hs <= 4.0
+
+
+def test_aggregate_timeline_by_dataset():
+    from experiments.evaluation.aggregate import aggregate_timeline_by_dataset
+
+    rows = [
+        {"dataset": "TED", "n_segments": 22, "n_correct": 22, "accuracy": 1.0, "mae_sec": 0.0},
+        {"dataset": "TED", "n_segments": 106, "n_correct": 106, "accuracy": 1.0, "mae_sec": 0.0},
+    ]
+    agg = aggregate_timeline_by_dataset(rows)
+    assert len(agg) == 1
+    assert agg[0]["dataset"] == "TED"
+    assert agg[0]["n_segments"] == 128
+    assert agg[0]["accuracy"] == 1.0
+
+
 def test_extractive_and_reference_summary():
     text = "Alpha models learn patterns. Beta models need more data. Gamma models are compact."
     hyp = _extractive_summary(text, max_sents=2)

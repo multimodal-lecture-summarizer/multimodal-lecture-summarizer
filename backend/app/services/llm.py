@@ -1,4 +1,5 @@
 import logging
+import re
 import requests
 from typing import Optional, Dict, Any, List
 from app.core.config import settings
@@ -42,7 +43,11 @@ class LLMService:
         self, prompt: str, system_prompt: str = "You are a helpful assistant."
     ) -> str:
         """Sends chat completion request with OpenRouter -> Groq -> Mock fallback hierarchy."""
-        
+        if not isinstance(system_prompt, str):
+            system_prompt = "".join(system_prompt) if isinstance(system_prompt, (list, tuple)) else str(system_prompt)
+        if not isinstance(prompt, str):
+            prompt = str(prompt)
+
         # 1. Try OpenRouter API first
         if self.openrouter_enabled:
             headers = {
@@ -112,20 +117,20 @@ class LLMService:
         return self._generate_mock_response(prompt)
 
     def _generate_mock_response(self, prompt: str) -> str:
-        """Generates mock LLM response."""
-        prompt_lower = prompt.lower()
-        if "summarize" in prompt_lower or "summary" in prompt_lower:
-            return (
-                "## EXECUTIVE SUMMARY\n"
-                "This video lecture presents a comprehensive analysis of Artificial Intelligence "
-                "concepts, specifically focusing on Audio processing, Computer Vision, "
-                "and LLM orchestration using OpenRouter and ChromaDB RAG."
-            )
-        else:
-            return (
-                "Based on the processed video transcript and slide keyframes, the lecture "
-                "discusses the core concepts of multimodal AI processing and video summarization. [00:15]"
-            )
+        """Last-resort answer from retrieved lecture context, never project boilerplate."""
+        summary_match = re.search(
+            r"Overall Lecture Summary:\s*(.+?)(?:\n\nLecture Chapter Outline:|\n\nRetrieved Specific|\Z)",
+            prompt,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if summary_match:
+            summary = " ".join(summary_match.group(1).split())
+            if summary:
+                return summary[:1200]
+        return (
+            "I could not reach the LLM provider. Please retry; the lecture summary "
+            "and transcript are available on the result page."
+        )
 
 
 llm_service = LLMService()

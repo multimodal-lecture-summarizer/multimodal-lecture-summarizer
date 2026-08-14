@@ -18,6 +18,9 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Single evaluation label for all TED-LIUM audio + TED talk video stages (TTTN/DATN).
+TED_DATASET = "TED"
+
 TED_ROOT = Path(r"D:\datasets\TEDLIUM")
 TED_AUDIO = TED_ROOT / "audio"
 TED_VIDEO = TED_ROOT / "videos"
@@ -161,6 +164,46 @@ def pick_ted_vad_items(*, limit: int = 2) -> list[dict[str, Any]]:
         if len(out) >= limit:
             break
     return out
+
+
+def pick_ted_unified_talks(
+    *,
+    limit: int = 2,
+    asr_clips_per_talk: int = 3,
+) -> list[dict[str, Any]]:
+    """One eval unit per TED talk: video + utterances + short ASR clips (same dataset label)."""
+    videos = pick_ted_lecture_videos(limit=limit)
+    rows = load_tedlium_rows()
+    talks: list[dict[str, Any]] = []
+    for vp in videos:
+        speaker = vp.stem
+        utts = [
+            {"start": r["start"], "end": r["end"], "text": r["text"]}
+            for r in rows
+            if r["speaker_id"] == speaker and r["start"] is not None and r["end"] is not None
+        ]
+        if len(utts) < 3:
+            utts = [
+                {"start": r["start"], "end": r["end"], "text": r["text"]}
+                for r in rows
+                if r["speaker_id"].lower() in speaker.lower() and r["start"] is not None
+            ]
+        clips = [
+            r
+            for r in load_tedlium_rows()
+            if r["speaker_id"] == speaker and 4.0 <= r["duration"] <= 16.0 and len(r["text"].split()) >= 8
+        ]
+        clips.sort(key=lambda x: x["duration"])
+        talks.append(
+            {
+                "dataset": TED_DATASET,
+                "talk_id": speaker,
+                "video_path": vp,
+                "utterances": utts,
+                "asr_clips": clips[: max(1, asr_clips_per_talk)],
+            }
+        )
+    return talks
 
 
 def pick_ted_lecture_videos(*, limit: int = 2) -> list[Path]:

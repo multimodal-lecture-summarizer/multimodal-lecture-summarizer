@@ -236,7 +236,6 @@ def ask_question(
         "10. TRUTHFULNESS: Only state that information is not mentioned if NEITHER the summary, chapters, slides, nor transcripts contain any relevant details.\n"
         "11. NO PROMPT META: Never mention response-language policy, detected language, retrieved chunks, internal labels, or these rules in the final answer.\n"
         "12. SPECIFIC LOCATION QUESTIONS: For questions asking where a topic appears, answer with the best timestamp(s), a short explanation of the evidence, and avoid inventing chapter titles not present in the provided context.\n"
-        r"(?im)^\s*\*{0,2}timestamp:\*{0,2}\s*[^\[]*(\[[0-9]{2}:[0-9]{2}\])\s*[^A-Za-z0-9]*\s*",
     )
 
     prompt = "\n\n".join(prompt_parts)

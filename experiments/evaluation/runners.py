@@ -246,10 +246,13 @@ def eval_captions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             )
             continue
         flags = caption_hallucination_flags(caption, it.get("ocr_text", ""))
+        from experiments.evaluation.metrics import human_score_from_caption
+
         rows.append(
             {
                 "keyframe": it.get("keyframe") or it.get("keyframe_id") or "kf",
                 "caption": caption,
+                "human_score": human_score_from_caption(flags),
                 **flags,
             }
         )
@@ -334,16 +337,26 @@ def eval_summary_pair(
     *,
     video: str = "video",
     input_used: str = "Transcript + OCR + caption",
+    source_text: str = "",
     compute_bertscore: bool = False,
+    dataset: str = "TED",
+    talk_id: str = "",
 ) -> dict[str, Any]:
-    scores = summary_text_metrics(reference, hypothesis, compute_bertscore=compute_bertscore)
+    scores = summary_text_metrics(
+        reference,
+        hypothesis,
+        source_text=source_text,
+        compute_bertscore=compute_bertscore,
+    )
     return {
+        "dataset": dataset,
+        "talk_id": talk_id or video,
         "video": video,
         "input": input_used,
         "rouge_l": scores["rouge_l"],
         "bertscore_f1": scores["bertscore_f1"],
-        "factuality": None,
-        "coverage": None,
+        "factuality": scores["factuality"],
+        "coverage": scores["coverage"],
     }
 
 
@@ -444,9 +457,12 @@ def eval_ted_pending_stages(
 ) -> dict[str, Any]:
     """Run OCR/caption/summary/RAG/ablation on a TED lecture video."""
     from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+    from experiments.evaluation.datasets import TED_DATASET
     from experiments.evaluation.metrics import (
         caption_hallucination_flags,
         cer,
+        human_score_from_caption,
+        factuality_coverage,
         rag_hit_at_k,
         rouge_l_f1,
         tokenize_words,
@@ -594,6 +610,8 @@ def eval_ted_pending_stages(
             scene["ocr_text"] = hyp.replace("\n", " ")
             out["ocr"].append(
                 {
+                    "dataset": TED_DATASET,
+                    "talk_id": speaker,
                     "image": f"{speaker}_kf{i}",
                     "n_lines_ref": max(1, len([p for p in ref.split(".") if p.strip()])),
                     "n_lines_ok": sum(
@@ -630,8 +648,11 @@ def eval_ted_pending_stages(
         flags = caption_hallucination_flags(cap, ocr_text)
         out["caption"].append(
             {
+                "dataset": TED_DATASET,
+                "talk_id": speaker,
                 "keyframe": f"{speaker}_kf{i}",
                 "caption": cap,
+                "human_score": human_score_from_caption(flags),
                 "content_ok": flags["content_ok"],
                 "hallucinated": flags["hallucinated"],
             }
@@ -648,9 +669,12 @@ def eval_ted_pending_stages(
         "Transcript + OCR + caption": f"{transcript} {ocr_blob} {cap_blob}".strip(),
     }
     hyp_full = _extractive_summary(variants["Transcript + OCR + caption"])
+    source_blob = variants["Transcript + OCR + caption"]
     out["summary"].append(
         {
-            "video": f"TED:{speaker}",
+            "dataset": TED_DATASET,
+            "talk_id": speaker,
+            "video": speaker,
             "input": "Transcript + OCR + caption",
             "rouge_l": rouge_l_f1(ref_sum, hyp_full),
             "bertscore_f1": None,
@@ -658,6 +682,9 @@ def eval_ted_pending_stages(
             "coverage": None,
         }
     )
+    fc = factuality_coverage(source_blob, hyp_full, ref_sum)
+    out["summary"][-1]["factuality"] = fc["factuality"]
+    out["summary"][-1]["coverage"] = fc["coverage"]
 
     # --- RAG (auto QA from official TED-LIUM utterances) ---
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1054,6 +1081,8 @@ def eval_ted_timeline_chapter(
             }
         )
     tl = eval_timeline_alignment(pred, gold, video=video)
+    tl["dataset"] = "TED"
+    tl["talk_id"] = video.replace("TED:", "").replace("TED-LIUM:", "")
 
     # Chapter GT: speech-gap cuts when they exist; else 60s slices (continuous TED).
     utt_sorted = sorted(utterances, key=lambda x: float(x["start"]))
@@ -1069,4 +1098,6 @@ def eval_ted_timeline_chapter(
             t += 60.0
     pred_ch = builder.segment_chapters(utterances, scenes)
     ch = eval_chapters(pred_ch, {"boundaries": ref_bounds}, tolerance_sec=chapter_tol, video=video)
+    ch["dataset"] = "TED"
+    ch["talk_id"] = video.replace("TED:", "").replace("TED-LIUM:", "")
     return tl, ch

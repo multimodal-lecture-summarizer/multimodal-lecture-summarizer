@@ -2,50 +2,78 @@
 
 Tài liệu triển khai phần **“Các bảng đánh giá cần bổ sung cho pipeline AI”** (TTTN/DATN).
 
-## Đã triển khai
+## Dataset
+
+| Tên | Nội dung |
+|-----|----------|
+| **TED** | Một dataset thống nhất: clip ASR + transcript TED-LIUM + video talk cùng `talk_id` (không tách TED-LIUM / TED video). |
+| **TVSum** | Scene / keyframe (GT importance). |
+
+## 5 stage ưu tiên (metric)
+
+1. **ASR** — WER, CER, RTF (+ so sánh multi-model vs production `base.en`)
+2. **Scene / Keyframe** — Precision, Recall, F1
+3. **OCR / Caption** — CER, human score (proxy 1–5), hallucination rate
+4. **Timeline / Chapter** — MAE, boundary P/R/F1
+5. **Summary** — ROUGE-L, BERTScore, factuality, coverage
+
+## Thành phần code
 
 | Thành phần | Đường dẫn |
 |---|---|
-| Metric thuần (WER/CER/RTF, VAD/scene/chapter P/R/F1, OCR, caption, ROUGE-L…) | `experiments/evaluation/metrics.py` |
-| Schema + normalize GT | `experiments/evaluation/schemas.py` |
-| Stage runners | `experiments/evaluation/runners.py` |
-| Render Markdown bảng pipeline (không RAG) | `experiments/evaluation/report.py` |
-| CLI tổng hợp | `experiments/scripts/run_eval_tables.py` |
-| Unit tests | `experiments/scripts/test_eval_metrics.py` |
-| Dataset routing TED-LIUM / TVSum | `experiments/evaluation/datasets.py` |
-| Manifest + GT mẫu | `benchmarks/manifest_eval.csv`, `benchmarks/references/` |
-
-## Không nằm trong phạm vi đánh giá (theo đề bài)
-
-- CPU/GPU/RAM hardware profiling
-- UI / authentication / admin / deployment
-
-## Thứ tự ưu tiên
-
-1. ASR → 2. Scene/Keyframe → 3. OCR/Caption → 4. Timeline/Chapter → 5. Summary  
-(+ Ablation multimodal, bảng tổng hợp stage). Không đánh giá RAG/Q&A.
+| Metrics | `experiments/evaluation/metrics.py` |
+| So sánh model | `experiments/evaluation/aggregate.py` |
+| TED unified | `experiments/evaluation/datasets.py` (`TED_DATASET`, `pick_ted_unified_talks`) |
+| Runners / model compare | `experiments/evaluation/runners.py`, `model_compare.py` |
+| Báo cáo Markdown | `experiments/evaluation/report.py` |
+| CLI | `experiments/scripts/run_eval_tables.py` |
 
 ## Cách chạy
 
 ```bash
 # Unit tests (không cần GPU)
-python -m pytest experiments/scripts/test_eval_metrics.py -q
+python experiments/scripts/test_eval_metrics.py
 
-# Sinh khung TBD
-python experiments/scripts/run_eval_tables.py --dry-report
+# Demo nhanh (CPU nếu thiếu cuDNN)
+$env:CUDA_VISIBLE_DEVICES="-1"
+python experiments/scripts/run_eval_tables.py \
+  --out-dir outputs/eval_tables_demo \
+  --ted-limit 2 --asr-limit 4 \
+  --asr-models tiny.en,base.en,small.en \
+  --production-asr base.en \
+  --skip-ocr
 
-# Mặc định: TED-LIUM (ASR/VAD/timeline/chapter/OCR/caption/summary/ablation) + TVSum (scene/keyframe)
-python experiments/scripts/run_eval_tables.py --out-dir outputs/eval_tables_real --asr-limit 12 --tvsum-limit 4 --asr-models base.en,small.en
+# So sánh candidate vs production (Bảng 10) — mặc định bật
+python experiments/scripts/run_eval_tables.py \
+  --out-dir outputs/eval_model_compare \
+  --ted-limit 1 --tvsum-limit 1 --model-compare
 
-# Chỉ ASR trên TED-LIUM
-python experiments/scripts/run_eval_tables.py --asr-only --asr-models base.en,small.en --asr-limit 12
+# Tắt so sánh (nhanh hơn)
+python experiments/scripts/run_eval_tables.py --no-model-compare
 
-# Manifest thủ công (không auto TED/TVSum)
-python experiments/scripts/run_eval_tables.py --no-auto-datasets --manifest benchmarks/manifest_eval.csv
+# BERTScore (chậm hơn)
+python experiments/scripts/run_eval_tables.py --bertscore
 ```
 
-Output: `outputs/eval_tables_*/EVAL_TABLES.md` (+ `.json`).
+Output: `outputs/eval_tables_*/EVAL_TABLES.md` (+ `.json`, gồm `model_comparison`).
 
-## Annotate dữ liệu thật
+## Production vs candidates (Bảng 10)
 
-Làm theo `benchmarks/references/README.md`. Mỗi bảng trong báo cáo nên có **một câu kết luận ngắn** sau bảng (script tự sinh khi có số liệu).
+| Stage | Production | Candidates |
+|-------|------------|------------|
+| ASR | `base.en` | `tiny.en`, `small.en`, `medium.en` |
+| Scene | PySceneDetect **27** | threshold 20, 35 |
+| Keyframe | CLIP agglomerative | keep-all, temporal-dedup |
+| Caption | Florence-2 | placeholder, OCR-grounded |
+| OCR | PaddleOCR | EasyOCR, Tesseract |
+
+## Production defaults
+
+| Stage | Production |
+|-------|------------|
+| ASR | Faster-Whisper `base.en` |
+| Scene | PySceneDetect threshold 27 |
+| Keyframe | CLIP ViT-B/32 agglomerative |
+| OCR | PaddleOCR |
+| Caption | Florence-2-base |
+| Summary | Extractive TF-IDF (proxy) hoặc LLM khi có API key |

@@ -1,4 +1,4 @@
-"""Markdown report generator for thesis evaluation tables (Bang 1–12)."""
+"""Markdown report generator for thesis pipeline evaluation (5 priority stages)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from experiments.evaluation.aggregate import build_dataset_aggregates
+from experiments.evaluation.metrics import mean_ignore_nan
+
 
 def _fmt(v: Any, digits: int = 3) -> str:
     if v is None:
         return "TBD"
     if isinstance(v, float):
-        if v != v:  # NaN
+        if v != v:
             return "N/A"
         return f"{v:.{digits}f}"
     return str(v)
@@ -23,9 +26,18 @@ def _pct(v: Any, digits: int = 2) -> str:
     if isinstance(v, float) and v != v:
         return "N/A"
     try:
-        return f"{float(v) * 100:.{digits}f}" if abs(float(v)) <= 1.5 else f"{float(v):.{digits}f}"
+        fv = float(v)
+        return f"{fv * 100:.{digits}f}" if abs(fv) <= 1.5 else f"{fv:.{digits}f}"
     except Exception:
         return str(v)
+
+
+def _delta(v: Any) -> str:
+    if v is None or (isinstance(v, float) and v != v):
+        return "N/A"
+    fv = float(v)
+    sign = "+" if fv > 0 else ""
+    return f"{sign}{fv:.3f}"
 
 
 def _md_table(headers: list[str], rows: list[list[Any]]) -> str:
@@ -38,88 +50,91 @@ def _md_table(headers: list[str], rows: list[list[Any]]) -> str:
     return "\n".join(lines)
 
 
+def _mean_rows(rows: list[dict[str, Any]], key: str) -> float:
+    return mean_ignore_nan(r.get(key) for r in rows)
+
+
 def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> str:
-    """Build full markdown matching the TTTN/DATN evaluation doc structure."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     title = title or "Bảng đánh giá pipeline AI (không gồm RAG/Q&A)"
+    prod = results.get("production_model", "faster-whisper-base.en")
     parts: list[str] = [
         f"# {title}",
         "",
         f"*Generated: {now}*",
         "",
-        "> Phạm vi: model/algorithm trong pipeline video. Không đo hardware/UI/auth/deploy.",
+        "> Phạm vi: 5 stage ưu tiên — ASR, Scene/Keyframe, OCR/Caption, Timeline/Chapter, Summary.",
+        "> Dataset **TED** = một dòng gộp toàn bộ talk (clip ASR + video + timeline trên cùng corpus).",
+        f"> Mô hình production (ASR): `{prod}`.",
         "",
     ]
 
-    # Bang 1 ASR
-    parts.append("## Bảng 1. Đánh giá ASR Faster-Whisper")
+    agg = results.get("aggregated") or build_dataset_aggregates(results)
+
+    # --- Bảng 1: ASR ---
+    parts.append("## Bảng 1. ASR — WER, CER, RTF (dataset TED)")
     parts.append("")
-    parts.append("**Mục đích:** chứng minh chọn Faster-Whisper (`base.en` / `small.en`) cho bài giảng tiếng Anh.")
-    parts.append("")
-    asr_rows = results.get("asr", [])
+    asr_agg = agg.get("asr") or []
     parts.append(
         _md_table(
-            ["Dataset", "Model", "WER (%)", "CER (%)", "RTF"],
+            ["Dataset", "Model", "Clips", "WER (%)", "CER (%)", "RTF"],
             [
                 [
-                    r.get("dataset", "TBD"),
+                    r.get("dataset", "TED"),
                     r.get("model", "TBD"),
-                    _pct(r.get("wer"), 2) if isinstance(r.get("wer"), float) else _fmt(r.get("wer_pct", r.get("wer"))),
-                    _pct(r.get("cer"), 2) if isinstance(r.get("cer"), float) else _fmt(r.get("cer_pct", r.get("cer"))),
+                    _fmt(r.get("n_clips"), 0),
+                    _pct(r.get("wer"), 2),
+                    _pct(r.get("cer"), 2),
                     _fmt(r.get("rtf")),
                 ]
-                for r in (asr_rows or [{"dataset": "TED-LIUM", "model": "base.en"}, {"dataset": "TED-LIUM", "model": "small.en"}])
+                for r in (asr_agg or [{"dataset": "TED", "model": prod}])
             ],
         )
     )
     parts.append("")
-    parts.append(results.get("asr_conclusion", "_Kết luận: TBD — chạy eval để điền._"))
+    parts.append(results.get("asr_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 2 VAD
-    parts.append("## Bảng 2. Đánh giá VAD / Silence Filtering")
-    parts.append("")
-    parts.append("**Mục đích:** lọc silence làm transcript sạch hơn, không cắt nhầm speech.")
-    parts.append("")
-    vad_rows = results.get("vad", [])
-    parts.append(
-        _md_table(
-            ["Video", "Tổng thời lượng (s)", "Speech thực tế (s)", "Speech detected (s)", "Precision", "Recall", "False Cut Rate"],
-            [
+    cmp_asr = results.get("model_comparison", {}).get("asr", [])
+    if cmp_asr:
+        parts.append("### So sánh ASR: candidate vs production")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Candidate model", "Metric", "Production", "Candidate", "Δ", "Better?"],
                 [
-                    r.get("video", "TBD"),
-                    _fmt(r.get("duration_sec")),
-                    _fmt(r.get("speech_ref_sec")),
-                    _fmt(r.get("speech_pred_sec")),
-                    _fmt(r.get("precision")),
-                    _fmt(r.get("recall")),
-                    _fmt(r.get("false_cut_rate")),
-                ]
-                for r in (vad_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
-            ],
+                    [
+                        r.get("model", ""),
+                        r.get("metric", "").upper(),
+                        _pct(r.get("production"), 2) if r.get("metric") in {"wer", "cer"} else _fmt(r.get("production")),
+                        _pct(r.get("candidate"), 2) if r.get("metric") in {"wer", "cer"} else _fmt(r.get("candidate")),
+                        _delta(r.get("delta")),
+                        "Yes" if r.get("better_than_production") else "No",
+                    ]
+                    for r in cmp_asr
+                ],
+            )
         )
-    )
-    parts.append("")
-    parts.append(results.get("vad_conclusion", "_Kết luận: TBD._"))
-    parts.append("")
+        parts.append("")
 
-    # Bang 3 Scene
-    parts.append("## Bảng 3. Đánh giá Scene Detection (PySceneDetect)")
+    # --- Bảng 2: Scene ---
+    parts.append("## Bảng 2. Scene Detection — Precision / Recall / F1")
     parts.append("")
-    scene_rows = results.get("scene", [])
+    scene_agg = agg.get("scene") or []
     parts.append(
         _md_table(
-            ["Video", "Scene thật", "Scene phát hiện", "Precision", "Recall", "F1"],
+            ["Dataset", "Videos", "Scene GT", "Scene pred", "P", "R", "F1"],
             [
                 [
-                    r.get("video", "TBD"),
+                    r.get("dataset", "TVSum"),
+                    _fmt(r.get("n_videos"), 0),
                     _fmt(r.get("n_ref"), 0),
                     _fmt(r.get("n_pred"), 0),
                     _fmt(r.get("precision")),
                     _fmt(r.get("recall")),
                     _fmt(r.get("f1")),
                 ]
-                for r in (scene_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
+                for r in (scene_agg or [{"dataset": "TVSum"}])
             ],
         )
     )
@@ -127,16 +142,17 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("scene_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 4 Keyframe
-    parts.append("## Bảng 4. Đánh giá Keyframe & CLIP Filtering")
+    # --- Bảng 3: Keyframe ---
+    parts.append("## Bảng 3. Keyframe & CLIP Filtering — P / R / F1")
     parts.append("")
-    kf_rows = results.get("keyframe", [])
+    kf_agg = agg.get("keyframe") or []
     parts.append(
         _md_table(
-            ["Video", "Keyframe ban đầu", "Keyframe sau lọc", "Precision", "Recall", "F1", "Tỷ lệ nén"],
+            ["Dataset", "Videos", "Trước lọc", "Sau lọc", "P", "R", "F1", "Nén"],
             [
                 [
-                    r.get("video", "TBD"),
+                    r.get("dataset", "TVSum"),
+                    _fmt(r.get("n_videos"), 0),
                     _fmt(r.get("n_before"), 0),
                     _fmt(r.get("n_after"), 0),
                     _fmt(r.get("precision")),
@@ -144,7 +160,7 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
                     _fmt(r.get("f1")),
                     _fmt(r.get("compression_ratio")),
                 ]
-                for r in (kf_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
+                for r in (kf_agg or [{"dataset": "TVSum"}])
             ],
         )
     )
@@ -152,22 +168,42 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("keyframe_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 5 OCR
-    parts.append("## Bảng 5. Đánh giá OCR PaddleOCR")
+    kf_cmp = results.get("model_comparison", {}).get("keyframe", [])
+    if kf_cmp:
+        parts.append("### So sánh chiến lược keyframe vs production (CLIP agglomerative)")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Strategy", "P", "R", "F1", "Δ F1 vs prod"],
+                [
+                    [
+                        r.get("strategy", ""),
+                        _fmt(r.get("precision")),
+                        _fmt(r.get("recall")),
+                        _fmt(r.get("f1")),
+                        _delta(r.get("delta_f1")),
+                    ]
+                    for r in kf_cmp
+                ],
+            )
+        )
+        parts.append("")
+
+    # --- Bảng 4: OCR ---
+    parts.append("## Bảng 4. OCR — CER, Word Accuracy (dataset TED)")
     parts.append("")
-    ocr_rows = results.get("ocr", [])
+    ocr_agg = agg.get("ocr") or []
     parts.append(
         _md_table(
-            ["Ảnh slide", "Số dòng chữ thật", "Số dòng OCR đúng", "CER (%)", "Word Acc"],
+            ["Dataset", "Keyframes", "CER (%)", "Word Acc"],
             [
                 [
-                    r.get("image", "TBD"),
-                    _fmt(r.get("n_lines_ref"), 0),
-                    _fmt(r.get("n_lines_ok"), 0),
-                    _pct(r.get("cer"), 2) if isinstance(r.get("cer"), float) else _fmt(r.get("cer")),
+                    r.get("dataset", "TED"),
+                    _fmt(r.get("n_keyframes"), 0),
+                    _pct(r.get("cer"), 2),
                     _fmt(r.get("word_accuracy")),
                 ]
-                for r in (ocr_rows or [{"image": "Slide 1"}, {"image": "Slide 2"}])
+                for r in (ocr_agg or [{"dataset": "TED"}])
             ],
         )
     )
@@ -175,21 +211,22 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("ocr_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 6 Caption
-    parts.append("## Bảng 6. Đánh giá Caption Florence-2")
+    # --- Bảng 5: Caption ---
+    parts.append("## Bảng 5. Caption — Human score (proxy), Hallucination (dataset TED)")
     parts.append("")
-    cap_rows = results.get("caption", [])
+    cap_agg = agg.get("caption") or []
     parts.append(
         _md_table(
-            ["Keyframe", "Caption sinh ra", "Đúng nội dung?", "Hallucination"],
+            ["Dataset", "Keyframes", "Human score (1–5)", "Content OK", "Hallucination rate"],
             [
                 [
-                    r.get("keyframe", "TBD"),
-                    (r.get("caption") or "TBD")[:80],
-                    "Yes" if r.get("content_ok") else ("No" if r.get("content_ok") is False else "TBD"),
-                    "Yes" if r.get("hallucinated") else ("No" if r.get("hallucinated") is False else "TBD"),
+                    r.get("dataset", "TED"),
+                    _fmt(r.get("n_keyframes"), 0),
+                    _fmt(r.get("human_score"), 1),
+                    _fmt(r.get("content_ok_rate")),
+                    _fmt(r.get("hallucination_rate")),
                 ]
-                for r in (cap_rows or [{"keyframe": "Keyframe 1"}, {"keyframe": "Keyframe 2"}])
+                for r in (cap_agg or [{"dataset": "TED"}])
             ],
         )
     )
@@ -197,23 +234,22 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("caption_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 7 Timeline
-    parts.append("## Bảng 7. Đánh giá Timeline Alignment")
+    # --- Bảng 6: Timeline ---
+    parts.append("## Bảng 6. Timeline Alignment — Accuracy, MAE (dataset TED)")
     parts.append("")
-    tl_rows = results.get("timeline", [])
+    tl_agg = agg.get("timeline") or []
     parts.append(
         _md_table(
-            ["Video", "Segment transcript", "Slide/keyframe đúng", "Slide/keyframe predicted", "Accuracy", "MAE (s)"],
+            ["Dataset", "Talks", "Segments", "Accuracy", "MAE (s)"],
             [
                 [
-                    r.get("video", "TBD"),
+                    r.get("dataset", "TED"),
+                    _fmt(r.get("n_talks"), 0),
                     _fmt(r.get("n_segments"), 0),
-                    _fmt(r.get("n_correct"), 0),
-                    _fmt(r.get("n_predicted"), 0),
                     _fmt(r.get("accuracy")),
                     _fmt(r.get("mae_sec")),
                 ]
-                for r in (tl_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
+                for r in (tl_agg or [{"dataset": "TED"}])
             ],
         )
     )
@@ -221,16 +257,17 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("timeline_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 8 Chapter
-    parts.append("## Bảng 8. Đánh giá Chapter Segmentation")
+    # --- Bảng 7: Chapter ---
+    parts.append("## Bảng 7. Chapter Segmentation — Boundary P/R/F1, MAE (dataset TED)")
     parts.append("")
-    ch_rows = results.get("chapter", [])
+    ch_agg = agg.get("chapter") or []
     parts.append(
         _md_table(
-            ["Video", "Số chapter chuẩn", "Số chapter sinh ra", "Boundary P", "Boundary R", "Boundary F1", "MAE (s)"],
+            ["Dataset", "Talks", "Ch GT", "Ch pred", "Boundary P", "Boundary R", "Boundary F1", "MAE (s)"],
             [
                 [
-                    r.get("video", "TBD"),
+                    r.get("dataset", "TED"),
+                    _fmt(r.get("n_talks"), 0),
                     _fmt(r.get("n_ref"), 0),
                     _fmt(r.get("n_pred"), 0),
                     _fmt(r.get("precision")),
@@ -238,7 +275,7 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
                     _fmt(r.get("f1")),
                     _fmt(r.get("mae")),
                 ]
-                for r in (ch_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
+                for r in (ch_agg or [{"dataset": "TED"}])
             ],
         )
     )
@@ -246,23 +283,24 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("chapter_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 9 Summary
-    parts.append("## Bảng 9. Đánh giá Summary LLM")
+    # --- Bảng 8: Summary ---
+    parts.append("## Bảng 8. Summary — ROUGE-L, BERTScore, Factuality, Coverage (dataset TED)")
     parts.append("")
-    sum_rows = results.get("summary", [])
+    sum_agg = agg.get("summary") or []
     parts.append(
         _md_table(
-            ["Video", "Input sử dụng", "ROUGE-L", "BERTScore", "Factuality", "Coverage"],
+            ["Dataset", "Talks", "Input", "ROUGE-L", "BERTScore", "Factuality", "Coverage"],
             [
                 [
-                    r.get("video", "TBD"),
+                    r.get("dataset", "TED"),
+                    _fmt(r.get("n_talks"), 0),
                     r.get("input", "Transcript + OCR + caption"),
                     _fmt(r.get("rouge_l")),
                     _fmt(r.get("bertscore_f1")),
                     _fmt(r.get("factuality")),
                     _fmt(r.get("coverage")),
                 ]
-                for r in (sum_rows or [{"video": "Video 1"}, {"video": "Video 2"}])
+                for r in (sum_agg or [{"dataset": "TED"}])
             ],
         )
     )
@@ -270,70 +308,20 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append(results.get("summary_conclusion", "_Kết luận: TBD._"))
     parts.append("")
 
-    # Bang 10 Ablation (RAG/Q&A table removed)
-    parts.append("## Bảng 10. Ablation: đóng góp của từng modality")
+    # --- Bảng 9: Tổng hợp ---
+    parts.append("## Bảng 9. Tổng hợp metric theo stage (dataset TED + TVSum scene/keyframe)")
     parts.append("")
-    ab_rows = results.get("ablation", [])
+    stage_rows = results.get("stages") or _default_stage_summary(results)
     parts.append(
         _md_table(
-            ["Talk", "Cấu hình", "Input", "Summary score"],
-            [
-                [
-                    r.get("video", "TED"),
-                    r.get("config", "TBD"),
-                    r.get("input", "TBD"),
-                    _fmt(r.get("summary_score")),
-                ]
-                for r in (
-                    ab_rows
-                    or [
-                        {"config": "Audio only", "input": "Transcript"},
-                        {"config": "Visual only", "input": "OCR + caption"},
-                        {"config": "Audio + Visual", "input": "Transcript + OCR + caption"},
-                    ]
-                )
-            ],
-        )
-    )
-    parts.append("")
-    parts.append(results.get("ablation_conclusion", "_Kết luận: TBD — bảng quan trọng để bảo vệ tính multimodal._"))
-    parts.append("")
-
-    # Bang 11 stage summary
-    parts.append("## Bảng 11. Tổng hợp metric theo stage")
-    parts.append("")
-    stage_rows = results.get("stages", [])
-    default_stages = [
-        ("ASR", "Faster-Whisper", "TED-LIUM / video lecture", "WER, CER, RTF"),
-        ("VAD", "Voice Activity Detection", "Video lecture annotate", "Precision, Recall, F1"),
-        ("Scene", "PySceneDetect", "TVSum / lecture annotate", "Precision, Recall, F1"),
-        ("Keyframe", "CLIP filtering", "TVSum/SumMe / lecture", "Precision, Recall, F1"),
-        ("OCR", "PaddleOCR", "TED keyframe + aligned transcript (weak GT)", "CER, Word accuracy"),
-        ("Caption", "OCR-grounded heuristic / Florence-2", "TED keyframe + hallucination heuristic", "Accuracy, Hallucination rate"),
-        ("Timeline", "TF-IDF + temporal proximity", "TED-LIUM utterances ↔ scenes", "Accuracy, MAE"),
-        ("Chapter", "TF-IDF semantic shift / 60s fallback", "TED-LIUM 60s slices", "Boundary F1"),
-        ("Summary", "Extractive TF-IDF", "TED-LIUM window-lead reference", "ROUGE-L, BERTScore, factuality"),
-    ]
-    if not stage_rows:
-        stage_rows = [
-            {
-                "stage": s,
-                "model": m,
-                "dataset": d,
-                "metrics": met,
-                "status": results.get("stage_status", {}).get(s.lower().split("/")[0], "pending"),
-            }
-            for s, m, d, met in default_stages
-        ]
-    parts.append(
-        _md_table(
-            ["Stage", "Model/Algorithm", "Dataset/Method", "Metrics", "Status"],
+            ["Stage", "Production model", "Dataset", "Metrics chính", "Giá trị TB", "Status"],
             [
                 [
                     r.get("stage", "TBD"),
                     r.get("model", "TBD"),
                     r.get("dataset", "TBD"),
                     r.get("metrics", "TBD"),
+                    r.get("value", "TBD"),
                     r.get("status", "pending"),
                 ]
                 for r in stage_rows
@@ -341,7 +329,7 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
         )
     )
     parts.append("")
-    parts.append("### Thứ tự ưu tiên nếu thiếu thời gian")
+    parts.append("### Thứ tự ưu tiên")
     parts.append("")
     parts.append("1. ASR (WER, CER, RTF)")
     parts.append("2. Scene/keyframe (P/R/F1)")
@@ -349,7 +337,183 @@ def render_eval_report(results: dict[str, Any], *, title: str | None = None) -> 
     parts.append("4. Timeline/chapter (MAE, boundary F1)")
     parts.append("5. Summary (factuality, coverage, ROUGE-L/BERTScore)")
     parts.append("")
+
+    # --- Bảng 10: Model justification ---
+    mc = results.get("model_comparison") or {}
+    parts.append("## Bảng 10. Chứng minh lựa chọn mô hình production vs candidate")
+    parts.append("")
+    parts.append(results.get("model_justification", "_Chạy với `--model-compare` để sinh bảng này._"))
+    parts.append("")
+
+    scene_cmp = mc.get("scene_threshold") or []
+    if scene_cmp:
+        parts.append("### Scene — PySceneDetect threshold")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Model", "Cuts", "P", "R", "F1", "Production?"],
+                [
+                    [
+                        r.get("model", ""),
+                        _fmt(r.get("n_pred"), 0),
+                        _fmt(r.get("precision")),
+                        _fmt(r.get("recall")),
+                        _fmt(r.get("f1")),
+                        "Yes" if r.get("is_production") else "No",
+                    ]
+                    for r in scene_cmp
+                ],
+            )
+        )
+        parts.append("")
+
+    kf_cmp = mc.get("keyframe") or []
+    if kf_cmp:
+        parts.append("### Keyframe — keep-all vs temporal vs CLIP (production)")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Strategy", "P", "R", "F1", "Δ F1", "Production?"],
+                [
+                    [
+                        r.get("strategy", r.get("model", "")),
+                        _fmt(r.get("precision")),
+                        _fmt(r.get("recall")),
+                        _fmt(r.get("f1")),
+                        _delta(r.get("delta_f1_vs_prod", r.get("delta_f1"))),
+                        "Yes" if r.get("is_production") else "No",
+                    ]
+                    for r in kf_cmp
+                ],
+            )
+        )
+        parts.append("")
+
+    cap_cmp = mc.get("caption") or []
+    if cap_cmp:
+        parts.append("### Caption — placeholder vs OCR-grounded vs Florence-2")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Model", "Content OK", "Hallucination", "Human score", "Production?"],
+                [
+                    [
+                        r.get("model", ""),
+                        _fmt(r.get("content_ok_rate")),
+                        _fmt(r.get("hallucination_rate")),
+                        _fmt(r.get("human_score"), 1),
+                        "Yes" if r.get("is_production") else "No",
+                    ]
+                    for r in cap_cmp
+                    if not r.get("error")
+                ],
+            )
+        )
+        parts.append("")
+
+    ocr_cmp = mc.get("ocr") or []
+    if ocr_cmp:
+        parts.append("### OCR — PaddleOCR vs EasyOCR vs Tesseract")
+        parts.append("")
+        parts.append(
+            _md_table(
+                ["Engine", "CER (%)", "Word Acc", "Time (s)", "Production?"],
+                [
+                    [
+                        r.get("engine", ""),
+                        _pct(r.get("cer"), 2),
+                        _fmt(r.get("word_accuracy")),
+                        _fmt(r.get("wall_sec")),
+                        "Yes" if r.get("is_production") else "No",
+                    ]
+                    for r in ocr_cmp
+                    if not r.get("error")
+                ],
+            )
+        )
+        parts.append("")
+
     return "\n".join(parts)
+
+
+def _default_stage_summary(results: dict[str, Any]) -> list[dict[str, Any]]:
+    status = results.get("stage_status", {})
+    prod = results.get("production_model", "faster-whisper-base.en")
+    agg = results.get("aggregated") or build_dataset_aggregates(results)
+    asr_ted = next((r for r in agg.get("asr") or [] if r.get("model") == prod), {})
+    tl_ted = (agg.get("timeline") or [{}])[0] if agg.get("timeline") else {}
+    ch_ted = (agg.get("chapter") or [{}])[0] if agg.get("chapter") else {}
+    scene_tv = (agg.get("scene") or [{}])[0] if agg.get("scene") else {}
+    kf_tv = (agg.get("keyframe") or [{}])[0] if agg.get("keyframe") else {}
+    ocr_ted = (agg.get("ocr") or [{}])[0] if agg.get("ocr") else {}
+    cap_ted = (agg.get("caption") or [{}])[0] if agg.get("caption") else {}
+    sum_ted = (agg.get("summary") or [{}])[0] if agg.get("summary") else {}
+    return [
+        {
+            "stage": "ASR",
+            "model": prod,
+            "dataset": "TED",
+            "metrics": "WER, CER, RTF",
+            "value": f"WER={_pct(asr_ted.get('wer'), 1)}" if asr_ted else "TBD",
+            "status": status.get("asr", "pending"),
+        },
+        {
+            "stage": "Scene",
+            "model": "PySceneDetect",
+            "dataset": "TVSum",
+            "metrics": "P, R, F1",
+            "value": f"F1={_fmt(scene_tv.get('f1'))}",
+            "status": status.get("scene", "pending"),
+        },
+        {
+            "stage": "Keyframe",
+            "model": "CLIP ViT-B/32 agglomerative",
+            "dataset": "TVSum",
+            "metrics": "P, R, F1",
+            "value": f"F1={_fmt(kf_tv.get('f1'))}",
+            "status": status.get("keyframe", "pending"),
+        },
+        {
+            "stage": "OCR",
+            "model": "PaddleOCR",
+            "dataset": "TED",
+            "metrics": "CER, Word Acc",
+            "value": f"CER={_pct(ocr_ted.get('cer'), 1)}",
+            "status": status.get("ocr", "pending"),
+        },
+        {
+            "stage": "Caption",
+            "model": "Florence-2-base / OCR-grounded",
+            "dataset": "TED",
+            "metrics": "Human score, Hallucination",
+            "value": f"score={_fmt(cap_ted.get('human_score'), 1)}",
+            "status": status.get("caption", "pending"),
+        },
+        {
+            "stage": "Timeline",
+            "model": "Temporal proximity + scene",
+            "dataset": "TED",
+            "metrics": "Accuracy, MAE",
+            "value": f"Acc={_fmt(tl_ted.get('accuracy'))}, MAE={_fmt(tl_ted.get('mae_sec'))}s",
+            "status": status.get("timeline", "pending"),
+        },
+        {
+            "stage": "Chapter",
+            "model": "TF-IDF semantic shift",
+            "dataset": "TED",
+            "metrics": "Boundary F1, MAE",
+            "value": f"F1={_fmt(ch_ted.get('f1'))}",
+            "status": status.get("chapter", "pending"),
+        },
+        {
+            "stage": "Summary",
+            "model": "Extractive TF-IDF (proxy LLM)",
+            "dataset": "TED",
+            "metrics": "ROUGE-L, BERTScore, Factuality, Coverage",
+            "value": f"ROUGE-L={_fmt(sum_ted.get('rouge_l'))}",
+            "status": status.get("summary", "pending"),
+        },
+    ]
 
 
 def write_report(results: dict[str, Any], out_path: Path, **kwargs: Any) -> Path:

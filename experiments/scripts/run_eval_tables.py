@@ -28,11 +28,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from experiments.evaluation.aggregate import build_asr_model_comparison, build_dataset_aggregates, group_mean
 from experiments.evaluation.datasets import (
+    TED_DATASET,
     load_tedlium_rows,
-    pick_ted_lecture_videos,
+    pick_ted_unified_talks,
     pick_ted_vad_items,
-    pick_tedlium_asr_items,
     pick_tvsum_videos,
     tvsum_scene_boundaries,
 )
@@ -84,9 +85,16 @@ def conclude(metric_name: str, values: list[float], *, higher_better: bool = Tru
     return f"_Kết luận: {metric_name} trung bình = {avg:.3f} → stage **{status}**._"
 
 
+def _production_asr_name(model_size: str) -> str:
+    return f"faster-whisper-{model_size}"
+
+
 def run_eval(args: argparse.Namespace) -> dict[str, Any]:
     bench_root = Path(args.benchmarks_root).resolve()
+    prod_asr = _production_asr_name(args.production_asr.strip())
     results: dict[str, Any] = {
+        "production_model": prod_asr,
+        "dataset_primary": TED_DATASET,
         "asr": [],
         "vad": [],
         "scene": [],
@@ -96,15 +104,14 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         "timeline": [],
         "chapter": [],
         "summary": [],
-        "rag": [],
         "ablation": [],
+        "model_comparison": {"asr": [], "keyframe": []},
         "stage_status": {},
     }
     stages = {s.strip().lower() for s in args.stages.split(",") if s.strip()}
     if "all" in stages:
         stages = {
             "asr",
-            "vad",
             "scene",
             "keyframe",
             "ocr",
@@ -112,8 +119,11 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             "timeline",
             "chapter",
             "summary",
-            "ablation",
         }
+        if args.include_vad:
+            stages.add("vad")
+        if args.include_ablation:
+            stages.add("ablation")
 
     rows = []
     if args.manifest and not args.auto_datasets:
@@ -121,29 +131,40 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         if args.limit and args.limit > 0:
             rows = rows[: args.limit]
 
-    # --- ASR ---
+    ted_talks: list[dict[str, Any]] = []
+    if args.auto_datasets:
+        clips_per = max(1, args.asr_limit // max(1, args.ted_limit))
+        ted_talks = pick_ted_unified_talks(limit=args.ted_limit, asr_clips_per_talk=clips_per)
+        print(f"[TED] Unified talks ({TED_DATASET}): {[t['talk_id'] for t in ted_talks]}")
+
+    # --- ASR (TED, multi-model vs production) ---
     if "asr" in stages:
         asr_models = [m.strip() for m in args.asr_models.split(",") if m.strip()]
+        if args.model_compare:
+            for m in [x.strip() for x in args.compare_asr_sizes.split(",") if x.strip()]:
+                if m not in asr_models:
+                    asr_models.append(m)
         if args.auto_datasets:
-            items = pick_tedlium_asr_items(limit=args.asr_limit or 6)
-            print(f"[ASR] TED-LIUM clips: {len(items)}")
-            for it in items:
-                for model in asr_models:
-                    try:
-                        scored = eval_asr_file(
-                            it["wav_path"],
-                            it["text"],
-                            model_size=model,
-                            language="en",
-                        )
-                        scored["dataset"] = f"TED-LIUM:{it['speaker_id']}"
-                        scored["model"] = f"faster-whisper-{model}"
-                        results["asr"].append(scored)
-                        print(
-                            f"[ASR] {it['id']} {model} WER={scored['wer']:.3f} RTF={scored['rtf']:.3f}"
-                        )
-                    except Exception as e:
-                        print(f"[ASR][WARN] {it['id']} {model}: {e}")
+            for talk in ted_talks:
+                for clip in talk.get("asr_clips") or []:
+                    for model in asr_models:
+                        try:
+                            scored = eval_asr_file(
+                                clip["wav_path"],
+                                clip["text"],
+                                model_size=model,
+                                language="en",
+                            )
+                            scored["dataset"] = TED_DATASET
+                            scored["talk_id"] = talk["talk_id"]
+                            scored["clip_id"] = clip.get("id") or clip["wav_path"].stem
+                            scored["model"] = f"faster-whisper-{model}"
+                            results["asr"].append(scored)
+                            print(
+                                f"[ASR] {talk['talk_id']} {model} WER={scored['wer']:.3f} RTF={scored['rtf']:.3f}"
+                            )
+                        except Exception as e:
+                            print(f"[ASR][WARN] {talk['talk_id']} {model}: {e}")
         else:
             for row in rows:
                 vid = row.get("video_id") or Path(row.get("video_path", "video")).stem
@@ -172,9 +193,16 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             [r["wer"] for r in results["asr"]],
             higher_better=False,
             good=0.20,
-        )
+        ) + f" Dataset **{TED_DATASET}**; production `{prod_asr}`."
+        if len(asr_models) > 1:
+            results["model_comparison"]["asr"] = build_asr_model_comparison(
+                results["asr"], production_model=prod_asr
+            )
+            by_model = group_mean(results["asr"], "model", "wer")
+            parts = [f"{m}: WER={v:.3f}" for m, v in sorted(by_model.items())]
+            results["asr_conclusion"] += " " + "; ".join(parts) + "."
 
-    # --- VAD ---
+    # --- VAD (optional) ---
     if "vad" in stages:
         if args.auto_datasets:
             for item in pick_ted_vad_items(limit=2):
@@ -227,6 +255,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                     scored = eval_scene_boundaries(
                         pred, ref, tolerance_sec=max(args.scene_tol, 2.0), video=f"TVSum:{it['video_id']}"
                     )
+                    scored["dataset"] = "TVSum"
                     results["scene"].append(scored)
                     print(f"[Scene] {it['video_id']} F1={scored['f1']:.3f} pred={len(pred)} ref={len(ref)}")
                 except Exception as e:
@@ -261,6 +290,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                         it["scores"],
                         video=f"TVSum:{it['video_id']}",
                     )
+                    scored["dataset"] = "TVSum"
                     results["keyframe"].append(scored)
                     print(f"[Keyframe] {it['video_id']} F1={scored['f1']:.3f}")
                 except Exception as e:
@@ -283,12 +313,12 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         results["stage_status"]["keyframe"] = "done" if results["keyframe"] else "pending"
         results["keyframe_conclusion"] = conclude("F1", [r.get("f1", float("nan")) for r in results["keyframe"]])
 
-    # --- OCR / Caption / Summary / Ablation on TED lecture videos ---
+    # --- OCR / Caption / Summary on unified TED talks ---
     pending_needed = {"ocr", "caption", "summary", "ablation"} & stages
-    if args.auto_datasets and pending_needed:
-        ted_pending = pick_ted_lecture_videos(limit=2)
-        print(f"[Pending] TED videos: {[p.name for p in ted_pending]}")
-        for vp in ted_pending:
+    if args.auto_datasets and pending_needed and ted_talks:
+        for talk in ted_talks:
+            vp = talk["video_path"]
+            print(f"[TED] OCR/Caption/Summary on {vp.name} (dataset={TED_DATASET})")
             try:
                 pending = eval_ted_pending_stages(
                     vp,
@@ -314,32 +344,33 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                 [r.get("cer", float("nan")) for r in results["ocr"]],
                 higher_better=False,
                 good=0.35,
-            ) + " OCR vs lời nói TED-LIUM cùng timestamp (weak GT, không phải GT chữ slide)."
+            ) + f" Dataset **{TED_DATASET}**; weak GT = transcript cùng timestamp."
         if "caption" in stages:
             agg = aggregate_caption_scores(results["caption"])
             results["stage_status"]["caption"] = "done" if results["caption"] else "pending"
             acc = agg.get("accuracy")
             hall = agg.get("hallucination_rate")
+            hs = mean_ignore_nan(r.get("human_score") for r in results["caption"])
             results["caption_conclusion"] = (
-                f"_Kết luận: accuracy={acc:.3f} hallucination_rate={hall:.3f} "
-                "(heuristic grounded trên OCR; Florence-2 tắt để tránh tranh GPU)._"
+                f"_Kết luận: human_score≈{hs:.1f}/5, accuracy={acc:.3f}, hallucination={hall:.3f} "
+                f"(dataset **{TED_DATASET}**; human score = proxy heuristic)._"
                 if results["caption"] and acc == acc and hall == hall
                 else "_Kết luận: TBD._"
             )
         if "summary" in stages:
             results["stage_status"]["summary"] = "done" if results["summary"] else "pending"
-            results["summary_conclusion"] = conclude(
-                "ROUGE-L",
-                [r.get("rouge_l", float("nan")) for r in results["summary"]],
-                good=0.25,
-            ) + " Reference = câu đầu mỗi cửa sổ 40s từ transcript TED-LIUM; hyp = extractive TF-IDF."
+            results["summary_conclusion"] = (
+                conclude("ROUGE-L", [r.get("rouge_l", float("nan")) for r in results["summary"]], good=0.25)
+                + f" Dataset **{TED_DATASET}**; "
+                + f"factuality≈{mean_ignore_nan(r.get('factuality') for r in results['summary']):.3f}, "
+                + f"coverage≈{mean_ignore_nan(r.get('coverage') for r in results['summary']):.3f}."
+            )
         if "ablation" in stages:
             results["stage_status"]["ablation"] = "done" if results["ablation"] else "pending"
-            results["ablation_conclusion"] = conclude(
-                "Summary ROUGE-L",
-                [r.get("summary_score", float("nan")) for r in results["ablation"]],
-                good=0.25,
-            ) + " So sánh Audio / Visual / Audio+Visual trên cùng TED talk."
+            results["ablation_conclusion"] = (
+                conclude("Summary ROUGE-L", [r.get("summary_score", float("nan")) for r in results["ablation"]], good=0.25)
+                + f" Dataset **{TED_DATASET}** (Audio / Visual / Audio+Visual)."
+            )
 
     # --- OCR ---
     if "ocr" in stages and not args.auto_datasets:
@@ -378,32 +409,21 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             else "_Kết luận: TBD._"
         )
 
-    # --- Timeline + Chapter on TED lecture videos ---
-    if args.auto_datasets and ("timeline" in stages or "chapter" in stages):
-        ted_videos = pick_ted_lecture_videos(limit=2)
-        ted_rows = load_tedlium_rows()
-        for vp in ted_videos:
-            speaker = vp.stem
-            utts = [
-                {"start": r["start"], "end": r["end"], "text": r["text"]}
-                for r in ted_rows
-                if r["speaker_id"] == speaker and r["start"] is not None and r["end"] is not None
-            ]
+    # --- Timeline + Chapter on unified TED talks ---
+    if args.auto_datasets and ("timeline" in stages or "chapter" in stages) and ted_talks:
+        for talk in ted_talks:
+            vp = talk["video_path"]
+            utts = talk.get("utterances") or []
             if len(utts) < 3:
-                # fallback: any speaker whose name appears in filename
-                utts = [
-                    {"start": r["start"], "end": r["end"], "text": r["text"]}
-                    for r in ted_rows
-                    if r["speaker_id"].lower() in speaker.lower()
-                    and r["start"] is not None
-                ]
-            if len(utts) < 3:
-                print(f"[TED] skip timeline/chapter {vp.name}: not enough TED-LIUM utterances")
+                print(f"[TED] skip timeline/chapter {vp.name}: not enough utterances")
                 continue
-            print(f"[TED] timeline/chapter on {vp.name} utt={len(utts)}")
+            print(f"[TED] timeline/chapter on {vp.name} utt={len(utts)} dataset={TED_DATASET}")
             try:
                 tl, ch = eval_ted_timeline_chapter(
-                    vp, utts, video=f"TED:{speaker}", chapter_tol=args.chapter_tol
+                    vp,
+                    utts,
+                    video=talk["talk_id"],
+                    chapter_tol=args.chapter_tol,
                 )
                 if "timeline" in stages:
                     results["timeline"].append(tl)
@@ -413,13 +433,15 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                 print(f"[TED][WARN] {vp.name}: {e}")
         if "timeline" in stages:
             results["stage_status"]["timeline"] = "done" if results["timeline"] else "pending"
-            results["timeline_conclusion"] = conclude(
-                "Accuracy", [r.get("accuracy", float("nan")) for r in results["timeline"]]
+            results["timeline_conclusion"] = (
+                conclude("MAE (s)", [r.get("mae_sec", float("nan")) for r in results["timeline"]], higher_better=False, good=2.0)
+                + f" Dataset **{TED_DATASET}**."
             )
         if "chapter" in stages:
             results["stage_status"]["chapter"] = "done" if results["chapter"] else "pending"
-            results["chapter_conclusion"] = conclude(
-                "Boundary F1", [r.get("f1", float("nan")) for r in results["chapter"]]
+            results["chapter_conclusion"] = (
+                conclude("Boundary F1", [r.get("f1", float("nan")) for r in results["chapter"]])
+                + f" Dataset **{TED_DATASET}**."
             )
     else:
         if "timeline" in stages:
@@ -501,6 +523,89 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                 "_Kết luận: TBD — tạo benchmarks/references/ablation_results.json sau khi chạy 3 cấu hình._"
             )
 
+    if args.model_compare and args.auto_datasets:
+        _run_model_comparisons(args, results, ted_talks)
+
+    return results
+
+
+def _run_model_comparisons(args: argparse.Namespace, results: dict[str, Any], ted_talks: list[dict[str, Any]]) -> None:
+    from experiments.evaluation.model_compare import (
+        build_justification_summary,
+        compare_caption_models,
+        compare_keyframe_strategies,
+        compare_ocr_engines,
+        compare_scene_thresholds,
+    )
+
+    mc = results.setdefault("model_comparison", {"asr": results.get("model_comparison", {}).get("asr", [])})
+
+    tv_items = pick_tvsum_videos(limit=max(1, min(2, args.tvsum_limit or 1)))
+    if tv_items:
+        it = tv_items[0]
+        try:
+            import cv2
+
+            cap = cv2.VideoCapture(str(it["video_path"]))
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0) or 25.0
+            cap.release()
+            thresholds = tuple(float(x.strip()) for x in args.scene_thresholds.split(",") if x.strip())
+            print(f"[Compare] Scene thresholds {thresholds} on {it['video_id']}")
+            mc["scene_threshold"] = compare_scene_thresholds(
+                it["video_path"],
+                it["scores"],
+                fps=fps,
+                thresholds=thresholds,
+                tolerance_sec=args.scene_tol,
+            )
+            print(f"[Compare] Keyframe strategies on {it['video_id']}")
+            mc["keyframe"] = compare_keyframe_strategies(
+                it["video_path"],
+                it["scores"],
+                video_label=f"TVSum:{it['video_id']}",
+            )
+        except Exception as e:
+            print(f"[Compare][WARN] scene/keyframe: {e}")
+
+    if ted_talks:
+        vp = ted_talks[0]["video_path"]
+        try:
+            print(f"[Compare] Caption models on {vp.name}")
+            mc["caption"] = compare_caption_models(vp, max_frames=min(3, args.caption_compare_frames))
+        except Exception as e:
+            print(f"[Compare][WARN] caption: {e}")
+
+        if not args.skip_ocr and ted_talks[0].get("utterances"):
+            try:
+                from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+
+                det = SceneDetector({"threshold": 27.0})
+                scenes = det.detect_scenes(str(vp))
+                work = vp.parent / "_ocr_cmp" / vp.stem
+                det.extract_keyframes(str(vp), scenes, str(work), strategy="middle")
+                keyed = [s for s in scenes if s.get("keyframe_path")]
+                if keyed:
+                    sc = keyed[len(keyed) // 2]
+                    path = sc.get("keyframe_path") or ""
+                    mid = 0.5 * (float(sc.get("start_seconds", 0)) + float(sc.get("end_seconds", 0)))
+                    ref_utts = [
+                        u["text"]
+                        for u in ted_talks[0]["utterances"]
+                        if float(u["start"]) <= mid <= float(u["end"]) + 2.0
+                    ]
+                    ref = " ".join(ref_utts) or " "
+                    print(f"[Compare] OCR engines on {Path(path).name}")
+                    mc["ocr"] = compare_ocr_engines(path, ref)
+            except Exception as e:
+                print(f"[Compare][WARN] ocr: {e}")
+
+    results["model_justification"] = build_justification_summary(mc)
+    print(f"[Compare] {results['model_justification'][:160]}...")
+
+
+def finalize_results(results: dict[str, Any]) -> dict[str, Any]:
+    """Attach dataset-level aggregates (one row per TED / TVSum)."""
+    results["aggregated"] = build_dataset_aggregates(results)
     return results
 
 
@@ -510,7 +615,30 @@ def main() -> int:
     parser.add_argument("--benchmarks-root", type=str, default=str(ROOT / "benchmarks"))
     parser.add_argument("--out-dir", type=str, default="")
     parser.add_argument("--stages", type=str, default="all", help="Comma list or 'all'")
-    parser.add_argument("--asr-models", type=str, default="base.en,small.en")
+    parser.add_argument("--asr-models", type=str, default="tiny.en,base.en,small.en")
+    parser.add_argument("--production-asr", type=str, default="base.en", help="Production Faster-Whisper size")
+    parser.add_argument("--ted-limit", type=int, default=2, help="Number of TED talks (unified dataset)")
+    parser.add_argument("--include-vad", action="store_true", help="Include optional VAD table")
+    parser.add_argument("--include-ablation", action="store_true", help="Include optional ablation table")
+    parser.add_argument(
+        "--model-compare",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Compare candidate models vs production (scene threshold, CLIP, caption, OCR, extra ASR)",
+    )
+    parser.add_argument(
+        "--scene-thresholds",
+        type=str,
+        default="20,27,35",
+        help="PySceneDetect thresholds to compare (production=27)",
+    )
+    parser.add_argument("--caption-compare-frames", type=int, default=2, help="Keyframes per TED talk for caption bakeoff")
+    parser.add_argument(
+        "--compare-asr-sizes",
+        type=str,
+        default="medium.en",
+        help="Extra ASR sizes when --model-compare (appended if missing)",
+    )
     parser.add_argument("--asr-only", action="store_true")
     parser.add_argument("--dry-report", action="store_true", help="Write empty TBD tables only")
     parser.add_argument("--limit", type=int, default=0)
@@ -542,7 +670,7 @@ def main() -> int:
     if args.dry_report:
         results: dict[str, Any] = {}
     else:
-        results = run_eval(args)
+        results = finalize_results(run_eval(args))
 
     report_path = write_report(results, out_dir / "EVAL_TABLES.md")
     (out_dir / "EVAL_TABLES.json").write_text(

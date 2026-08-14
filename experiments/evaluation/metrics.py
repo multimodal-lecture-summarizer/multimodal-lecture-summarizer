@@ -417,19 +417,60 @@ def bertscore_f1(reference: str, hypothesis: str, *, lang: str = "en") -> float 
         return None
 
 
+def factuality_coverage(
+    source_text: str,
+    hypothesis: str,
+    reference_summary: str,
+) -> dict[str, float]:
+    """Proxy metrics when human factuality labels are unavailable.
+
+    - factuality: fraction of hypothesis words grounded in source (transcript/OCR).
+    - coverage: fraction of reference-summary words echoed in hypothesis.
+    """
+    hyp_toks = set(tokenize_words(hypothesis))
+    src_toks = set(tokenize_words(source_text))
+    ref_toks = set(tokenize_words(reference_summary))
+    factuality = len(hyp_toks & src_toks) / len(hyp_toks) if hyp_toks else 0.0
+    coverage = len(hyp_toks & ref_toks) / len(ref_toks) if ref_toks else 0.0
+    return {"factuality": factuality, "coverage": coverage}
+
+
+def human_score_from_caption(flags: dict[str, Any]) -> float:
+    """Map heuristic caption flags to a 1–5 rubric (automated proxy)."""
+    if flags.get("hallucinated"):
+        return 1.0
+    grounding = float(flags.get("grounding_score") or 0.0)
+    if grounding >= 0.6:
+        return 5.0
+    if grounding >= 0.4:
+        return 4.0
+    if grounding >= 0.25:
+        return 3.0
+    if grounding >= 0.15:
+        return 2.0
+    return 1.5
+
+
 def summary_text_metrics(
     reference: str,
     hypothesis: str,
     *,
+    source_text: str = "",
     lang: str = "en",
     compute_bertscore: bool = True,
 ) -> dict[str, float | None]:
     out: dict[str, float | None] = {
         "rouge_l": rouge_l_f1(reference, hypothesis),
         "bertscore_f1": None,
+        "factuality": None,
+        "coverage": None,
     }
     if compute_bertscore:
         out["bertscore_f1"] = bertscore_f1(reference, hypothesis, lang=lang)
+    if source_text.strip():
+        fc = factuality_coverage(source_text, hypothesis, reference)
+        out["factuality"] = fc["factuality"]
+        out["coverage"] = fc["coverage"]
     return out
 
 
