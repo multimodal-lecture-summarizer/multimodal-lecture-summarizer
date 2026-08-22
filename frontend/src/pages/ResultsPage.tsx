@@ -91,7 +91,7 @@ export const ResultsPage: React.FC = () => {
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
+  const [expandedChapterIdx, setExpandedChapterIdx] = useState<number | null>(null);
   useEffect(() => {
     if (!videoId) {
       setError("Không tìm thấy ID video bài giảng. Vui lòng quay lại lịch sử.");
@@ -658,22 +658,45 @@ export const ResultsPage: React.FC = () => {
               <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
                 {chaptersList.map((chapter, idx) => {
                   const isChapterActive = idx === activeChapterIdx;
+                  const isExpanded = idx === expandedChapterIdx;
                   const chStartSecs = parseTimeText(chapter.start);
 
                   return (
-                    <div 
-                      key={idx} 
-                      onClick={() => seekTo(chStartSecs)}
-                      className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-colors duration-150 ${
-                        isChapterActive 
-                          ? 'border-primary bg-primary/10 text-slate-900 font-bold' 
-                          : 'border-slate-200/50 bg-[#FAF5FF] text-slate-500 hover:border-primary'
-                      }`}
-                    >
-                      <span className="text-xs truncate max-w-[200px] sm:max-w-xs">{chapter.title}</span>
-                      <span className="font-mono-data text-[10px] px-1.5 py-0.5 bg-slate-200/50 rounded text-slate-900 font-bold">
-                        {chapter.start}
-                      </span>
+                    <div key={idx} className="flex flex-col border border-slate-200/50 rounded-lg overflow-hidden shadow-sm transition-all duration-300">
+                      <div 
+                        onClick={() => seekTo(chStartSecs)}
+                        className={`flex justify-between items-center p-3 cursor-pointer transition-colors duration-150 ${
+                          isChapterActive 
+                            ? 'border-l-4 border-l-primary bg-primary/10 text-slate-900 font-bold' 
+                            : 'border-l-4 border-l-transparent bg-[#FAF5FF] text-slate-600 hover:bg-primary/5'
+                        }`}
+                      >
+                        <div className="flex flex-col gap-1 pr-2 flex-1 min-w-0">
+                          <span className="text-xs truncate" title={chapter.title}>{chapter.title}</span>
+                          <span className="font-mono-data text-[10px] text-slate-400 font-medium">
+                            {chapter.start}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedChapterIdx(isExpanded ? null : idx);
+                            }}
+                            className={`w-6 h-6 flex justify-center items-center rounded-full hover:bg-slate-200/50 transition-colors ${isExpanded ? 'text-primary bg-primary/10' : 'text-slate-400'}`}
+                          >
+                            <span className="material-symbols-outlined text-sm transition-transform duration-300" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                              expand_more
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="px-3 pb-3 pt-1 text-[11px] text-slate-500 bg-[#FAF5FF]/50 border-t border-slate-100 italic leading-relaxed">
+                          {chapter.summary || "Chưa có nội dung tóm tắt."}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}

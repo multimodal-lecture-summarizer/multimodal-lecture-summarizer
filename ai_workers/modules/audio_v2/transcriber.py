@@ -17,8 +17,43 @@ class AudioTranscriber:
         self.cache_dir = Path(worker_settings.CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
+        # Inject cuDNN / cuBLAS DLL paths for CTranslate2 (Faster-Whisper)
+        import sys
+        site_packages = Path(sys.executable).parent.parent / "Lib" / "site-packages"
+        cudnn_bin = site_packages / "nvidia" / "cudnn" / "bin"
+        cublas_bin = site_packages / "nvidia" / "cublas" / "bin"
+        ctranslate2_dir = site_packages / "ctranslate2"
+
+        paths_to_add = []
+        for bin_dir in (cudnn_bin, cublas_bin, ctranslate2_dir):
+            if bin_dir.exists():
+                paths_to_add.append(str(bin_dir))
+                if hasattr(os, "add_dll_directory"):
+                    try:
+                        os.add_dll_directory(str(bin_dir))
+                    except OSError:
+                        pass
+
+        if paths_to_add:
+            os.environ["PATH"] = ";".join(paths_to_add) + ";" + os.environ.get("PATH", "")
+
         import torch
-        if torch.cuda.is_available():
+
+        # CTranslate2 on Windows still expects cuDNN 8 symbols; prefer GPU only when present.
+        cudnn8_dll = ctranslate2_dir / "cudnn_ops_infer64_8.dll"
+        if not cudnn8_dll.exists():
+            cudnn8_dll = cudnn_bin / "cudnn_ops_infer64_8.dll"
+        force_device = str(self.config.get("device") or os.environ.get("FASTER_WHISPER_DEVICE", "")).lower()
+
+        if force_device == "cpu" or (torch.cuda.is_available() and not cudnn8_dll.exists()):
+            if torch.cuda.is_available() and force_device != "cpu" and not cudnn8_dll.exists():
+                print(
+                    "[ASR] cuDNN 8 DLL missing for Faster-Whisper; using CPU for ASR "
+                    "(Florence/CLIP can still use CUDA)."
+                )
+            self.device = "cpu"
+            self.compute_type = "int8"
+        elif torch.cuda.is_available():
             self.device = "cuda"
             self.compute_type = "float16"
         else:

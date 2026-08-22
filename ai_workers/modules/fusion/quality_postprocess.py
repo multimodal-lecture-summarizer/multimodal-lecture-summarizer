@@ -16,12 +16,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-RECOMMENDED_STACK = ["sprint1", "sprint3", "sprint4_v2", "sprint7"]
+RECOMMENDED_STACK = ["sprint1", "sprint3", "sprint4_v2"]
 FULL_STACK_S10 = [
     "sprint1",
     "sprint3",
     "sprint4_v2",
-    "sprint7",
     "sprint5",
     "sprint8_soft",
     "sprint9",
@@ -50,7 +49,10 @@ def _ocr_from_description(desc: str) -> str:
 
 
 def is_generic_caption(desc: str) -> bool:
-    return bool(re.match(r"(?i)^keyframe for scene\s+\d+$", (desc or "").strip()))
+    desc_clean = (desc or "").strip()
+    if desc_clean == "Visual description unavailable":
+        return True
+    return bool(re.match(r"(?i)^keyframe for scene\s+\d+$", desc_clean))
 
 
 def keyframe_evidence_score(kf: dict) -> float:
@@ -242,32 +244,7 @@ def sprint4_v2_chapter_aware_prune(
     return sorted(kept, key=lambda k: float(k.get("timestamp") or 0.0)), stats
 
 
-def sprint7_transcript_caption_fallback(keyframes: list, max_chars: int = 100) -> tuple[list, dict]:
-    out = []
-    enriched = 0
-    skipped_no_transcript = 0
-    for kf in keyframes:
-        item = dict(kf)
-        desc = item.get("description") or item.get("caption") or ""
-        transcript = (item.get("transcript") or "").strip()
-        if is_generic_caption(desc) and transcript:
-            snippet = (
-                transcript[:max_chars].rsplit(" ", 1)[0]
-                if len(transcript) > max_chars
-                else transcript
-            )
-            item["description"] = snippet
-            item["caption"] = item["description"]
-            item["caption_enriched"] = True
-            item["enrich_source"] = "transcript_fallback"
-            enriched += 1
-        elif is_generic_caption(desc):
-            skipped_no_transcript += 1
-        out.append(item)
-    return out, {
-        "enriched_from_transcript": enriched,
-        "generic_without_transcript": skipped_no_transcript,
-    }
+
 
 
 def sprint5_boost_chapter_coverage(chapters: list, keyframes: list) -> tuple[list, list, dict]:
@@ -478,10 +455,6 @@ def apply_sprint_stack(
         elif name == "sprint4_v2":
             ctx.keyframes, ctx.stats["sprint4_v2"] = sprint4_v2_chapter_aware_prune(
                 ctx.chapters, ctx.keyframes, **sprint4_cfg
-            )
-        elif name == "sprint7":
-            ctx.keyframes, ctx.stats["sprint7"] = sprint7_transcript_caption_fallback(
-                ctx.keyframes
             )
         elif name == "sprint5":
             ctx.chapters, ctx.keyframes, ctx.stats["sprint5"] = sprint5_boost_chapter_coverage(

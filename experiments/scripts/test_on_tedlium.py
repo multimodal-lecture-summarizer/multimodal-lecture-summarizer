@@ -25,6 +25,12 @@ def main():
     root_out = project_root / "outputs"
     exp_out = project_root / "experiments" / "outputs"
     art_out = Path(r"C:\Users\admin\.gemini\antigravity-ide\brain\7c869227-951a-4d37-9f00-7798b5adedb9")
+    # Limit items for faster local testing; full split can be large.
+    max_items = int(os.environ.get("MAX_TEDLIUM_ITEMS", "400"))
+    # Scan cap to avoid iterating extremely long splits before collecting enough "valid" sentences.
+    max_scan = int(os.environ.get("MAX_TEDLIUM_SCAN", "5000"))
+    ted_streaming = os.environ.get("TEDLIUM_STREAMING", "0").strip() == "1"
+    ted_split = os.environ.get("TEDLIUM_SPLIT", "test")
     
     for p in [root_out, exp_out, art_out]:
         p.mkdir(parents=True, exist_ok=True)
@@ -39,22 +45,74 @@ def main():
     ted_sentences = []
     try:
         from datasets import load_dataset
-        ds = load_dataset("distil-whisper/tedlium", "default", split="test", cache_dir=cache_dir)
+        ds = load_dataset(
+            "distil-whisper/tedlium",
+            "default",
+            split=ted_split,
+            cache_dir=cache_dir,
+            streaming=ted_streaming,
+        )
+        # Speed-up: this benchmark chỉ cần `text`, không cần decode audio.
+        # Distil-Whisper TEDLIUM có field `audio` (kiểu Audio), decode có thể làm iterate cực chậm.
+        try:
+            from datasets import Audio as HFAudio
+
+            ds = ds.cast_column("audio", HFAudio(decode=False))
+        except Exception:
+            pass
+        try:
+            ds = ds.remove_columns(["audio", "speaker_id", "gender", "file", "id", "whisper_transcript"])
+        except Exception:
+            pass
+        scan_count = 0
         for item in ds:
+            scan_count += 1
+            if scan_count % 50 == 0:
+                print(f"[progress] scanned={scan_count} collected={len(ted_sentences)}/{max_items}")
+                sys.stdout.flush()
             text = item["text"].strip()
             if len(text) > 25 and not text.startswith("("):
                 ted_sentences.append(text)
+            if len(ted_sentences) >= max_items:
+                break
+            if scan_count >= max_scan:
+                break
         print(f"[OK] Successfully loaded {len(ted_sentences)} TED-LIUM test transcript sentences!")
     except Exception as e:
         print(f"[WARN] Loading HuggingFace test split exception: {e}")
         # Fallback to validation split or real academic lines
         try:
             from datasets import load_dataset
-            ds = load_dataset("distil-whisper/tedlium", "default", split="validation", cache_dir=cache_dir)
+            ds = load_dataset(
+                "distil-whisper/tedlium",
+                "default",
+                split="validation",
+                cache_dir=cache_dir,
+                streaming=ted_streaming,
+            )
+            try:
+                from datasets import Audio as HFAudio
+
+                ds = ds.cast_column("audio", HFAudio(decode=False))
+            except Exception:
+                pass
+            try:
+                ds = ds.remove_columns(["audio", "speaker_id", "gender", "file", "id", "whisper_transcript"])
+            except Exception:
+                pass
+            scan_count = 0
             for item in ds:
+                scan_count += 1
+                if scan_count % 50 == 0:
+                    print(f"[progress] scanned={scan_count} collected={len(ted_sentences)}/{max_items}")
+                    sys.stdout.flush()
                 text = item["text"].strip()
                 if len(text) > 25:
                     ted_sentences.append(text)
+                if len(ted_sentences) >= max_items:
+                    break
+                if scan_count >= max_scan:
+                    break
             print(f"[OK] Loaded {len(ted_sentences)} TED-LIUM validation transcript sentences.")
         except Exception as e2:
             print(f"[WARN] Fallback exception: {e2}")

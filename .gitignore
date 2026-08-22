@@ -41,6 +41,6 @@ postgres_data/
 .DS_Store
 Thumbs.db
 
-# Benchmark references
-benchmarks/references/**/*
-!benchmarks/references/.gitkeep
+# Benchmarks
+benchmarks/
+

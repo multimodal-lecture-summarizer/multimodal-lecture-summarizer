@@ -299,35 +299,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         del semantic
         release_worker_resources("semantic stage")
 
-        # Upload keyframes to R2 if configured
-        from ai_workers.core.config import worker_settings
-        if worker_settings.CF_R2_ACCESS_KEY_ID:
-            log_step("Đang tải các ảnh slide keyframe lên Cloudflare R2...", "storage", 72)
-            import boto3
-            s3_client = boto3.client(
-                "s3",
-                endpoint_url=f"https://{worker_settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-                aws_access_key_id=worker_settings.CF_R2_ACCESS_KEY_ID,
-                aws_secret_access_key=worker_settings.CF_R2_SECRET_ACCESS_KEY,
-            )
-            bucket_name = worker_settings.CF_R2_BUCKET_NAME
-            
-            for scene in visual_result.get("scenes", []):
-                local_path = scene.get("keyframe_path")
-                if local_path and os.path.exists(local_path):
-                    filename = os.path.basename(local_path)
-                    object_key = f"keyframes/{job_id}/{filename}"
-                    
-                    s3_client.upload_file(
-                        local_path,
-                        bucket_name,
-                        object_key,
-                        ExtraArgs={"ContentType": "image/png"}
-                    )
-                    
-                    public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
-                    scene["keyframe_url"] = f"{public_base}/{object_key}"
-            log_step("Đã tải xong toàn bộ slide lên R2.", "storage", 74)
+
 
         # Stage 5: Timeline
         check_revoked()
@@ -341,26 +313,130 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         del timeline
         release_worker_resources("timeline stage")
 
-        # Stage 6: Summarization & RAG Indexing
+        # Re-construct keyframes and run Quality Sprint BEFORE Summarization
+        chapters = timeline_result.get("chapters", [])
+        scenes = visual_result.get("scenes", [])
+        scene_utterance_lists = {id(scene): [] for scene in scenes}
+        
+        aligned_segments = timeline_result.get("aligned_segments", [])
+        if aligned_segments:
+            for item in aligned_segments:
+                scene_id = item.get("scene_id")
+                utt_text = item.get("utterance", {}).get("text", "")
+                if scene_id in scene_utterance_lists and utt_text:
+                    scene_utterance_lists[scene_id].append(utt_text)
+        else:
+            for utt in utterances:
+                u_start = utt.get("start", 0.0)
+                u_end = utt.get("end", 0.0)
+                best_scene = None
+                max_overlap = 0.0
+                for scene in scenes:
+                    scene_start = scene.get("start_seconds", 0.0)
+                    scene_end = scene.get("end_seconds", 0.0)
+                    overlap_start = max(u_start, scene_start)
+                    overlap_end = min(u_end, scene_end)
+                    overlap = overlap_end - overlap_start
+                    if overlap > max_overlap:
+                        max_overlap = overlap
+                        best_scene = scene
+                if best_scene is not None and max_overlap > 0:
+                    scene_utterance_lists[id(best_scene)].append(utt.get("text", ""))
+                    
+        for scene in scenes:
+            scene["script"] = " ".join(scene_utterance_lists[id(scene)]).strip()
+
+        keyframes = []
+        for scene in scenes:
+            keyframes.append({
+                "timestamp": scene["start_seconds"],
+                "local_path": scene.get("keyframe_path"),
+                "imageUrl": scene.get("keyframe_url", ""),
+                "description": scene.get("caption", f"Slide at {scene['start_timecode']}"),
+                "transcript": scene.get("script", ""),
+                "ocr_text": scene.get("ocr_text", ""),
+                "blur_score": scene.get("blur_score"),
+                "importanceScore": scene.get("importanceScore", 0.8),
+            })
+
+        sprint_stats = None
+        export_meta = None
+        from ai_workers.core.config import worker_settings
+        if worker_settings.ENABLE_SPRINT_STACK:
+            log_step(f"Đang chạy quality sprint stack ({worker_settings.SPRINT_STACK})...", "quality", 86)
+            import time
+            sprint_start_time = time.time()
+            try:
+                qp = apply_quality_postprocess(
+                    chapters=chapters,
+                    keyframes=keyframes,
+                    utterances=utterances,
+                    stack_name=worker_settings.SPRINT_STACK,
+                    min_chapter_sec=worker_settings.MIN_CHAPTER_SEC,
+                )
+                chapters = qp["chapters"]
+                keyframes = qp["keyframes"]
+                sprint_stats = qp.get("sprint_stats")
+                export_meta = qp.get("export_meta")
+                sprint_duration = time.time() - sprint_start_time
+                log_step(f"Sprint stack xong trong {sprint_duration:.2f}s: {len(chapters)} chapters, {len(keyframes)} keyframes.", "quality", 87)
+            except Exception as qp_err:
+                print(f"[Quality] Sprint stack failed, keeping baseline outputs: {qp_err}")
+
+        # Storage (R2 Upload of FINAL keyframes)
+        if worker_settings.CF_R2_ACCESS_KEY_ID:
+            log_step("Đang tải các ảnh slide keyframe lên Cloudflare R2...", "storage", 87)
+            import time
+            r2_start = time.time()
+            import boto3
+            s3_client = boto3.client(
+                "s3",
+                endpoint_url=f"https://{worker_settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+                aws_access_key_id=worker_settings.CF_R2_ACCESS_KEY_ID,
+                aws_secret_access_key=worker_settings.CF_R2_SECRET_ACCESS_KEY,
+            )
+            bucket_name = worker_settings.CF_R2_BUCKET_NAME
+            
+            for kf in keyframes:
+                local_path = kf.get("local_path")
+                if local_path and os.path.exists(local_path):
+                    filename = os.path.basename(local_path)
+                    object_key = f"keyframes/{job_id}/{filename}"
+                    try:
+                        s3_client.upload_file(local_path, bucket_name, object_key, ExtraArgs={"ContentType": "image/png"})
+                        public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
+                        kf["imageUrl"] = f"{public_base}/{object_key}"
+                    except Exception as upload_err:
+                        print(f"R2 upload error: {upload_err}")
+            
+            r2_duration = time.time() - r2_start
+            log_step(f"Đã tải xong {len(keyframes)} keyframes lên R2 trong {r2_duration:.2f}s.", "storage", 88)
+
+        # Sync keyframes back to scenes (Quality Sprint filters + R2 URLs)
+        valid_kf_map = {kf.get("local_path"): kf for kf in keyframes if kf.get("local_path")}
+        synced_scenes = []
+        for scene in scenes:
+            path = scene.get("keyframe_path")
+            if path in valid_kf_map:
+                kf = valid_kf_map[path]
+                if kf.get("imageUrl"):
+                    scene["keyframe_url"] = kf["imageUrl"]
+                synced_scenes.append(scene)
+        
+        # Update the visual result so the API job saver sees the filtered & URL-updated scenes
+        visual_result["scenes"] = synced_scenes
+
+        # Stage 6: Summarization
         check_revoked()
         log_step("Đang yêu cầu mô hình AI (Groq API) sinh bản tóm tắt chi tiết...", "text", 88)
         summarizer = Summarizer()
         text_result = summarizer.process(
-            utterances, slides, timeline_result.get("chapters", [])
+            utterances, keyframes, chapters
         )
+        # Update chapters with LLM output (titles and summaries)
+        chapters = text_result.get("chapters", chapters)
         log_step("Đã tạo bản tóm tắt bài giảng thành công.", "text", 93)
 
-        # Build Multimodal RAG vector index in ChromaDB
-        log_step("Đang tạo chỉ mục RAG đa phương thức vào ChromaDB...", "rag", 96)
-        try:
-            rag_success = summarizer.build_rag_index(job_id, utterances, slides)
-            if rag_success:
-                log_step("Đã lưu chỉ mục RAG vào ChromaDB thành công.", "rag", 98)
-            else:
-                log_step("Cảnh báo: Không thể tạo chỉ mục RAG (Sử dụng Mock Store).", "rag", 98)
-        except Exception as rag_err:
-            print(f"Error building RAG index: {rag_err}")
-            log_step("Lỗi khi tạo chỉ mục RAG.", "rag", 98)
 
         del summarizer
         release_worker_resources("summarization stage")
@@ -387,86 +463,6 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     duration = 0.0
     if utterances:
         duration = utterances[-1]["end"]
-
-    # Align transcript utterances with visual scenes to populate "script"
-    scenes = visual_result.get("scenes", [])
-    scene_utterance_lists = {id(scene): [] for scene in scenes}
-    
-    aligned_segments = timeline_result.get("aligned_segments", [])
-    if aligned_segments:
-        for item in aligned_segments:
-            scene_id = item.get("scene_id")
-            utt_text = item.get("utterance", {}).get("text", "")
-            if scene_id in scene_utterance_lists and utt_text:
-                scene_utterance_lists[scene_id].append(utt_text)
-    else:
-        # Fallback to pure temporal overlap if timeline semantic alignment failed
-        for utt in utterances:
-            u_start = utt.get("start", 0.0)
-            u_end = utt.get("end", 0.0)
-            
-            best_scene = None
-            max_overlap = 0.0
-            
-            for scene in scenes:
-                scene_start = scene.get("start_seconds", 0.0)
-                scene_end = scene.get("end_seconds", 0.0)
-                
-                overlap_start = max(u_start, scene_start)
-                overlap_end = min(u_end, scene_end)
-                overlap = overlap_end - overlap_start
-                
-                if overlap > max_overlap:
-                    max_overlap = overlap
-                    best_scene = scene
-                    
-            if best_scene is not None and max_overlap > 0:
-                scene_utterance_lists[id(best_scene)].append(utt.get("text", ""))
-                
-    for scene in scenes:
-        scene["script"] = " ".join(scene_utterance_lists[id(scene)]).strip()
-
-    # Construct keyframes from visual scenes for FE gallery compatibility
-    keyframes = []
-    for scene in scenes:
-        keyframes.append({
-            "timestamp": scene["start_seconds"],
-            "imageUrl": scene["keyframe_url"],
-            "description": scene.get("caption", f"Slide at {scene['start_timecode']}"),
-            "transcript": scene.get("script", ""),
-            "ocr_text": scene.get("ocr_text", ""),
-            "blur_score": scene.get("blur_score"),
-            "importanceScore": scene.get("importanceScore", 0.8),
-        })
-
-    chapters = text_result.get("chapters", [])
-    sprint_stats = None
-    export_meta = None
-    if worker_settings.ENABLE_SPRINT_STACK:
-        log_step(
-            f"Đang chạy quality sprint stack ({worker_settings.SPRINT_STACK})...",
-            "quality",
-            99,
-        )
-        try:
-            qp = apply_quality_postprocess(
-                chapters=chapters,
-                keyframes=keyframes,
-                utterances=utterances,
-                stack_name=worker_settings.SPRINT_STACK,
-                min_chapter_sec=worker_settings.MIN_CHAPTER_SEC,
-            )
-            chapters = qp["chapters"]
-            keyframes = qp["keyframes"]
-            sprint_stats = qp.get("sprint_stats")
-            export_meta = qp.get("export_meta")
-            log_step(
-                f"Sprint stack xong: {len(chapters)} chapters, {len(keyframes)} keyframes.",
-                "quality",
-                99,
-            )
-        except Exception as qp_err:
-            print(f"[Quality] Sprint stack failed, keeping baseline outputs: {qp_err}")
 
     result = {
         "job_id": job_id,
@@ -534,3 +530,53 @@ def process_visual(job_id: str, video_path: str, output_dir: str):
     finally:
         visual = None
         release_worker_resources("process_visual task")
+
+
+@app.task(bind=True, name="ai_workers.build_rag_index", max_retries=3, autoretry_for=(Exception,), retry_backoff=True)
+def build_rag_index(self, video_id: str):
+    import sys
+    import os
+    import json
+    
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend"))
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+        
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        from app.models.summary import Summary
+        from app.models.video import Video
+        from app.core.constants import RagStatus
+        from ai_workers.modules.fusion.summarizer import Summarizer
+        
+        summary = db.query(Summary).filter(Summary.video_id == video_id).first()
+        if not summary:
+            raise ValueError(f"No summary found for video {video_id}")
+            
+        utterances = []
+        if summary.transcript_text:
+            try:
+                utterances = json.loads(summary.transcript_text)
+            except Exception:
+                pass
+                
+        slides = summary.keyframes_json or []
+        
+        summarizer = Summarizer()
+        rag_success = summarizer.build_rag_index(video_id, utterances, slides)
+        
+        if rag_success:
+            db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.READY})
+        else:
+            db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.FAILED})
+        db.commit()
+    except Exception as e:
+        if self.request.retries >= self.max_retries:
+            from app.models.video import Video
+            from app.core.constants import RagStatus
+            db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.FAILED})
+            db.commit()
+        raise e
+    finally:
+        db.close()

@@ -296,7 +296,9 @@ class SemanticAnalyzer:
             return
 
         for scene in scenes:
-            scene.setdefault("caption", f"Keyframe for Scene {scene.get('scene_index', '')}".strip())
+            current_cap = scene.get("caption", "")
+            if not current_cap or current_cap.startswith("Keyframe for Scene"):
+                scene["caption"] = "Visual description unavailable"
 
         if not worker_settings.ENABLE_FLORENCE_CAPTIONING:
             print("[Semantic] Florence-2 captioning disabled by ENABLE_FLORENCE_CAPTIONING=0.")
@@ -319,8 +321,7 @@ class SemanticAnalyzer:
             verify_florence_model(model_dir)
             determinism = FlorenceDeterminism(runtime)
             determinism.enable()
-            caption_scenes = self._select_florence_caption_scenes(scenes)
-            skipped_count = len(scenes) - len(caption_scenes)
+            caption_scenes = [s for s in scenes if s.get("keyframe_path") and os.path.exists(s["keyframe_path"])]
             if not caption_scenes:
                 print("[Semantic] No scenes selected for Florence-2 captioning.")
                 return
@@ -333,8 +334,9 @@ class SemanticAnalyzer:
             if cuda_memory_mb is not None:
                 free_mb, total_mb = cuda_memory_mb
                 print(f"[Semantic] Available VRAM before Florence-2 load: {free_mb}/{total_mb} MB.")
-            if skipped_count > 0:
-                print(f"[Semantic] Skipping Florence-2 for {skipped_count} lower-priority frames.")
+            if cuda_memory_mb is not None:
+                free_mb, total_mb = cuda_memory_mb
+                print(f"[Semantic] Available VRAM before Florence-2 load: {free_mb}/{total_mb} MB.")
             
             # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
             import transformers
@@ -360,7 +362,7 @@ class SemanticAnalyzer:
             processor = AutoProcessor.from_pretrained(
                 model_dir,
                 trust_remote_code=True,
-                use_fast=False,
+                use_fast=True,
             )
             print("[Semantic] Florence-2 processor loaded.", flush=True)
             print("[Semantic] Loading Florence-2 model weights...", flush=True)
@@ -388,81 +390,91 @@ class SemanticAnalyzer:
                 else worker_settings.FLORENCE_CPU_NUM_BEAMS
             )
             
-            for scene in caption_scenes:
-                path = scene.get("keyframe_path")
-                if not path or not os.path.exists(path):
-                    continue
-                    
-                try:
-                    with Image.open(path) as image:
-                        raw_image = image.convert("RGB")
+            batch_size = max(1, worker_settings.FLORENCE_MAX_BATCH_SIZE)
+            for i in range(0, len(caption_scenes), batch_size):
+                batch = caption_scenes[i:i + batch_size]
+                print(f"[Semantic] Processing Florence-2 batch {i//batch_size + 1} ({len(batch)} frames)...")
+                
+                for scene in batch:
+                    path = scene.get("keyframe_path")
+                    if not path or not os.path.exists(path):
+                        continue
+                        
+                    try:
+                        with Image.open(path) as image:
+                            raw_image = image.convert("RGB")
 
-                        # Pad to square to fix Florence-2 "only support square feature maps for now" error
-                        width, height = raw_image.size
-                        if width != height:
-                            size = max(width, height)
-                            padded_image = Image.new("RGB", (size, size), (0, 0, 0))
-                            padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
-                            proc_image = padded_image
-                        else:
-                            proc_image = raw_image
+                            # Pad to square to fix Florence-2 "only support square feature maps for now" error
+                            width, height = raw_image.size
+                            if width != height:
+                                size = max(width, height)
+                                padded_image = Image.new("RGB", (size, size), (0, 0, 0))
+                                padded_image.paste(raw_image, ((size - width) // 2, (size - height) // 2))
+                                proc_image = padded_image
+                            else:
+                                proc_image = raw_image
 
-                        inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt")
-                        inputs = {key: value.to(runtime.device) for key, value in inputs.items()}
-                        inputs["pixel_values"] = inputs["pixel_values"].to(dtype=runtime.dtype)
+                            inputs = processor(text=task_prompt, images=proc_image, return_tensors="pt")
+                            inputs = {key: value.to(runtime.device) for key, value in inputs.items()}
+                            inputs["pixel_values"] = inputs["pixel_values"].to(dtype=runtime.dtype)
 
-                        with torch.no_grad():
-                            generated_ids = model.generate(
-                                input_ids=inputs["input_ids"],
-                                pixel_values=inputs["pixel_values"],
-                                max_new_tokens=64,
-                                num_beams=num_beams,
-                                do_sample=False,
-                                early_stopping=True,
-                                no_repeat_ngram_size=3,
-                                repetition_penalty=1.2,
-                                eos_token_id=processor.tokenizer.eos_token_id,
-                                pad_token_id=processor.tokenizer.pad_token_id,
+                            with torch.no_grad():
+                                generated_ids = model.generate(
+                                    input_ids=inputs["input_ids"],
+                                    pixel_values=inputs["pixel_values"],
+                                    max_new_tokens=64,
+                                    num_beams=num_beams,
+                                    do_sample=False,
+                                    early_stopping=True,
+                                    no_repeat_ngram_size=3,
+                                    repetition_penalty=1.2,
+                                    eos_token_id=processor.tokenizer.eos_token_id,
+                                    pad_token_id=processor.tokenizer.pad_token_id,
+                                )
+
+                            generated_text = processor.batch_decode(
+                                generated_ids,
+                                skip_special_tokens=False,
+                            )[0]
+                            parsed_answer = processor.post_process_generation(
+                                generated_text,
+                                task=task_prompt,
+                                image_size=(raw_image.width, raw_image.height),
                             )
-
-                        generated_text = processor.batch_decode(
-                            generated_ids,
-                            skip_special_tokens=False,
-                        )[0]
-                        parsed_answer = processor.post_process_generation(
-                            generated_text,
-                            task=task_prompt,
-                            image_size=(raw_image.width, raw_image.height),
-                        )
-                    
-                    # The answer is a dict, we extract the task value
-                    caption = parsed_answer.get(task_prompt, "")
-                    if not isinstance(caption, str):
-                        caption = str(caption)
                         
-                    caption = caption.strip()
-                    # Remove robotic prefixes to make it sound natural
-                    lower_cap = caption.lower()
-                    prefixes = [
-                        "the image shows a ", "the image shows an ", "the image shows ", 
-                        "the image is a ", "the image is an ", "the image is ",
-                        "this image shows a ", "this image shows an ", "this image shows ",
-                        "this is a picture of a ", "this is a picture of an ", "this is a picture of ",
-                        "this is a ", "this is an "
-                    ]
-                    for prefix in prefixes:
-                        if lower_cap.startswith(prefix):
-                            caption = caption[len(prefix):]
-                            if caption:
-                                caption = caption[0].upper() + caption[1:]
-                            break
-                    
-                    scene["caption"] = caption
+                        # The answer is a dict, we extract the task value
+                        caption = parsed_answer.get(task_prompt, "")
+                        if not isinstance(caption, str):
+                            caption = str(caption)
+                            
+                        caption = caption.strip()
+                        # Remove robotic prefixes to make it sound natural
+                        lower_cap = caption.lower()
+                        prefixes = [
+                            "the image shows a ", "the image shows an ", "the image shows ", 
+                            "the image is a ", "the image is an ", "the image is ",
+                            "this image shows a ", "this image shows an ", "this image shows ",
+                            "this is a picture of a ", "this is a picture of an ", "this is a picture of ",
+                            "this is a ", "this is an "
+                        ]
+                        for prefix in prefixes:
+                            if lower_cap.startswith(prefix):
+                                caption = caption[len(prefix):]
+                                if caption:
+                                    caption = caption[0].upper() + caption[1:]
+                                break
                         
-                except Exception as e:
-                    print(f"[Semantic] Error generating Florence-2 caption for {path}: {e}")
-                    if "caption" not in scene:
-                        scene["caption"] = "Image"
+                        if caption:
+                            scene["caption"] = caption
+                            
+                    except Exception as e:
+                        print(f"[Semantic] Error generating Florence-2 caption for {path}: {e}")
+                
+                # End of batch cleanup to free up VRAM/RAM
+                image = raw_image = padded_image = proc_image = inputs = generated_ids = generated_text = parsed_answer = None
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
         except FlorenceResourceError as e:
             print(f"[Semantic] {e}")
         finally:
@@ -478,25 +490,6 @@ class SemanticAnalyzer:
             gc.collect()
             print("[Semantic] Florence-2 model released successfully.")
 
-    def _select_florence_caption_scenes(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        max_captions = max(0, worker_settings.FLORENCE_MAX_CAPTIONS)
-        candidates = [
-            scene
-            for scene in scenes
-            if scene.get("keyframe_path") and os.path.exists(scene["keyframe_path"])
-        ]
-        if max_captions == 0 or not candidates:
-            return []
-        if len(candidates) <= max_captions:
-            return candidates
-
-        ranked = sorted(
-            enumerate(candidates),
-            key=lambda item: item[1].get("importanceScore", 0.0),
-            reverse=True,
-        )[:max_captions]
-        return [scene for _, scene in sorted(ranked, key=lambda item: item[0])]
-        
     def extract_ocr_paddleocr(self, scenes: list[dict[str, Any]]):
         """Extract text from scenes using PaddleOCR."""
         if not scenes:
