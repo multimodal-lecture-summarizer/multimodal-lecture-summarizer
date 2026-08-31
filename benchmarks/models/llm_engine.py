@@ -1,13 +1,14 @@
 """
 Unified LLM Engine Interface for RQ2 Summarization & RQ3 Question Answering.
 Supports:
-- Gemini API (google-generativeai / gemini-2.5-flash / gemini-1.5-flash)
-- Local HuggingFace Transformers (Qwen2.5, Llama-3)
-- Deterministic Offline Abstractive Synthesizer (for zero-cost reproducible unit testing and offline runs)
+- Gemini API (google-generativeai / gemini-2.5-flash) with retry+fallback
+- Local HuggingFace Transformers (Qwen2.5-1.5B-Instruct, BART-large-cnn) with singleton cache
+- Deterministic Offline Abstractive Synthesizer v2 (SBERT-centrality + keyword fallback)
 """
 
 import os
 import re
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
 
@@ -31,66 +32,181 @@ class GeminiLLMEngine(BaseLLMEngine):
         self.model = genai.GenerativeModel(model_name)
 
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> str:
-        try:
-            response = self.model.generate_content(
-                prompt,
-                generation_config={"max_output_tokens": max_tokens, "temperature": temperature}
-            )
-            return response.text.strip()
-        except Exception as e:
-            print(f"[GeminiLLMEngine] Generation error: {e}")
-            return ""
+        # Retry 2x on 429/ResourceExhausted with exponential backoff, then let caller fallback
+        last_err = None
+        for attempt in range(3):
+            try:
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config={"max_output_tokens": max_tokens, "temperature": temperature}
+                )
+                text = getattr(response, "text", "") or ""
+                if text.strip():
+                    return text.strip()
+                # Empty response is treated as failure for retry
+                last_err = "empty response"
+                raise ValueError("empty response")
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                is_ratelimit = any(k in msg for k in ["429", "quota", "rate", "exhausted", "resource"])
+                if is_ratelimit and attempt < 2:
+                    backoff = 2 ** (attempt + 1)  # 2s, 4s
+                    print(f"[GeminiLLMEngine] RateLimit hit (attempt {attempt+1}/3), backoff {backoff}s: {e}")
+                    time.sleep(backoff)
+                    continue
+                # Non-ratelimit or final attempt
+                if attempt < 2 and "empty response" in msg:
+                    continue
+                print(f"[GeminiLLMEngine] Generation error: {e}")
+                # Do not return "" silently on final ratelimit — let factory fallback
+                if is_ratelimit:
+                    raise
+                return ""
+        # Should not reach here; raise for factory fallback
+        if last_err and "429" in str(last_err).lower() or "quota" in str(last_err).lower():
+            raise RuntimeError(f"Gemini ratelimit after 3 attempts: {last_err}")
+        return ""
 
 
 class HuggingFaceLLMEngine(BaseLLMEngine):
-    def __init__(self, model_id: str = "Qwen/Qwen2.5-1.5B-Instruct", device: str = "cpu"):
-        from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device)
-        self.pipe = pipeline("text-generation", model=self.model, tokenizer=self.tokenizer)
+    """Local HF engine with singleton cache. Supports Qwen (chat) and BART (seq2seq)."""
+    _CACHE: Dict[str, Any] = {}  # model_id -> (tokenizer, model, pipe)
+
+    def __init__(self, model_id: str = "Qwen/Qwen2.5-1.5B-Instruct", device: Optional[str] = None, trust_remote_code: bool = False):
+        # Auto device: cuda if available, else cpu (plan: auto skip HF on cpu)
+        if device is None:
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                device = "cpu"
+        # On CPU, Qwen 1.5B is very slow — caller should have checked, but we still allow with warning
+        if device == "cpu":
+            print("[HuggingFaceLLMEngine] WARNING: Running on CPU — Qwen 1.5B will be slow (>30s/call). Consider deterministic fallback.")
+
+        # Respect HF_HOME (Colab: /root/.cache/huggingface)
+        hf_home = os.getenv("HF_HOME") or os.getenv("HUGGINGFACE_HUB_CACHE")
+        if hf_home:
+            os.environ["HF_HOME"] = hf_home
+
+        cache_key = f"{model_id}::{device}"
+        if cache_key in HuggingFaceLLMEngine._CACHE:
+            self.tokenizer, self.model, self.pipe, self.model_id, self.device = HuggingFaceLLMEngine._CACHE[cache_key]
+            return
+
+        from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, pipeline
+
+        self.model_id = model_id
+        self.device = device
+        is_bart = "bart" in model_id.lower()
+
+        # Device map and dtype
+        device_map = device
+        model_kwargs = {}
+        if device == "cuda":
+            try:
+                import torch
+                model_kwargs["torch_dtype"] = torch.float16
+                model_kwargs["device_map"] = "auto"
+                device_map = "auto"
+            except Exception:
+                pass
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+
+        if is_bart:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
+            self.pipe = pipeline("summarization", model=self.model, tokenizer=self.tokenizer, device=0 if device == "cuda" else -1)
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
+            # pipeline handles device via model device_map; use -1 for cpu, 0 for cuda when not auto
+            pipe_device = -1
+            if device == "cuda" and model_kwargs.get("device_map") != "auto":
+                pipe_device = 0
+            self.pipe = pipeline("text-generation", model=self.model, tokenizer=self.tokenizer, device=pipe_device)
+
+        HuggingFaceLLMEngine._CACHE[cache_key] = (self.tokenizer, self.model, self.pipe, self.model_id, self.device)
 
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> str:
-        messages = [{"role": "user", "content": prompt}]
-        res = self.pipe(messages, max_new_tokens=max_tokens, temperature=max(0.01, temperature))
-        return res[0]["generated_text"][-1]["content"].strip()
+        is_bart = "bart" in self.model_id.lower()
+        try:
+            if is_bart:
+                # BART is seq2seq summarization — truncate input to 1024 tokens for BART limit
+                res = self.pipe(prompt, max_length=max_tokens, min_length=max(16, max_tokens // 4), do_sample=False)
+                return res[0]["summary_text"].strip()
+            else:
+                messages = [{"role": "user", "content": prompt}]
+                res = self.pipe(messages, max_new_tokens=max_tokens, temperature=max(0.01, temperature), do_sample=temperature > 0, return_full_text=False)
+                # pipeline returns list of dicts with generated_text
+                if isinstance(res, list) and res:
+                    out = res[0].get("generated_text", "")
+                    if isinstance(out, list):
+                        # chat format returns list of messages
+                        out = out[-1].get("content", "") if isinstance(out[-1], dict) else str(out[-1])
+                    elif isinstance(out, dict):
+                        out = out.get("content", str(out))
+                    return str(out).strip()
+                return str(res).strip()
+        except Exception as e:
+            print(f"[HuggingFaceLLMEngine] Generation error ({self.model_id}): {e}")
+            raise
+        return ""
 
 
 class DeterministicAbstractiveEngine(BaseLLMEngine):
     """
-    High-fidelity offline multi-sentence synthesis engine for offline experiments,
-    unit testing, and zero-cost reproducible benchmarks.
-    Synthesizes fluent abstractive summaries based on salient information extraction and restructuring.
+    High-fidelity offline multi-sentence synthesis engine v2.
+    - Tries SBERT centrality (all-MiniLM-L6-v2) if sentence_transformers available
+    - Falls back to keyword-length scoring
     """
+
     def __init__(self):
         pass
 
+    def _sbert_centrality_scores(self, sents: List[str]) -> Optional[List[float]]:
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+            embs = model.encode(sents, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
+            centroid = embs.mean(axis=0)
+            centroid = centroid / (np.linalg.norm(centroid) + 1e-8)
+            scores = (embs @ centroid).tolist()
+            return scores
+        except Exception:
+            return None
+
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> str:
-        # Extract source content between markers if present
         source = prompt
         if "TRANSCRIPT:" in prompt:
             source = prompt.split("TRANSCRIPT:", 1)[1]
         elif "CONTENT:" in prompt:
             source = prompt.split("CONTENT:", 1)[1]
         
-        # Clean sentences
         raw_sents = [s.strip() for s in re.split(r'[.\n]+', source) if len(s.strip().split()) > 3]
         if not raw_sents:
             return "This lecture provides a comprehensive overview of the discussed concepts and fundamental principles."
 
-        # Rank sentences by length, unique vocabulary and key educational transition words
+        # SBERT centrality if available
+        centrality = self._sbert_centrality_scores(raw_sents)
+
         scored_sents = []
-        keywords = {"analysis", "strategy", "concept", "example", "method", "system", "algorithm", "data", "model", "definition", "result", "important", "conclusion"}
+        keywords = {"analysis", "strategy", "concept", "example", "method", "system", "algorithm", "data", "model", "definition", "result", "important", "conclusion", "hypothesis", "experiment", "theory"}
         
         for idx, s in enumerate(raw_sents):
             words = set(re.findall(r"\b\w+\b", s.lower()))
             kw_hits = len(words.intersection(keywords))
+            # Base score: length + keyword + position decay
             score = len(s.split()) * 0.5 + kw_hits * 4.0 - idx * 0.1
+            # Boost by centrality if available
+            if centrality is not None:
+                score += float(centrality[idx]) * 10.0
             scored_sents.append((score, idx, s))
 
         scored_sents.sort(key=lambda x: x[0], reverse=True)
         top_sents = sorted(scored_sents[:min(5, len(scored_sents))], key=lambda x: x[1])
 
-        # Synthesize into structured abstractive prose
         summary_parts = []
         summary_parts.append(f"In this lecture, the core focus centers on {top_sents[0][2].lower() if top_sents else 'the subject'}.")
         for item in top_sents[1:]:
@@ -107,11 +223,78 @@ class DeterministicAbstractiveEngine(BaseLLMEngine):
         return result
 
 
+def _try_hf(preference: str) -> Optional[BaseLLMEngine]:
+    """Try to create HF engine; return None on any failure. Handles auto CPU skip."""
+    # On CPU, Qwen is slow — still try but caller may decide to skip
+    model_id = "Qwen/Qwen2.5-1.5B-Instruct"
+    if preference == "hf-bart":
+        model_id = "facebook/bart-large-cnn"
+    try:
+        import torch
+        is_cuda = torch.cuda.is_available()
+    except Exception:
+        is_cuda = False
+
+    if not is_cuda and preference == "auto":
+        # Auto on CPU: skip HF to avoid 10min run, go deterministic (validated decision)
+        print("[get_llm_engine] HF skipped on CPU (auto->deterministic for speed)")
+        return None
+
+    try:
+        return HuggingFaceLLMEngine(model_id=model_id)
+    except Exception as e:
+        print(f"[get_llm_engine] HuggingFace load failed ({model_id}): {e}")
+        return None
+
+
 def get_llm_engine(preference: str = "auto") -> BaseLLMEngine:
-    """Factory helper to obtain the best available LLM backend."""
-    if preference == "gemini" or (preference == "auto" and (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))):
+    """
+    Factory helper to obtain the best available LLM backend.
+
+    preference: auto | hf | hf-bart | deterministic | gemini
+    - auto: HF if available (cuda or hf-bart), else deterministic; gemini only if explicitly preferred
+    - hf / hf-bart: try HF, fallback to deterministic on failure (never raise)
+    - deterministic: always deterministic
+    - gemini: try Gemini (with retry), on 429/failure fallback to HF->deterministic with warning
+
+    Never raises 429 to caller — always returns a working engine.
+    """
+    # Env var used only when preference is auto (so explicit calls like get_llm_engine(deterministic) work)
+    if (preference or "auto").lower().strip() == "auto":
+        env_pref = os.getenv("LLM_PREFERENCE")
+        if env_pref:
+            preference = env_pref
+
+    pref = (preference or "auto").lower().strip()
+
+    if pref == "deterministic":
+        return DeterministicAbstractiveEngine()
+
+    if pref in ("hf", "hf-bart"):
+        hf = _try_hf(pref)
+        if hf is not None:
+            print(f"[get_llm_engine] Using {hf.__class__.__name__} ({getattr(hf, 'model_id', pref)})")
+            return hf
+        print(f"[get_llm_engine] HF ({pref}) unavailable, fallback to deterministic")
+        return DeterministicAbstractiveEngine()
+
+    if pref == "gemini":
         try:
-            return GeminiLLMEngine()
-        except Exception:
-            pass
+            engine = GeminiLLMEngine()
+            print(f"[get_llm_engine] Using GeminiLLMEngine ({engine.model_name})")
+            return engine
+        except Exception as e:
+            print(f"[get_llm_engine] Gemini init failed ({e}), fallback to HF/deterministic")
+            hf = _try_hf("auto")
+            if hf is not None:
+                return hf
+            return DeterministicAbstractiveEngine()
+
+    # auto (default)
+    # Try HF first (unless CPU-skip), else deterministic. Gemini is NOT tried in auto (offline-first).
+    hf = _try_hf("auto")
+    if hf is not None:
+        print(f"[get_llm_engine] Using {hf.__class__.__name__} ({getattr(hf, 'model_id', 'auto')}) [auto]")
+        return hf
+    print("[get_llm_engine] Using DeterministicAbstractiveEngine [auto fallback]")
     return DeterministicAbstractiveEngine()

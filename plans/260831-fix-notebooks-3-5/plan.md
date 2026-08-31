@@ -6,7 +6,7 @@ priority: P1
 branch: "main"
 tags: [notebook, benchmark, rq1, rq2, rq3, data-integrity]
 blockedBy: []
-blocks: []
+blocks: [260831-ratelimit-free-summarization]
 created: "2026-08-31T10:26:54.933Z"
 createdBy: "ck:plan"
 source: skill
