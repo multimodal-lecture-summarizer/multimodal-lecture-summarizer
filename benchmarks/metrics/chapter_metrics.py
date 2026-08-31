@@ -220,3 +220,30 @@ def window_diff(
             penalties += 1
 
     return penalties / total_windows if total_windows > 0 else 0.0
+
+
+def compute_all_chapter_metrics(
+    gold_boundaries_sec: Sequence[float],
+    pred_boundaries_sec: Sequence[float],
+    video_duration_sec: float = 1800.0,
+) -> dict[str, float]:
+    """Calculate all chaptering benchmark metrics in one call:
+    - Collar F1 @ 3s, 5s, 10s
+    - Beeferman's P_k
+    - Pevzner & Hearst's WindowDiff
+    """
+    multi_f1 = compute_multi_collar_f1(gold_boundaries_sec, pred_boundaries_sec, tolerances=(3.0, 5.0, 10.0))
+    
+    ref_bin = boundaries_to_binary_sequence(gold_boundaries_sec, video_duration_sec, step_sec=1.0)
+    hyp_bin = boundaries_to_binary_sequence(pred_boundaries_sec, video_duration_sec, step_sec=1.0)
+    
+    pk = pk_metric(ref_bin, hyp_bin)
+    wd = window_diff(ref_bin, hyp_bin)
+    
+    return {
+        "collar_f1_3s": multi_f1["collar_3s_f1"],
+        "collar_f1_5s": multi_f1["collar_5s_f1"],
+        "collar_f1_10s": multi_f1["collar_10s_f1"],
+        "pk": pk,
+        "window_diff": wd,
+    }

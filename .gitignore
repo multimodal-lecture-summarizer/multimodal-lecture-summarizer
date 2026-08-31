@@ -16,11 +16,12 @@ uploads/
 storage/
 *.wav
 
-# Models
-models/
+# Models (weights and checkpoints at root)
+/models/
 *.pt
 *.bin
 *.onnx
+!benchmarks/models/
 
 # Videos (large files)
 videos/
