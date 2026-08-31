@@ -1,0 +1,10 @@
+{
+  "loaded": false,
+  "gating": "open",
+  "license": "unknown",
+  "siblings_count": 19468,
+  "streaming_error": "ValueError(\"Config name is missing.\\nPlease pick one among the available configs: ['audio', 'text', 'titles']\\nExample of usage:\\n\\t`load_dataset('ytseg', 'audio')`\")",
+  "full_load_error": "ValueError(\"Config name is missing.\\nPlease pick one among the available configs: ['audio', 'text', 'titles']\\nExample of usage:\\n\\t`load_dataset('ytseg', 'audio')`\")",
+  "yt_probe": [],
+  "elapsed_sec": 17.826478699998916
+}

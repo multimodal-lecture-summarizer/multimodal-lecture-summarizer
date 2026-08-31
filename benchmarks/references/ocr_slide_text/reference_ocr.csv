@@ -1,0 +1,6 @@
+image_id,image_path,reference_text,reference_caption,required_keywords,notes
+keyframe_scene_0,storage/mock_r2_bucket/keyframes/07903484-67b1-4bc8-9841-492e47fe001a/keyframe_scene_0.png,,,,
+keyframe_scene_1,storage/mock_r2_bucket/keyframes/07903484-67b1-4bc8-9841-492e47fe001a/keyframe_scene_1.png,,,,
+keyframe_scene_10,storage/mock_r2_bucket/keyframes/07903484-67b1-4bc8-9841-492e47fe001a/keyframe_scene_10.png,,,,
+keyframe_scene_11,storage/mock_r2_bucket/keyframes/07903484-67b1-4bc8-9841-492e47fe001a/keyframe_scene_11.png,,,,
+keyframe_scene_12,storage/mock_r2_bucket/keyframes/07903484-67b1-4bc8-9841-492e47fe001a/keyframe_scene_12.png,,,,

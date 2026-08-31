@@ -1,0 +1,6 @@
+{
+  "available": false,
+  "torch_version": "2.5.1+cpu",
+  "cuda_available": false,
+  "error": "no CUDA; cannot measure T4"
+}

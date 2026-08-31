@@ -1,0 +1,3 @@
+{
+  "text_splits_error": "HfHubHTTPError(\"429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/retkowski/ytseg/revision/4ee1c1fccc5a9e118ff0918f3df1e61aadca8970 (Request ID: Root=1-6a950b6f-42b01f1e607aed9575edc202;2a017ec9-76a2-4ba2-abd2-4712d23e21e7)\\n\\nWe had to rate limit your IP (2405:4802:90"
+}

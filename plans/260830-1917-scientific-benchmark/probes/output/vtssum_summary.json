@@ -1,0 +1,43 @@
+{
+  "top_level": [
+    ".git",
+    "README.md",
+    "dev",
+    "test",
+    "train"
+  ],
+  "json_files_sample": [
+    "dev\\222mjiypn6dodmork5qj7jkunpp2guul.json",
+    "dev\\22za3c4l6syoeyr4bseniiweezijck43.json",
+    "dev\\23ddg2hr3oyqtcfqjbdgcghfcp3ty66w.json",
+    "dev\\25jsw5qqfzxfxk2gphos7z3gq56q7mhs.json",
+    "dev\\26agbwp3whhs5iwfmv74zhvpqaev4xiu.json",
+    "dev\\26e6vhmzobe6sm7xkxasj6jycni7wxbz.json",
+    "dev\\26geya23jnfoc3uxk4k7lsgz3y4a7peq.json",
+    "dev\\27kprpytjrcv6mhstl7lxz7hmixj2twi.json",
+    "dev\\27v7ds5zmngl2ibsw2onyydz2dfk2j5b.json",
+    "dev\\2aodxedulqbcpde62zz25kk3g4p2tiof.json",
+    "dev\\2as6xhyovazejpdpybklyg4xz6rvwkbx.json",
+    "dev\\2bxwzb6zqyy7d56wdzhvuf3dnsnnoran.json",
+    "dev\\2cevuhn3xk5hmo72qntqgxugpgff266s.json",
+    "dev\\2chbehxvjekzmvaziwcaa3ghjh4hcoqa.json",
+    "dev\\2cxjqmp3stlp3uv45gby35c6izpd5cbe.json",
+    "dev\\2dwqhhphh6yd4o7gqzrp5xacceiznsjp.json",
+    "dev\\2ebawmdaiwygtvnqb6kuw5kxvc5rh6at.json",
+    "dev\\2f6r3ocxptcaibihoiogl3dotwie5ton.json",
+    "dev\\2fpsv7whs6sryhgmdbolhf5dj7tbao7r.json",
+    "dev\\2fxc4q7fezk4ytxkr3wwnapvwedb2yds.json",
+    "dev\\2h6v5xeeup47qk3p3xypd2lpw222fe6m.json",
+    "dev\\2imkgr6csa3jfbaemzxxcprdb6aod5kr.json",
+    "dev\\2iyzdz6bn4uklgbfyuzczqoq5zganiv5.json",
+    "dev\\2j6524naxgqhqv4gfkonchacf2rmobpo.json",
+    "dev\\2k7xth5funbu43sepflmvbegynukp4pb.json",
+    "dev\\2kgoqow7mo5xqtibfy2mwebpeeystisr.json",
+    "dev\\2m6pjclgmq57k6an566xrzmpid5gmtp7.json",
+    "dev\\2mfhhdtkg7xwh7boq6mao5yucx6oe72d.json",
+    "dev\\2mpm3a2cpd7nny3gsdefqn6lnmfek5fm.json",
+    "dev\\2ngmc5aeksm24iz6ddr7u3s6seqbubke.json"
+  ],
+  "json_files_count": 9616,
+  "elapsed_sec": 25.15307550000034
+}

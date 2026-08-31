@@ -1,0 +1,24 @@
+{
+  "gigant/tib-bench": {
+    "splits": [
+      "train"
+    ],
+    "ok": true
+  },
+  "gigant/tib-bench-mm-test": {
+    "splits": [
+      "train"
+    ],
+    "ok": true
+  },
+  "gigant/tib-bench-mm-part1": {
+    "error": "DatasetNotFoundError(\"Dataset 'gigant/tib-bench-mm-part1' doesn't exist on the Hub or cannot be accessed. If the dataset is private or gated, make sure to log in with `huggingface-cli login` or visit the dataset page at https://huggingface.co/datasets/gigant/tib-bench-mm-part1 to ask for access.\")",
+    "ok": false
+  },
+  "gigant/tib_slides": {
+    "splits": [
+      "train"
+    ],
+    "ok": true
+  }
+}

@@ -508,3 +508,21 @@ def mean_ignore_nan(values: Iterable[float | None]) -> float:
     if not nums:
         return float("nan")
     return sum(nums) / len(nums)
+
+
+# ---------------------------------------------------------------------------
+# Chapter segmentation metrics (Collar F1, Pk, WindowDiff)
+# ---------------------------------------------------------------------------
+
+try:
+    from benchmarks.metrics.chapter_metrics import (
+        CollarMetrics,
+        collar_f1,
+        compute_multi_collar_f1,
+        boundaries_to_binary_sequence,
+        pk_metric,
+        window_diff,
+    )
+except ImportError:
+    pass
+

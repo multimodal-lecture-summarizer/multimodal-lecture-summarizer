@@ -1,0 +1,942 @@
+[
+  {
+    "doi": "10.5446/19252 (DOI)",
+    "title": "Lecture 10. 13C NMR Chemical Shifts",
+    "license": "CC Attribution - ShareAlike 3.0 USA: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 496,
+    "transcript_len": 31750,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/54699 (DOI)",
+    "title": "On modular representations of GL_2(L) for unramified L",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 189,
+    "transcript_len": 54332,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16238 (DOI)",
+    "title": "15 Even More Probe Diffusion",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 146,
+    "transcript_len": 49091,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18965 (DOI)",
+    "title": "Lecture 24. Enzymes",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 529,
+    "transcript_len": 26171,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49084 (DOI)",
+    "title": "Avestan – Introduction, Part 3",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 111,
+    "transcript_len": 21571,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18321 (DOI)",
+    "title": "Mechanical properties of steel 16: solid solution strengthening",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 200,
+    "transcript_len": 43594,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46068 (DOI)",
+    "title": "Habitats at Herculaneum and Early Roman Interior Decoration",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 1136,
+    "transcript_len": 68137,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19406 (DOI)",
+    "title": "Lecture 01. Introduction to Carboxylic Acids.",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 348,
+    "transcript_len": 45657,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/55664 (DOI)",
+    "title": "2/4 A Brief Introduction to Mean Field Spin Glass Models",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 1265,
+    "transcript_len": 28616,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49241 (DOI)",
+    "title": "Old Irish – Morphology, Part 3",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 130,
+    "transcript_len": 14646,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/48169 (DOI)",
+    "title": "Mathieu Moonshine: Symmetry Surfing and Quarter BPS States at the Kummer Point",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 847,
+    "transcript_len": 47704,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46695 (DOI)",
+    "title": "17. Ray or Geometrical Optics II",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 332,
+    "transcript_len": 53266,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/42705 (DOI)",
+    "title": "9. Diagrams for light-atom interactions",
+    "license": "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 85,
+    "transcript_len": 23559,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46067 (DOI)",
+    "title": "Lifestyles of the Rich and Famous: Houses and Villas at Pompeii",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 831,
+    "transcript_len": 71235,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19420 (DOI)",
+    "title": "Lecture 16. Introduction to Carbohydrates: Structure and Stereochemistry.",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 348,
+    "transcript_len": 38255,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18324 (DOI)",
+    "title": "Mechanical properties of steel 19: strain hardening",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 194,
+    "transcript_len": 38642,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16432 (DOI)",
+    "title": "The p-adic Simpson correspondence and Higgs isocrystals",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 469,
+    "transcript_len": 25268,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/35244 (DOI)",
+    "title": "Differential forms",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 2.5 Switzerland: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 118,
+    "transcript_len": 30510,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18893 (DOI)",
+    "title": "Lecture 15. Hydrogen Wavefunctions, Quantum Numbers, Term Symbols and Transitions",
+    "license": "CC Attribution - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 142,
+    "transcript_len": 32333,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19233 (DOI)",
+    "title": "Lecture 17. Enols, Enamines, and Enolates",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 337,
+    "transcript_len": 39448,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16306 (DOI)",
+    "title": "1/2 Introduction to Polyfold Regularization",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 387,
+    "transcript_len": 43251,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19362 (DOI)",
+    "title": "Lecture 16. Chemical Equilibrium, Part III",
+    "license": "CC Attribution - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 221,
+    "transcript_len": 42926,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18987 (DOI)",
+    "title": "Lecture 22. Effusion Continued and Real Gasses",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 223,
+    "transcript_len": 36067,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/59226 (DOI)",
+    "title": "On some relations between Optimal Transport and Stochastic Geometric Mechanics",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 135,
+    "transcript_len": 27734,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/20847 (DOI)",
+    "title": "Trade-offs in Distributed Learning",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 466,
+    "transcript_len": 45532,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/20490 (DOI)",
+    "title": "On the cycle class map for zero-cycles over local fields",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 708,
+    "transcript_len": 40632,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49058 (DOI)",
+    "title": "Early Latin – Morphosyntactic structures, Part 3",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 81,
+    "transcript_len": 11449,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/43775 (DOI)",
+    "title": "6/6 On the local Langlands conjectures for reductive groups over p-adic fields",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 1330,
+    "transcript_len": 47208,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/42645 (DOI)",
+    "title": "3. Wave Mechanics (continued) and Stern-Gerlach Experiment",
+    "license": "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 118,
+    "transcript_len": 48956,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49498 (DOI)",
+    "title": "Gothic – Phonology, Part 2",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 96,
+    "transcript_len": 27148,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/42630 (DOI)",
+    "title": "13. Quantum Dynamics (continued)",
+    "license": "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 114,
+    "transcript_len": 42580,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49252 (DOI)",
+    "title": "Tocharian – Morphosyntactic Structures, Part 2",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 87,
+    "transcript_len": 18735,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/21649 (DOI)",
+    "title": "The Robinson Annulation & Amines",
+    "license": "CC Attribution - ShareAlike 3.0 USA: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 353,
+    "transcript_len": 26434,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/37206 (DOI)",
+    "title": "Lecture Stoechiometric Organometallics 15 - 02.12.13",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 134,
+    "transcript_len": 22052,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/56103 (DOI)",
+    "title": "Bulk-boundary correspondence for disordered free-fermion topological phases",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 933,
+    "transcript_len": 33614,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16297 (DOI)",
+    "title": "4/4 Polyfolds and the construction of Symplectic Field Theory",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 174,
+    "transcript_len": 52617,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49490 (DOI)",
+    "title": "Early Vedic – Introduction, Part 3",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 109,
+    "transcript_len": 18425,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16315 (DOI)",
+    "title": "Fredholm theory and Deligne-Mumford spaces for witch balls",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 553,
+    "transcript_len": 43931,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.14288/1.0397420 (DOI)",
+    "title": "On an arithmetic criterion for holonomicity",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 479,
+    "transcript_len": 39071,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/57321 (DOI)",
+    "title": "Contracting self-similar groups and conformal dimension",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 2.0 Generic: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 876,
+    "transcript_len": 35494,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46042 (DOI)",
+    "title": "Electrodes 101 - Voltage and current in galvanic cells and electrolysis cells",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 573,
+    "transcript_len": 10715,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/15062 (DOI)",
+    "title": "Cosmology | Lecture 4",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 177,
+    "transcript_len": 66043,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/44092 (DOI)",
+    "title": "7th HLF – Lecture: A personal journey into the world of mathematics",
+    "license": "No Open Access License: German copyright law applies. This film may be used for your own use but it may not be distributed via the internet or passed on to external parties.",
+    "abstract_len": 424,
+    "transcript_len": 32106,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49519 (DOI)",
+    "title": "Hittite – Morphology, Part 1",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 112,
+    "transcript_len": 12940,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16981 (DOI)",
+    "title": "Where does quantum field theory come from?",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 428,
+    "transcript_len": 40150,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18916 (DOI)",
+    "title": "Lecture 08. Molecular Motion.",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 218,
+    "transcript_len": 28998,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/55531 (DOI)",
+    "title": "Toposes of presheaves on monoids as generalized topological spaces",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 899,
+    "transcript_len": 36037,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49068 (DOI)",
+    "title": "Old Albanian – Introduction, Part 4",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 85,
+    "transcript_len": 12302,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46690 (DOI)",
+    "title": "1. Course Introduction and Newtonian Mechanics",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 395,
+    "transcript_len": 61323,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16213 (DOI)",
+    "title": "17 More Probe Diffusion",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 129,
+    "transcript_len": 49407,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46705 (DOI)",
+    "title": "12. LCR Circuits—DC Voltage",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 182,
+    "transcript_len": 53181,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18872 (DOI)",
+    "title": "Lecture 13. Protein Function and Enzymes.",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 189,
+    "transcript_len": 66537,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/42698 (DOI)",
+    "title": "4. Non-classical light, squeezing, Part 2",
+    "license": "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 87,
+    "transcript_len": 51578,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49083 (DOI)",
+    "title": "Avestan – Introduction, Part 2",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 105,
+    "transcript_len": 19349,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16235 (DOI)",
+    "title": "9 Dielectric Relaxation, Part 2",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 152,
+    "transcript_len": 52849,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49250 (DOI)",
+    "title": "Old Irish – Morphosyntactic Structures, Part 4",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 184,
+    "transcript_len": 12767,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/44010 (DOI)",
+    "title": "4/4 Equivalence of Liouville quantum gravity and the Brownian map",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 449,
+    "transcript_len": 52343,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18741 (DOI)",
+    "title": "Modern Main Group Chemistry",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 104,
+    "transcript_len": 11270,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/51670 (DOI)",
+    "title": "Spring temperature shapes West Nile Virus (WNV) transmission in Europe",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 644,
+    "transcript_len": 13826,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/36598 (DOI)",
+    "title": "Distinguished Seminar in Robotics, Systems & Control: From Swarm of Flying Robotics to Nanomedicine",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 2.5 Switzerland: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 651,
+    "transcript_len": 46286,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18313 (DOI)",
+    "title": "Mechanical properties of steel 7: evolution of plastic strain",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 300,
+    "transcript_len": 34786,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19235 (DOI)",
+    "title": "Lecture 20. Phosphorus Chemistry",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 449,
+    "transcript_len": 39941,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46064 (DOI)",
+    "title": "It Takes a City: The Founding of Rome and the Beginnings of Urbanism in Italy",
+    "license": "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 749,
+    "transcript_len": 68165,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/57383 (DOI)",
+    "title": "Mean field games with major and minor players",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 2.0 Generic: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 464,
+    "transcript_len": 39162,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/51039 (DOI)",
+    "title": "2/4 The Frobenius Structure Conjecture for Log Calabi-Yau Varieties",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 1933,
+    "transcript_len": 54679,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19011 (DOI)",
+    "title": "Lecture 22. Chemical Kinetics Pt. 1.",
+    "license": "CC Attribution - ShareAlike 3.0 USA: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 245,
+    "transcript_len": 34698,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/37293 (DOI)",
+    "title": "Evaluation (2)",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 170,
+    "transcript_len": 32667,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18975 (DOI)",
+    "title": "Lecture 10. Polarizing Power and Covalent Character",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 219,
+    "transcript_len": 45763,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/43763 (DOI)",
+    "title": "Integrability and non-equilibrium statistical physics",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 417,
+    "transcript_len": 55780,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49456 (DOI)",
+    "title": "Old Church Slavonic – Morphosyntactic structures, Part 1",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 65,
+    "transcript_len": 15749,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/59230 (DOI)",
+    "title": "Semi-discrete unbalanced optimal transport and quantization",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 608,
+    "transcript_len": 37429,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19466 (DOI)",
+    "title": "Lec. 16. Equilibrium Constants: Temperature and Pressure",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 221,
+    "transcript_len": 46916,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19495 (DOI)",
+    "title": "Lecture 26. Electrophilic Aromatic Substitution, Part 3",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 483,
+    "transcript_len": 40636,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49503 (DOI)",
+    "title": "Gothic – Text sample",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 125,
+    "transcript_len": 13218,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/35094 (DOI)",
+    "title": "Are We Still Modern?",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 2.5 Switzerland: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 1200,
+    "transcript_len": 52428,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/46038 (DOI)",
+    "title": "Vapor Pressure 101 - How to describe phase equilibria (Vaporization, Absorption)",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 671,
+    "transcript_len": 10735,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18947 (DOI)",
+    "title": "Lecture 14. The Gibbs Energy.",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 529,
+    "transcript_len": 21378,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/48152 (DOI)",
+    "title": "Compactness of conformal metric with a critical integrability assumption",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 131,
+    "transcript_len": 16984,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19449 (DOI)",
+    "title": "Lecture 11. Mole and Molar Mass (no captions)",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 414,
+    "transcript_len": 34262,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/15131 (DOI)",
+    "title": "String Theory and M-Theory | Lecture 6",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 616,
+    "transcript_len": 58184,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/59258 (DOI)",
+    "title": "A Gutzwiller type trace formula for the magnetic Dirac operator",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 296,
+    "transcript_len": 35234,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18934 (DOI)",
+    "title": "Lecture 26. Final Exam Review",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 208,
+    "transcript_len": 38899,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/15040 (DOI)",
+    "title": "General Relativity | Lecture 8",
+    "license": "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 363,
+    "transcript_len": 60575,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16305 (DOI)",
+    "title": "3/3 Boundary, corners, strong bundles, and implicit function theorems",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 548,
+    "transcript_len": 68296,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/59165 (DOI)",
+    "title": "Entropic regularization of optimal transport and applications",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 238,
+    "transcript_len": 17799,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19467 (DOI)",
+    "title": "Lec. 17. Equilibrium Calculations",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 221,
+    "transcript_len": 45811,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/49492 (DOI)",
+    "title": "Early Vedic – Introduction, Part 1",
+    "license": "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 105,
+    "transcript_len": 14415,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/16292 (DOI)",
+    "title": "Introduction to Regularization Problems",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 505,
+    "transcript_len": 47854,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/42627 (DOI)",
+    "title": "10. Uncertainty Principle and Compatible Observables",
+    "license": "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 151,
+    "transcript_len": 45279,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/48176 (DOI)",
+    "title": "Space Time Actions from The World Line",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 265,
+    "transcript_len": 48069,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18877 (DOI)",
+    "title": "Lecture 18. Terpenes and Cell Signaling, Part 2",
+    "license": "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 189,
+    "transcript_len": 61361,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18887 (DOI)",
+    "title": "Lecture 09. The Morse and \"6-12\" Potential and Quantization in Two Spatial Dimensions",
+    "license": "CC Attribution - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 469,
+    "transcript_len": 38383,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/19005 (DOI)",
+    "title": "Lecture 16. Electrochemistry Pt. 1.",
+    "license": "CC Attribution - ShareAlike 3.0 USA: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this",
+    "abstract_len": 245,
+    "transcript_len": 40278,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  },
+  {
+    "doi": "10.5446/18328 (DOI)",
+    "title": "Modern Steel Products (2014) - Overview of Tandem Mill Designs (Cold- Strip Mill): lecture 13",
+    "license": "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.",
+    "abstract_len": 286,
+    "transcript_len": 41614,
+    "has_keyframes": true,
+    "video_url_present": true,
+    "language": "en"
+  }
+]

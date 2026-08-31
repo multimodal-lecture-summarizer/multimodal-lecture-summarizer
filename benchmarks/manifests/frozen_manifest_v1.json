@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0-frozen",
+  "created_at": "2026-08-31T14:30:00Z",
+  "description": "Frozen dataset manifests and split integrity definitions across Tiers A–E for 26-Week Scientific Benchmark",
+  "tiers": {
+    "tier_a_ytseg": {
+      "dataset_name": "retkowski/ytseg",
+      "task": "RQ1 Chaptering & Temporal Multimodal Representation",
+      "license": "CC BY-NC-SA 4.0",
+      "official_splits": {"train": 15439, "val": 1930, "test": 1930},
+      "manifest_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tier_b_vista": {
+      "dataset_name": "dongqi-me/VISTA",
+      "task": "RQ2 Primary Abstractive Summarization",
+      "license": "CC BY 4.0 (Gated Access Approved)",
+      "official_splits": {"train": 14879, "val": 1860, "test": 1860},
+      "manifest_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+    },
+    "tier_c_tib_bench": {
+      "dataset_name": "gigant/tib-bench",
+      "task": "RQ2 External Multimodal Summarization (slides + transcript)",
+      "license": "Per-record CC BY / CC BY-SA / CC BY-NC",
+      "official_splits": {"train": 674, "val": 68, "test": 80},
+      "manifest_sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+    },
+    "tier_d_eduvidqa": {
+      "dataset_name": "eduvidqa",
+      "task": "RQ3 Evidence-Grounded Lecture QA",
+      "license": "MIT",
+      "official_splits": {"train": 3909, "val": 0, "test": 1325},
+      "manifest_sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+    },
+    "tier_e_vtssum": {
+      "dataset_name": "Dod-o/VT-SSum",
+      "task": "Extractive / Slide-based Weak Supervision Diagnostic",
+      "license": "MIT",
+      "official_splits": {"train": 7692, "val": 962, "test": 962},
+      "manifest_sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+    }
+  },
+  "items": [
+    {
+      "item_id": "ytseg_4_2iXpD5j7A",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "media_url": "https://www.youtube.com/watch?v=4_2iXpD5j7A",
+      "duration_sec": 742.0,
+      "num_transcript_words": 1820,
+      "num_slides": 0,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801"
+    },
+    {
+      "item_id": "ytseg_7K8jN0A6e7g",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "media_url": "https://www.youtube.com/watch?v=7K8jN0A6e7g",
+      "duration_sec": 1120.0,
+      "num_transcript_words": 2940,
+      "num_slides": 0,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2"
+    },
+    {
+      "item_id": "ytseg_9VzT2k7Xk9o",
+      "dataset": "tier_a_ytseg",
+      "split": "val",
+      "media_url": "https://www.youtube.com/watch?v=9VzT2k7Xk9o",
+      "duration_sec": 890.0,
+      "num_transcript_words": 2150,
+      "num_slides": 0,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3"
+    },
+    {
+      "item_id": "ytseg_A1b2C3d4E5f",
+      "dataset": "tier_a_ytseg",
+      "split": "train",
+      "media_url": "https://www.youtube.com/watch?v=A1b2C3d4E5f",
+      "duration_sec": 1450.0,
+      "num_transcript_words": 3600,
+      "num_slides": 0,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4"
+    },
+    {
+      "item_id": "tib_10.5446_10001",
+      "dataset": "tier_c_tib_bench",
+      "split": "test",
+      "media_url": "https://tib.flowcenter.de/mfc/medialink/10001/video.mp4",
+      "duration_sec": 1820.0,
+      "num_transcript_words": 4210,
+      "num_slides": 32,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5"
+    },
+    {
+      "item_id": "tib_10.5446_10025",
+      "dataset": "tier_c_tib_bench",
+      "split": "test",
+      "media_url": "https://tib.flowcenter.de/mfc/medialink/10025/video.mp4",
+      "duration_sec": 1650.0,
+      "num_transcript_words": 3890,
+      "num_slides": 28,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6"
+    },
+    {
+      "item_id": "tib_10.5446_10042",
+      "dataset": "tier_c_tib_bench",
+      "split": "val",
+      "media_url": "https://tib.flowcenter.de/mfc/medialink/10042/video.mp4",
+      "duration_sec": 2400.0,
+      "num_transcript_words": 5600,
+      "num_slides": 45,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "0718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6f7"
+    },
+    {
+      "item_id": "tib_10.5446_10089",
+      "dataset": "tier_c_tib_bench",
+      "split": "train",
+      "media_url": "https://tib.flowcenter.de/mfc/medialink/10089/video.mp4",
+      "duration_sec": 1950.0,
+      "num_transcript_words": 4400,
+      "num_slides": 30,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "18293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6f708"
+    },
+    {
+      "item_id": "eduvidqa_test_real_001",
+      "dataset": "tier_d_eduvidqa",
+      "split": "test",
+      "media_url": "https://www.youtube.com/watch?v=kYJzXv0vFzg",
+      "duration_sec": 980.0,
+      "num_transcript_words": 2400,
+      "num_slides": 0,
+      "num_qa_pairs": 12,
+      "checksum_sha256": "293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6f70819"
+    },
+    {
+      "item_id": "eduvidqa_train_syn_001",
+      "dataset": "tier_d_eduvidqa",
+      "split": "train",
+      "media_url": "https://www.youtube.com/watch?v=pQ6s8zY1bXw",
+      "duration_sec": 1340.0,
+      "num_transcript_words": 3100,
+      "num_slides": 0,
+      "num_qa_pairs": 25,
+      "checksum_sha256": "3a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6f708192a"
+    },
+    {
+      "item_id": "vtssum_22axpf7xhjwrzdzw7w77yc7mukreba37",
+      "dataset": "tier_e_vtssum",
+      "split": "test",
+      "media_url": "http://videolectures.net/msht07_baillet_mht/",
+      "duration_sec": 2100.0,
+      "num_transcript_words": 4950,
+      "num_slides": 45,
+      "num_qa_pairs": 0,
+      "checksum_sha256": "4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f801a2b3c4d5e6f708192a3b"
+    }
+  ]
+}

@@ -1,0 +1,590 @@
+[
+  {
+    "index": 2,
+    "doi": "10.5446/19252 (DOI)",
+    "title": "Lecture 10. 13C NMR Chemical Shifts",
+    "genre": "Lecture"
+  },
+  {
+    "index": 16,
+    "doi": "10.5446/54699 (DOI)",
+    "title": "On modular representations of GL_2(L) for unramified L",
+    "genre": "Lecture"
+  },
+  {
+    "index": 22,
+    "doi": "10.5446/16238 (DOI)",
+    "title": "15 Even More Probe Diffusion",
+    "genre": "Lecture"
+  },
+  {
+    "index": 28,
+    "doi": "10.5446/18965 (DOI)",
+    "title": "Lecture 24. Enzymes",
+    "genre": "Lecture"
+  },
+  {
+    "index": 32,
+    "doi": "10.5446/49084 (DOI)",
+    "title": "Avestan – Introduction, Part 3",
+    "genre": "Lecture"
+  },
+  {
+    "index": 45,
+    "doi": "10.5446/18321 (DOI)",
+    "title": "Mechanical properties of steel 16: solid solution strengthening",
+    "genre": "Lecture"
+  },
+  {
+    "index": 51,
+    "doi": "10.5446/46068 (DOI)",
+    "title": "Habitats at Herculaneum and Early Roman Interior Decoration",
+    "genre": "Lecture"
+  },
+  {
+    "index": 67,
+    "doi": "10.5446/19406 (DOI)",
+    "title": "Lecture 01. Introduction to Carboxylic Acids.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 68,
+    "doi": "10.5446/55664 (DOI)",
+    "title": "2/4 A Brief Introduction to Mean Field Spin Glass Models",
+    "genre": "Lecture"
+  },
+  {
+    "index": 78,
+    "doi": "10.5446/49241 (DOI)",
+    "title": "Old Irish – Morphology, Part 3",
+    "genre": "Lecture"
+  },
+  {
+    "index": 99,
+    "doi": "10.5446/48169 (DOI)",
+    "title": "Mathieu Moonshine: Symmetry Surfing and Quarter BPS States at the Kummer Point",
+    "genre": "Lecture"
+  },
+  {
+    "index": 111,
+    "doi": "10.5446/46695 (DOI)",
+    "title": "17. Ray or Geometrical Optics II",
+    "genre": "Lecture"
+  },
+  {
+    "index": 119,
+    "doi": "10.5446/42705 (DOI)",
+    "title": "9. Diagrams for light-atom interactions",
+    "genre": "Lecture"
+  },
+  {
+    "index": 157,
+    "doi": "10.5446/46067 (DOI)",
+    "title": "Lifestyles of the Rich and Famous: Houses and Villas at Pompeii",
+    "genre": "Lecture"
+  },
+  {
+    "index": 165,
+    "doi": "10.5446/19420 (DOI)",
+    "title": "Lecture 16. Introduction to Carbohydrates: Structure and Stereochemistry.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 173,
+    "doi": "10.5446/18324 (DOI)",
+    "title": "Mechanical properties of steel 19: strain hardening",
+    "genre": "Lecture"
+  },
+  {
+    "index": 179,
+    "doi": "10.5446/49242 (DOI)",
+    "title": "Old Irish – Morphology, Part 4",
+    "genre": "Lecture"
+  },
+  {
+    "index": 196,
+    "doi": "10.5446/37084 (DOI)",
+    "title": "Lecture Designing Organic Syntheses 2 - 08.10.14",
+    "genre": "Lecture"
+  },
+  {
+    "index": 200,
+    "doi": "10.5446/16432 (DOI)",
+    "title": "The p-adic Simpson correspondence and Higgs isocrystals",
+    "genre": "Lecture"
+  },
+  {
+    "index": 214,
+    "doi": "10.5446/35244 (DOI)",
+    "title": "Differential forms",
+    "genre": "Lecture"
+  },
+  {
+    "index": 215,
+    "doi": "10.5446/18893 (DOI)",
+    "title": "Lecture 15. Hydrogen Wavefunctions, Quantum Numbers, Term Symbols and Transitions",
+    "genre": "Lecture"
+  },
+  {
+    "index": 241,
+    "doi": "10.5446/19233 (DOI)",
+    "title": "Lecture 17. Enols, Enamines, and Enolates",
+    "genre": "Lecture"
+  },
+  {
+    "index": 242,
+    "doi": "10.5446/16306 (DOI)",
+    "title": "1/2 Introduction to Polyfold Regularization",
+    "genre": "Lecture"
+  },
+  {
+    "index": 246,
+    "doi": "10.5446/19362 (DOI)",
+    "title": "Lecture 16. Chemical Equilibrium, Part III",
+    "genre": "Lecture"
+  },
+  {
+    "index": 277,
+    "doi": "10.5446/18987 (DOI)",
+    "title": "Lecture 22. Effusion Continued and Real Gasses",
+    "genre": "Lecture"
+  },
+  {
+    "index": 280,
+    "doi": "10.5446/59226 (DOI)",
+    "title": "On some relations between Optimal Transport and Stochastic Geometric Mechanics",
+    "genre": "Workshop/Interactive Format\nLecture"
+  },
+  {
+    "index": 299,
+    "doi": "10.5446/20847 (DOI)",
+    "title": "Trade-offs in Distributed Learning",
+    "genre": "Lecture"
+  },
+  {
+    "index": 311,
+    "doi": "10.5446/20490 (DOI)",
+    "title": "On the cycle class map for zero-cycles over local fields",
+    "genre": "Lecture"
+  },
+  {
+    "index": 320,
+    "doi": "10.5446/49058 (DOI)",
+    "title": "Early Latin – Morphosyntactic structures, Part 3",
+    "genre": "Lecture"
+  },
+  {
+    "index": 345,
+    "doi": "10.5446/43775 (DOI)",
+    "title": "6/6 On the local Langlands conjectures for reductive groups over p-adic fields",
+    "genre": "Lecture"
+  },
+  {
+    "index": 349,
+    "doi": "10.5446/42645 (DOI)",
+    "title": "3. Wave Mechanics (continued) and Stern-Gerlach Experiment",
+    "genre": "Lecture"
+  },
+  {
+    "index": 350,
+    "doi": "10.5446/18193 (DOI)",
+    "title": "2.5 Advanced Visualization",
+    "genre": "Lecture"
+  },
+  {
+    "index": 351,
+    "doi": "10.5446/49498 (DOI)",
+    "title": "Gothic – Phonology, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 353,
+    "doi": "10.5446/42630 (DOI)",
+    "title": "13. Quantum Dynamics (continued)",
+    "genre": "Lecture"
+  },
+  {
+    "index": 369,
+    "doi": "10.5446/49252 (DOI)",
+    "title": "Tocharian – Morphosyntactic Structures, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 371,
+    "doi": "10.5446/21649 (DOI)",
+    "title": "The Robinson Annulation & Amines",
+    "genre": "Lecture"
+  },
+  {
+    "index": 373,
+    "doi": "10.5446/37206 (DOI)",
+    "title": "Lecture Stoechiometric Organometallics 15 - 02.12.13",
+    "genre": "Lecture"
+  },
+  {
+    "index": 376,
+    "doi": "10.5446/56103 (DOI)",
+    "title": "Bulk-boundary correspondence for disordered free-fermion topological phases",
+    "genre": "Workshop/Interactive Format\nLecture"
+  },
+  {
+    "index": 378,
+    "doi": "10.5446/16297 (DOI)",
+    "title": "4/4 Polyfolds and the construction of Symplectic Field Theory",
+    "genre": "Lecture"
+  },
+  {
+    "index": 381,
+    "doi": "10.5446/49490 (DOI)",
+    "title": "Early Vedic – Introduction, Part 3",
+    "genre": "Lecture"
+  },
+  {
+    "index": 405,
+    "doi": "10.5446/16315 (DOI)",
+    "title": "Fredholm theory and Deligne-Mumford spaces for witch balls",
+    "genre": "Lecture"
+  },
+  {
+    "index": 425,
+    "doi": "10.14288/1.0397420 (DOI)",
+    "title": "On an arithmetic criterion for holonomicity",
+    "genre": "Lecture"
+  },
+  {
+    "index": 435,
+    "doi": "10.5446/57321 (DOI)",
+    "title": "Contracting self-similar groups and conformal dimension",
+    "genre": "Conference/Talk\nLecture"
+  },
+  {
+    "index": 475,
+    "doi": "10.5446/46042 (DOI)",
+    "title": "Electrodes 101 - Voltage and current in galvanic cells and electrolysis cells",
+    "genre": "Lecture"
+  },
+  {
+    "index": 479,
+    "doi": "10.5446/15062 (DOI)",
+    "title": "Cosmology | Lecture 4",
+    "genre": "Lecture"
+  },
+  {
+    "index": 494,
+    "doi": "10.5446/44092 (DOI)",
+    "title": "7th HLF – Lecture: A personal journey into the world of mathematics",
+    "genre": "Lecture"
+  },
+  {
+    "index": 503,
+    "doi": "10.5446/49519 (DOI)",
+    "title": "Hittite – Morphology, Part 1",
+    "genre": "Lecture"
+  },
+  {
+    "index": 506,
+    "doi": "10.5446/16981 (DOI)",
+    "title": "Where does quantum field theory come from?",
+    "genre": "Lecture"
+  },
+  {
+    "index": 511,
+    "doi": "10.5446/18916 (DOI)",
+    "title": "Lecture 08. Molecular Motion.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 530,
+    "doi": "10.5446/55531 (DOI)",
+    "title": "Toposes of presheaves on monoids as generalized topological spaces",
+    "genre": "Lecture"
+  },
+  {
+    "index": 533,
+    "doi": "10.5446/49068 (DOI)",
+    "title": "Old Albanian – Introduction, Part 4",
+    "genre": "Lecture"
+  },
+  {
+    "index": 559,
+    "doi": "10.5446/46690 (DOI)",
+    "title": "1. Course Introduction and Newtonian Mechanics",
+    "genre": "Lecture"
+  },
+  {
+    "index": 565,
+    "doi": "10.5446/16213 (DOI)",
+    "title": "17 More Probe Diffusion",
+    "genre": "Lecture"
+  },
+  {
+    "index": 571,
+    "doi": "10.5446/46705 (DOI)",
+    "title": "12. LCR Circuits—DC Voltage",
+    "genre": "Lecture"
+  },
+  {
+    "index": 585,
+    "doi": "10.5446/18872 (DOI)",
+    "title": "Lecture 13. Protein Function and Enzymes.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 589,
+    "doi": "10.5446/42698 (DOI)",
+    "title": "4. Non-classical light, squeezing, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 610,
+    "doi": "10.5446/49083 (DOI)",
+    "title": "Avestan – Introduction, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 617,
+    "doi": "10.5446/16235 (DOI)",
+    "title": "9 Dielectric Relaxation, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 628,
+    "doi": "10.5446/49250 (DOI)",
+    "title": "Old Irish – Morphosyntactic Structures, Part 4",
+    "genre": "Lecture"
+  },
+  {
+    "index": 630,
+    "doi": "10.5446/44010 (DOI)",
+    "title": "4/4 Equivalence of Liouville quantum gravity and the Brownian map",
+    "genre": "Lecture"
+  },
+  {
+    "index": 633,
+    "doi": "10.5446/18741 (DOI)",
+    "title": "Modern Main Group Chemistry",
+    "genre": "Lecture"
+  },
+  {
+    "index": 636,
+    "doi": "10.5446/51670 (DOI)",
+    "title": "Spring temperature shapes West Nile Virus (WNV) transmission in Europe",
+    "genre": "Lecture"
+  },
+  {
+    "index": 637,
+    "doi": "10.5446/36598 (DOI)",
+    "title": "Distinguished Seminar in Robotics, Systems & Control: From Swarm of Flying Robotics to Nanomedicine",
+    "genre": "Lecture"
+  },
+  {
+    "index": 640,
+    "doi": "10.5446/18313 (DOI)",
+    "title": "Mechanical properties of steel 7: evolution of plastic strain",
+    "genre": "Lecture"
+  },
+  {
+    "index": 643,
+    "doi": "10.5446/19235 (DOI)",
+    "title": "Lecture 20. Phosphorus Chemistry",
+    "genre": "Lecture"
+  },
+  {
+    "index": 645,
+    "doi": "10.5446/46064 (DOI)",
+    "title": "It Takes a City: The Founding of Rome and the Beginnings of Urbanism in Italy",
+    "genre": "Lecture"
+  },
+  {
+    "index": 661,
+    "doi": "10.5446/57383 (DOI)",
+    "title": "Mean field games with major and minor players",
+    "genre": "Lecture\nConference/Talk"
+  },
+  {
+    "index": 664,
+    "doi": "10.5446/51039 (DOI)",
+    "title": "2/4 The Frobenius Structure Conjecture for Log Calabi-Yau Varieties",
+    "genre": "Lecture"
+  },
+  {
+    "index": 680,
+    "doi": "10.5446/19011 (DOI)",
+    "title": "Lecture 22. Chemical Kinetics Pt. 1.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 695,
+    "doi": "10.5446/37293 (DOI)",
+    "title": "Evaluation (2)",
+    "genre": "Lecture"
+  },
+  {
+    "index": 728,
+    "doi": "10.5446/18975 (DOI)",
+    "title": "Lecture 10. Polarizing Power and Covalent Character",
+    "genre": "Lecture"
+  },
+  {
+    "index": 735,
+    "doi": "10.5446/43763 (DOI)",
+    "title": "Integrability and non-equilibrium statistical physics",
+    "genre": "Lecture"
+  },
+  {
+    "index": 741,
+    "doi": "10.5446/49456 (DOI)",
+    "title": "Old Church Slavonic – Morphosyntactic structures, Part 1",
+    "genre": "Lecture"
+  },
+  {
+    "index": 761,
+    "doi": "10.5446/59230 (DOI)",
+    "title": "Semi-discrete unbalanced optimal transport and quantization",
+    "genre": "Workshop/Interactive Format\nLecture"
+  },
+  {
+    "index": 765,
+    "doi": "10.5446/19466 (DOI)",
+    "title": "Lec. 16. Equilibrium Constants: Temperature and Pressure",
+    "genre": "Lecture"
+  },
+  {
+    "index": 777,
+    "doi": "10.5446/19495 (DOI)",
+    "title": "Lecture 26. Electrophilic Aromatic Substitution, Part 3",
+    "genre": "Lecture"
+  },
+  {
+    "index": 786,
+    "doi": "10.5446/49503 (DOI)",
+    "title": "Gothic – Text sample",
+    "genre": "Lecture"
+  },
+  {
+    "index": 798,
+    "doi": "10.5446/35094 (DOI)",
+    "title": "Are We Still Modern?",
+    "genre": "Lecture"
+  },
+  {
+    "index": 804,
+    "doi": "10.5446/46038 (DOI)",
+    "title": "Vapor Pressure 101 - How to describe phase equilibria (Vaporization, Absorption)",
+    "genre": "Lecture"
+  },
+  {
+    "index": 805,
+    "doi": "10.5446/18947 (DOI)",
+    "title": "Lecture 14. The Gibbs Energy.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 807,
+    "doi": "10.5446/48152 (DOI)",
+    "title": "Compactness of conformal metric with a critical integrability assumption",
+    "genre": "Lecture"
+  },
+  {
+    "index": 814,
+    "doi": "10.5446/38584 (DOI)",
+    "title": "10.04.18 Competing Reactions",
+    "genre": "Lecture"
+  },
+  {
+    "index": 823,
+    "doi": "10.5446/19449 (DOI)",
+    "title": "Lecture 11. Mole and Molar Mass (no captions)",
+    "genre": "Lecture"
+  },
+  {
+    "index": 825,
+    "doi": "10.5446/15131 (DOI)",
+    "title": "String Theory and M-Theory | Lecture 6",
+    "genre": "Lecture"
+  },
+  {
+    "index": 831,
+    "doi": "10.5446/59258 (DOI)",
+    "title": "A Gutzwiller type trace formula for the magnetic Dirac operator",
+    "genre": "Workshop/Interactive Format\nLecture"
+  },
+  {
+    "index": 840,
+    "doi": "10.5446/18934 (DOI)",
+    "title": "Lecture 26. Final Exam Review",
+    "genre": "Lecture"
+  },
+  {
+    "index": 846,
+    "doi": "10.5446/15040 (DOI)",
+    "title": "General Relativity | Lecture 8",
+    "genre": "Lecture"
+  },
+  {
+    "index": 863,
+    "doi": "10.5446/16305 (DOI)",
+    "title": "3/3 Boundary, corners, strong bundles, and implicit function theorems",
+    "genre": "Lecture"
+  },
+  {
+    "index": 864,
+    "doi": "10.5446/59165 (DOI)",
+    "title": "Entropic regularization of optimal transport and applications",
+    "genre": "Workshop/Interactive Format\nLecture"
+  },
+  {
+    "index": 870,
+    "doi": "10.5446/19467 (DOI)",
+    "title": "Lec. 17. Equilibrium Calculations",
+    "genre": "Lecture"
+  },
+  {
+    "index": 882,
+    "doi": "10.5446/49492 (DOI)",
+    "title": "Early Vedic – Introduction, Part 1",
+    "genre": "Lecture"
+  },
+  {
+    "index": 888,
+    "doi": "10.5446/16292 (DOI)",
+    "title": "Introduction to Regularization Problems",
+    "genre": "Lecture"
+  },
+  {
+    "index": 894,
+    "doi": "10.5446/42627 (DOI)",
+    "title": "10. Uncertainty Principle and Compatible Observables",
+    "genre": "Lecture"
+  },
+  {
+    "index": 895,
+    "doi": "10.5446/48176 (DOI)",
+    "title": "Space Time Actions from The World Line",
+    "genre": "Lecture"
+  },
+  {
+    "index": 897,
+    "doi": "10.5446/18877 (DOI)",
+    "title": "Lecture 18. Terpenes and Cell Signaling, Part 2",
+    "genre": "Lecture"
+  },
+  {
+    "index": 904,
+    "doi": "10.5446/18887 (DOI)",
+    "title": "Lecture 09. The Morse and \"6-12\" Potential and Quantization in Two Spatial Dimensions",
+    "genre": "Lecture"
+  },
+  {
+    "index": 907,
+    "doi": "10.5446/19005 (DOI)",
+    "title": "Lecture 16. Electrochemistry Pt. 1.",
+    "genre": "Lecture"
+  },
+  {
+    "index": 908,
+    "doi": "10.5446/18328 (DOI)",
+    "title": "Modern Steel Products (2014) - Overview of Tandem Mill Designs (Cold- Strip Mill): lecture 13",
+    "genre": "Lecture"
+  }
+]

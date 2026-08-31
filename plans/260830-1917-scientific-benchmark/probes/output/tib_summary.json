@@ -1,0 +1,32 @@
+{
+  "elapsed_sec_so_far": 0,
+  "splits": {
+    "train": 7282,
+    "test": 911,
+    "valid": 910
+  },
+  "lecture_test_total": 98,
+  "lecture_test_usable": 94,
+  "excluded_reasons": {
+    "too-short(59)": 1,
+    "too-short(32)": 1,
+    "empty": 1,
+    "too-short(44)": 1
+  },
+  "license_distribution_top10": {
+    "CC Attribution 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.": 28,
+    "CC Attribution - NonCommercial - NoDerivatives 3.0 Germany: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.": 14,
+    "CC Attribution - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this": 13,
+    "CC Attribution 3.0 Germany: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor.": 10,
+    "CC Attribution - NonCommercial - ShareAlike 3.0 Unported: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this": 7,
+    "CC Attribution - NonCommercial - NoDerivatives 4.0 International: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.": 7,
+    "CC Attribution - NonCommercial - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this": 5,
+    "CC Attribution - ShareAlike 3.0 USA: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this": 4,
+    "CC Attribution - NonCommercial - NoDerivatives 2.5 Switzerland: You are free to use, copy, distribute and transmit the work or content in unchanged form for any legal and non-commercial purpose as long as the work is attributed to the author in the manner specified by the author or licensor.": 3,
+    "CC Attribution - ShareAlike 4.0 International: You are free to use, adapt and copy, distribute and transmit the work or content in adapted or unchanged form for any legal purpose as long as the work is attributed to the author in the manner specified by the author or licensor and the work or content is shared also in adapted form only under the conditions of this": 3
+  },
+  "lecture_train": 795,
+  "lecture_valid": 88,
+  "bench_error": "ValueError(\"Bad split: test. Available splits: ['train']\")",
+  "elapsed_sec": 59.79757720000089
+}

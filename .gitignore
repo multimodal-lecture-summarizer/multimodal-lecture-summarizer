@@ -41,6 +41,7 @@ postgres_data/
 .DS_Store
 Thumbs.db
 
-# Benchmarks
-benchmarks/
-
+# Benchmarks & probes caches
+benchmarks/official_datasets/
+benchmarks/data/
+plans/**/probes/cache/
