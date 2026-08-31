@@ -44,6 +44,7 @@ Thumbs.db
 
 # Benchmarks & probes caches
 benchmarks/official_datasets/
-benchmarks/data/cached_features/
+benchmarks/data/cached_features/*
+!benchmarks/data/cached_features/*.pt
 !benchmarks/data/*.py
 plans/**/probes/cache/
