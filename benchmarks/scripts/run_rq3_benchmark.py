@@ -25,6 +25,9 @@ from benchmarks.models.retrieval_qa import (
     compute_qa_f1_em,
 )
 from benchmarks.metrics.statistics import holm_bonferroni_family
+from benchmarks.models.chaptering import C5_TemporalCrossAttentionTransformer
+from benchmarks.data.dataset import collate_lecture_batches
+from benchmarks.models.llm_engine import get_llm_engine, DeterministicAbstractiveEngine
 
 
 def run_rq3_benchmark(
@@ -45,6 +48,51 @@ def run_rq3_benchmark(
 
     data_path = Path(data_dir)
     pt_files = {p.stem: p for p in data_path.glob("*.pt")}
+
+    # ── LLM/SBERT availability guard ─────────────────────────────────────────
+    try:
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            "sentence-transformers không khả dụng. Không thể chạy DenseRetriever (SBERT). "
+            "Cài đặt: pip install sentence-transformers"
+        )
+
+    _llm_engine = get_llm_engine()
+    if isinstance(_llm_engine, DeterministicAbstractiveEngine):
+        raise EnvironmentError(
+            "Không tìm thấy LLM backend thực (Gemini API key). "
+            "Đang rơi về DeterministicAbstractiveEngine (hash-fallback) — "
+            "Kết quả Answer F1 sẽ không có ý nghĩa. "
+            "Thiết lập GEMINI_API_KEY hoặc GOOGLE_API_KEY."
+        )
+
+    # ── Load C5 checkpoint (real Phase 1 predicted boundaries) ───────────────
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    c5_ckpt = Path("checkpoints/c5_real.pt")
+    if not c5_ckpt.exists():
+        raise FileNotFoundError(
+            f"Thiếu C5 checkpoint từ Phase 1: {c5_ckpt}\n"
+            "Không được tự sinh ranh giới giả. Hãy chạy notebook 03 để tạo checkpoint."
+        )
+
+    c5_model = C5_TemporalCrossAttentionTransformer(
+        d_text=384, d_vis=384, d_ocr=384, d_ac=32, d_model=256,
+        n_layers=4, n_heads=8, num_boundary_tokens=3,
+    ).to(device)
+    c5_model.load_state_dict(torch.load(c5_ckpt, map_location=device, weights_only=True))
+    c5_model.eval()
+    print(f"[OK] Đã load C5 checkpoint từ: {c5_ckpt}")
+
+    @torch.no_grad()
+    def _compute_c5_boundaries(cached: dict) -> list:
+        """Chạy C5 forward trên 1 bài giảng, trả về danh sách ranh giới (giây)."""
+        batch = collate_lecture_batches([cached]).to(device)
+        output = c5_model(batch)
+        pred_bounds = c5_model.extract_boundaries(
+            output.probabilities, batch.timestamps, mask=batch.mask
+        )
+        return pred_bounds[0] if pred_bounds else []
 
     q0 = Q0_FlatRetrievalQA(QAConfig(variant_id="Q0_flat", top_k=3))
     q1 = Q1_OracleHierarchyRetrievalQA(QAConfig(variant_id="Q1_oracle", top_k=3))
@@ -81,22 +129,32 @@ def run_rq3_benchmark(
 
         timestamps = [float(t) for t in cached_data.get("timestamps", torch.arange(len(sentences)))]
         gt_boundaries = [float(t) for t in cached_data.get("ground_truth_boundaries", [])]
-        pred_boundaries = [b + np.random.uniform(-10.0, 10.0) for b in gt_boundaries] if gt_boundaries else [float(len(sentences) * 5.0)]
+        # Real C5 predicted boundaries (from Phase 1 checkpoint)
+        pred_boundaries = _compute_c5_boundaries(cached_data)
+        if not pred_boundaries:
+            print(f"  [WARN] C5 ranh giới rỗng, dùng gt_boundaries thay thế: {vname}")
+            pred_boundaries = gt_boundaries
 
-        # Oracle chapters
-        ch_size = max(1, len(sentences) // max(1, len(gt_boundaries) + 1))
+        # Oracle chapters: slice sentences by REAL gt_boundaries timestamps
+        total_duration = float(cached_data.get("total_duration_sec") or (max(timestamps) if timestamps else 0.0))
+        chapter_starts = [0.0] + gt_boundaries + [total_duration]
         oracle_chapters = []
-        for c_i in range(max(1, len(gt_boundaries) + 1)):
-            st = c_i * ch_size
-            en = min(len(sentences), (c_i + 1) * ch_size)
+        for c_i in range(len(chapter_starts) - 1):
+            c_start = chapter_starts[c_i]
+            c_end = chapter_starts[c_i + 1]
+            c_sents = [
+                sentences[j] for j in range(len(sentences))
+                if timestamps[j] >= c_start and timestamps[j] < c_end
+            ] or sentences[:1]
             oracle_chapters.append({
                 "title": f"Chapter {c_i+1}",
-                "sentences": sentences[st:en],
-                "start_sec": float(st * 10),
-                "end_sec": float(en * 10)
+                "sentences": c_sents,
+                "start_sec": c_start,
+                "end_sec": c_end,
             })
 
-        ocr_slides = [f"Slide: {sentences[min(i*ch_size, len(sentences)-1)][:40]}" for i in range(len(oracle_chapters))]
+        # OCR: cached có OCR tensor nhưng không có readable text — bỏ qua OCR cho Q3
+        ocr_slides = []
 
         # Process questions
         qa_dict = item.get("Q&A", {})
