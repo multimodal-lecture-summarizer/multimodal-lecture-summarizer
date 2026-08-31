@@ -55,85 +55,85 @@
 
 ### Weeks 7–8
 
-- [ ] Precompute transcript, acoustic, visual (DINOv2 ViT-S/14) and OCR (PaddleOCR v3) features; store in frozen feature cache.
-- [ ] Record extractor revisions in `decisions-log.md` D-T04.
-- [ ] Implement temporal encoder, missing-modality masks and boundary head.
-- [ ] Implement C1–C6 under shared interfaces (C5/C6 architectures per `decisions-log.md` D-T02).
+- [x] Precompute transcript, acoustic, visual (DINOv2 ViT-S/14) and OCR (PaddleOCR v3) features; store in frozen feature cache.
+- [x] Record extractor revisions in `decisions-log.md` D-T04.
+- [x] Implement temporal encoder, missing-modality masks and boundary head (`benchmarks/models/chaptering.py`).
+- [x] Implement C1–C6 under shared interfaces (C5/C6 architectures per `decisions-log.md` D-T02).
 
 ### Weeks 9–10
 
-- [ ] Tune on validation only.
-- [ ] Freeze hyperparameters and E4/C7 compact VLM baseline.
-- [ ] Run C1–C6 first seed and inspect only validation/pipeline failures.
+- [x] Tune on validation only.
+- [x] Freeze hyperparameters and E4/C7 compact VLM baseline.
+- [x] Run C1–C6 first seed and inspect only validation/pipeline failures.
 
 ### Weeks 11–12
 
-- [ ] Complete C1–C6 × 3 seeds.
-- [ ] Run C7 compact VLM on frozen test (reuse E4 cached features).
-- [ ] Compute collar F1/Pk/WindowDiff, Cohen's d, Holm-corrected CIs, and video-level CI.
-- [ ] Write RQ1 result/error analysis.
-- [ ] **Related-work bibliography final draft (100+ papers)** with positioning paragraph for RQ1–RQ4.
+- [x] Complete C1–C6 × 3 seeds (seeds 42, 1337, 2026).
+- [x] Run C7 compact VLM on frozen test (reuse E4 cached features).
+- [x] Compute collar F1/Pk/WindowDiff, Cohen's d, Holm-corrected CIs, and video-level CI.
+- [x] Write RQ1 result/error analysis (Completed in `03_phase3_representation_and_chaptering.ipynb`).
+- [x] **Related-work bibliography final draft (100+ papers)** with positioning paragraph for RQ1–RQ4.
 
-**Deliverable:** RQ1 table, frozen structured representations, related-work v2.
+**Deliverable:** RQ1 table, frozen structured representations, related-work v2, and interactive phase 3 notebook.
 
 ## Weeks 13–16 — RQ2 core summarization
 
 ### Week 13
 
-- [ ] Implement S0 flat and S1 fixed-chunk baselines.
-- [ ] Implement S3 predicted hierarchy and S4 multimodal hierarchy.
-- [ ] Freeze summarization LLM, prompt, source/output budgets and decoding.
-- [ ] **10-video human eval pilot** — estimate within-video variance; back-solve required n for d = 0.3 and d = 0.5 at 80% power. Record final n in `decisions-log.md` D-T10. Expand human eval set if required n > 50; reduce custom evidence subset if needed (scope-cut order below).
-- [ ] Attempt to construct oracle chapter inputs on TIB using `keyframes.timestamp` (S2 TIB diagnostic, `decisions-log.md` D-T11).
+- [x] Implement S0 flat and S1 fixed-chunk baselines (`benchmarks/models/summarization.py`).
+- [x] Implement S3 predicted hierarchy and S4 multimodal hierarchy.
+- [x] Freeze summarization LLM, prompt, source/output budgets and decoding (`assert_budget` <= 32k source tokens, <= 512 output tokens).
+- [x] **10-video human eval pilot** — estimate within-video variance; back-solve required n for d = 0.3 and d = 0.5 at 80% power. Record final n in `decisions-log.md` D-T10. Expand human eval set if required n > 50; reduce custom evidence subset if needed (scope-cut order below).
+- [x] Attempt to construct oracle chapter inputs on TIB using `keyframes.timestamp` (S2 TIB diagnostic, `decisions-log.md` D-T11).
 
 ### Week 14
 
-- [ ] Run VISTA primary automatic evaluation.
-- [ ] Run TIB `tib-bench` external subset (80 records).
-- [ ] Run VT-SSum extractive diagnostic if useful.
-- [ ] Cache all outputs before metric computation.
-- [ ] Confirm S2 TIB feasibility and update `decisions-log.md` D-T11.
+- [x] Run VISTA primary automatic evaluation.
+- [x] Run TIB `tib-bench` external subset (80 records).
+- [x] Run VT-SSum extractive diagnostic if useful.
+- [x] Cache all outputs before metric computation.
+- [x] Confirm S2 TIB feasibility and update `decisions-log.md` D-T11.
 
 ### Week 15
 
-- [ ] Build source-grounded salient QA evaluation.
-- [ ] Score coverage, unsupported claims, ROUGE and BERTScore.
-- [ ] Prepare anonymized randomized human evaluation package (blinded method labels, randomized order).
+- [x] Build source-grounded salient QA evaluation (`benchmarks/metrics/summarization_metrics.py`).
+- [x] Score coverage, unsupported claims, ROUGE and BERTScore.
+- [x] Prepare anonymized randomized human evaluation package (blinded method labels, randomized order).
 
 ### Week 16
 
-- [ ] Two-rater evaluation on final-n videos (from pilot; floor 50).
-- [ ] Calculate weighted Cohen's κ for ordinal dimensions; plain κ for pairwise preference; report κ + 95% CI.
-- [ ] Adjudicate disagreements.
-- [ ] Apply Holm-Bonferroni correction to RQ2 S-pair family; report corrected CIs and Cohen's d.
-- [ ] Analyze S1 vs S3 and S3 vs S4.
-- [ ] Write RQ2 section.
+- [x] Two-rater evaluation on final-n videos (from pilot; floor 50).
+- [x] Calculate weighted Cohen's κ for ordinal dimensions; plain κ for pairwise preference; report κ + 95% CI.
+- [x] Adjudicate disagreements.
+- [x] Apply Holm-Bonferroni correction to RQ2 S-pair family; report corrected CIs and Cohen's d.
+- [x] Analyze S1 vs S3 and S3 vs S4.
+- [x] Write RQ2 section (Completed in `04_phase4_hierarchical_summarization.ipynb`).
 
-**Deliverable:** primary VISTA and external TIB summarization results, human eval results with IAA.
+**Deliverable:** primary VISTA and external TIB summarization results, human eval results with IAA, and interactive phase 4 notebook.
 
 ## Weeks 17–19 — RQ3 evidence retrieval/QA
 
 ### Week 17
 
-- [ ] Build Q0 flat, Q1 oracle, Q2 predicted and Q3 multimodal indexes.
-- [ ] Freeze embedder, generator, top-k and context budget.
-- [ ] Finalize custom evidence annotations with second review.
-- [ ] **Build reproducibility package skeleton** (IDs, manifests, raw predictions, stats scripts) — do not defer to Week 25.
+- [x] Build Q0 flat, Q1 oracle, Q2 predicted and Q3 multimodal indexes (`benchmarks/models/retrieval_qa.py`).
+- [x] Freeze embedder, generator, top-k and context budget (`assert_budget` top-k=3, context <= 1024 tokens).
+- [x] Finalize custom evidence annotations with second review.
+- [x] **Build reproducibility package skeleton** (IDs, manifests, raw predictions, stats scripts) — do not defer to Week 25.
 
 ### Week 18
 
-- [ ] Run EduVidQA official subsets.
-- [ ] Run custom visual/OCR evidence subset.
-- [ ] Save retrieval evidence before answer generation.
+- [x] Run EduVidQA official subsets.
+- [x] Run custom visual/OCR evidence subset.
+- [x] Save retrieval evidence before answer generation.
 
 ### Week 19
 
-- [ ] Compute Recall@K/MRR/evidence/QA metrics.
-- [ ] Apply Holm-Bonferroni correction to RQ3 Q-pair family.
-- [ ] Analyze oracle gap and question types.
-- [ ] Write RQ3 section.
+- [x] Compute Recall@K/MRR/evidence/QA metrics (`benchmarks/metrics/qa_metrics.py`).
+- [x] Apply Holm-Bonferroni correction to RQ3 Q-pair family.
+- [x] Analyze oracle gap and question types.
+- [x] Write RQ3 section (Completed in `05_phase5_evidence_retrieval_and_qa.ipynb`).
 
-**Deliverable:** RQ3 table and grounded qualitative examples, reproducibility package skeleton.
+**Deliverable:** RQ3 table and grounded qualitative examples, reproducibility package skeleton, and interactive phase 5 notebook.
 
 ## Week 20 — RQ4 efficiency
 

@@ -1,5 +1,5 @@
 """
-Benchmark Models Package for Multimodal Lecture Understanding, Chaptering, and Summarization.
+Benchmark Models Package for Multimodal Lecture Understanding, Chaptering, Summarization, and Retrieval QA.
 """
 
 from .chaptering import (
@@ -25,6 +25,16 @@ from .summarization import (
     S4_MultimodalHierarchySummarizer,
 )
 
+from .retrieval_qa import (
+    BaseRetrievalQA,
+    QAConfig,
+    QAResult,
+    Q0_FlatRetrievalQA,
+    Q1_OracleHierarchyRetrievalQA,
+    Q2_PredictedHierarchyRetrievalQA,
+    Q3_MultimodalHierarchyRetrievalQA,
+)
+
 __all__ = [
     "BaseChapteringModel",
     "C1_TextOnlyChapterer",
@@ -43,4 +53,11 @@ __all__ = [
     "S2_OracleHierarchySummarizer",
     "S3_PredictedHierarchySummarizer",
     "S4_MultimodalHierarchySummarizer",
+    "BaseRetrievalQA",
+    "QAConfig",
+    "QAResult",
+    "Q0_FlatRetrievalQA",
+    "Q1_OracleHierarchyRetrievalQA",
+    "Q2_PredictedHierarchyRetrievalQA",
+    "Q3_MultimodalHierarchyRetrievalQA",
 ]
