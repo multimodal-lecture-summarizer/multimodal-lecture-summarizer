@@ -13,6 +13,7 @@ Implements architectures defined in decisions-log.md (D-T02):
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -93,30 +94,62 @@ class BaseChapteringModel(nn.Module):
         probabilities: torch.Tensor,
         timestamps: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
-        threshold: float = 0.5,
-        min_interval_sec: float = 15.0
+        threshold: float = 0.45,
+        min_interval_sec: float = 30.0,
+        smooth_sigma: float = 1.0
     ) -> List[List[float]]:
         """
-        Extract predicted boundary timestamps from probability sequence with non-maximum suppression.
+        Extract predicted boundary timestamps using 1D Non-Maximum Suppression (Peak Finding)
+        with Gaussian kernel smoothing to prevent adjacent clustered boundary artifacts.
         """
         batch_size, seq_len = probabilities.shape
         batch_boundaries: List[List[float]] = []
 
         for b in range(batch_size):
-            probs = probabilities[b].detach().cpu().numpy()
+            raw_probs = probabilities[b].detach().cpu().numpy()
             times = timestamps[b].detach().cpu().numpy()
             valid_len = int(mask[b].sum().item()) if mask is not None else seq_len
 
-            sample_boundaries = []
-            last_ts = -min_interval_sec
+            if valid_len <= 1:
+                batch_boundaries.append([])
+                continue
 
-            for t_idx in range(valid_len):
-                if probs[t_idx] >= threshold:
-                    cur_ts = float(times[t_idx])
-                    if cur_ts - last_ts >= min_interval_sec:
-                        sample_boundaries.append(cur_ts)
-                        last_ts = cur_ts
-            batch_boundaries.append(sample_boundaries)
+            p = raw_probs[:valid_len]
+            t = times[:valid_len]
+
+            # 1D Gaussian smoothing if enough points
+            if smooth_sigma > 0 and len(p) >= 5:
+                kernel_radius = int(np.ceil(2 * smooth_sigma))
+                x_k = np.arange(-kernel_radius, kernel_radius + 1)
+                kernel = np.exp(-0.5 * (x_k / smooth_sigma) ** 2)
+                kernel /= kernel.sum()
+                p_smooth = np.convolve(p, kernel, mode='same')
+            else:
+                p_smooth = p
+
+            # Detect local maxima
+            candidate_peaks = []
+            for i in range(len(p_smooth)):
+                left = p_smooth[i - 1] if i > 0 else p_smooth[i]
+                right = p_smooth[i + 1] if i < len(p_smooth) - 1 else p_smooth[i]
+                
+                # Check if local peak and exceeds threshold
+                if p_smooth[i] >= threshold and p_smooth[i] >= left and p_smooth[i] >= right:
+                    candidate_peaks.append((float(p_smooth[i]), float(t[i]), i))
+
+            # 1D Greedy Non-Maximum Suppression (NMS)
+            # Sort candidate peaks by probability descending
+            candidate_peaks.sort(key=lambda x: x[0], reverse=True)
+            selected_times: List[float] = []
+
+            for score, ts, idx in candidate_peaks:
+                # Check if this peak is too close to an already selected higher-confidence peak
+                if all(abs(ts - sel_t) >= min_interval_sec for sel_t in selected_times):
+                    selected_times.append(ts)
+
+            # Sort chronologically
+            selected_times.sort()
+            batch_boundaries.append(selected_times)
 
         return batch_boundaries
 

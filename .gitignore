@@ -24,8 +24,8 @@ storage/
 !benchmarks/models/
 
 # Videos (large files)
-videos/
-data/
+/videos/
+/data/
 
 # IDE
 .idea/
@@ -44,5 +44,6 @@ Thumbs.db
 
 # Benchmarks & probes caches
 benchmarks/official_datasets/
-benchmarks/data/
+benchmarks/data/cached_features/
+!benchmarks/data/*.py
 plans/**/probes/cache/
