@@ -192,15 +192,44 @@ class DeterministicAbstractiveEngine(BaseLLMEngine):
     - Tries SBERT centrality (all-MiniLM-L6-v2) if sentence_transformers available
     - Falls back to keyword-length scoring
     """
+    # SBERT model cached in sys.modules to survive reimports and avoid repeated HF downloads
+    _SBERT_CACHE_KEY = "__deterministic_sbert_model__"
 
     def __init__(self):
         pass
 
-    def _sbert_centrality_scores(self, sents: List[str]) -> Optional[List[float]]:
+    def _get_sbert_model(self):
+        """Load SBERT model once per kernel session, cached in sys.modules."""
+        if _sys.modules.get(self._SBERT_CACHE_KEY) is not None:
+            return _sys.modules[self._SBERT_CACHE_KEY]
         try:
             from sentence_transformers import SentenceTransformer
+            # Try local cache first (avoids HF 429 rate-limit on repeated Colab runs)
+            try:
+                model = SentenceTransformer(
+                    "sentence-transformers/all-MiniLM-L6-v2",
+                    device="cpu",
+                    local_files_only=True,
+                )
+            except Exception:
+                # Not cached locally yet — download once
+                model = SentenceTransformer(
+                    "sentence-transformers/all-MiniLM-L6-v2",
+                    device="cpu",
+                    local_files_only=False,
+                )
+            _sys.modules[self._SBERT_CACHE_KEY] = model
+            return model
+        except Exception:
+            _sys.modules[self._SBERT_CACHE_KEY] = None  # mark as unavailable, don't retry
+            return None
+
+    def _sbert_centrality_scores(self, sents: List[str]) -> Optional[List[float]]:
+        try:
             import numpy as np
-            model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+            model = self._get_sbert_model()
+            if model is None:
+                return None
             embs = model.encode(sents, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
             centroid = embs.mean(axis=0)
             centroid = centroid / (np.linalg.norm(centroid) + 1e-8)
