@@ -34,6 +34,7 @@ storage/
 # Experiments datasets (large)
 experiments/datasets/**/*
 !experiments/datasets/.gitkeep
+!experiments/datasets/eduviqa/q_and_a.json
 
 # Docker
 postgres_data/
