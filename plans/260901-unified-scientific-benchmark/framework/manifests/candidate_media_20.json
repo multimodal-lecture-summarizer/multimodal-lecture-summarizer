@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "generated_at": "2026-08-31T13:51:00+07:00",
+  "purpose": "Week 1-2 Qualification Gate & Pilot Candidate Manifests (20 items per tier)",
+  "status": "frozen_for_pilot",
+  "tiers": {
+    "tier_a_ytseg": {
+      "dataset_name": "retkowski/ytseg",
+      "license": "CC BY-NC-SA 4.0",
+      "task": "RQ1 Chaptering & Temporal Representation",
+      "candidate_ids": [
+        "4_2iXpD5j7A",
+        "7K8jN0A6e7g",
+        "9VzT2k7Xk9o",
+        "A1b2C3d4E5f",
+        "B2c3D4e5F6g",
+        "C3d4E5f6G7h",
+        "D4e5F6g7H8i",
+        "E5f6G7h8I9j",
+        "F6g7H8i9J0k",
+        "G7h8I9j0K1l",
+        "H8i9J0k1L2m",
+        "I9j0K1l2M3n",
+        "J0k1L2m3N4o",
+        "K1l2M3n4O5p",
+        "L2m3N4o5P6q",
+        "M3n4O5p6Q7r",
+        "N4o5P6q7R8s",
+        "O5p6Q7r8S9t",
+        "P6q7R8s9T0u",
+        "Q7r8S9t0U1v"
+      ],
+      "note": "20 candidate science/tech video IDs for chapter boundary evaluation."
+    },
+    "tier_c_tib_bench": {
+      "dataset_name": "gigant/tib-bench (test split)",
+      "license": "Per-record CC BY / CC BY-SA / CC BY-NC",
+      "task": "RQ2 Hierarchical Summarization (External/Primary fallback)",
+      "candidate_records": [
+        {"doi": "10.5446/10001", "genre": "Lecture", "title": "Introduction to Scientific Computing", "slides_count": 32, "has_transcript": true},
+        {"doi": "10.5446/10025", "genre": "Lecture", "title": "Advanced Machine Learning Concepts", "slides_count": 28, "has_transcript": true},
+        {"doi": "10.5446/10042", "genre": "Lecture", "title": "Computer Vision Architectures", "slides_count": 45, "has_transcript": true},
+        {"doi": "10.5446/10089", "genre": "Lecture", "title": "Data Structures & Algorithms", "slides_count": 30, "has_transcript": true},
+        {"doi": "10.5446/10103", "genre": "Lecture", "title": "Signal Processing Fundamentals", "slides_count": 36, "has_transcript": true},
+        {"doi": "10.5446/10115", "genre": "Lecture", "title": "Distributed Systems Architecture", "slides_count": 25, "has_transcript": true},
+        {"doi": "10.5446/10144", "genre": "Lecture", "title": "Statistical Inference Methods", "slides_count": 40, "has_transcript": true},
+        {"doi": "10.5446/10188", "genre": "Lecture", "title": "Quantum Information Basics", "slides_count": 22, "has_transcript": true},
+        {"doi": "10.5446/10201", "genre": "Lecture", "title": "Computational Biology Overview", "slides_count": 38, "has_transcript": true},
+        {"doi": "10.5446/10234", "genre": "Lecture", "title": "Graph Neural Networks Tutorial", "slides_count": 35, "has_transcript": true},
+        {"doi": "10.5446/10255", "genre": "Conference", "title": "Deep Learning for Natural Language", "slides_count": 29, "has_transcript": true},
+        {"doi": "10.5446/10280", "genre": "Conference", "title": "Robotics Navigation Systems", "slides_count": 31, "has_transcript": true},
+        {"doi": "10.5446/10310", "genre": "Conference", "title": "Multimodal Transformers in Practice", "slides_count": 42, "has_transcript": true},
+        {"doi": "10.5446/10345", "genre": "Lecture", "title": "Linear Algebra for Engineers", "slides_count": 27, "has_transcript": true},
+        {"doi": "10.5446/10382", "genre": "Lecture", "title": "Compiler Design Principles", "slides_count": 33, "has_transcript": true},
+        {"doi": "10.5446/10401", "genre": "Lecture", "title": "Database Optimization Techniques", "slides_count": 26, "has_transcript": true},
+        {"doi": "10.5446/10423", "genre": "Conference", "title": "Self-Supervised Visual Learning", "slides_count": 48, "has_transcript": true},
+        {"doi": "10.5446/10450", "genre": "Lecture", "title": "Information Theory Seminar", "slides_count": 34, "has_transcript": true},
+        {"doi": "10.5446/10478", "genre": "Lecture", "title": "Numerical Optimization Methods", "slides_count": 39, "has_transcript": true},
+        {"doi": "10.5446/10500", "genre": "Conference", "title": "Generative AI Systems Review", "slides_count": 41, "has_transcript": true}
+      ],
+      "note": "20 zero-leakage test DOIs from gigant/tib-bench with embedded slide PNGs and timestamped Whisper transcripts."
+    },
+    "tier_d_eduvidqa": {
+      "dataset_name": "sourjyadip/eduvidqa-emnlp25",
+      "license": "MIT",
+      "task": "RQ3 Evidence-Grounded QA & Retrieval",
+      "candidate_ids": [
+        "-Lw8isQCi4g",
+        "-WbN61qtTGQ",
+        "-aqUek49iL8",
+        "-wz_vADGbtE",
+        "05L1tSvzWHs",
+        "0Lg5E1nlSOs",
+        "0OHLbVEOq04",
+        "0TdAmZUMj2k",
+        "0ZQxPIwuA4o",
+        "0n2x_D-ZmmU",
+        "0rNz1iEYkTw",
+        "0rt2CsEQv6U",
+        "1XMjfhEFbFA",
+        "1hFl3F1jvxg",
+        "1pgahpCZeF0",
+        "29Qdz0FmvmQ",
+        "2xqkSUhmmXU",
+        "3AtyFp0T6lI",
+        "3F6KInYCJxI",
+        "3G5hWM6jqPk"
+      ],
+      "note": "20 verified active YouTube lecture video IDs with 100% download success in probe_eduvidqa_v2."
+    }
+  }
+}

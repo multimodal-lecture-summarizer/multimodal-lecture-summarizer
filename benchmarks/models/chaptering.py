@@ -32,6 +32,26 @@ class ChapteringBatch:
     mask: Optional[torch.Tensor] = None               # [B, T] True = valid token
     targets: Optional[torch.Tensor] = None            # [B, T] 1 = boundary, 0 = non-boundary
 
+    def to(self, device) -> "ChapteringBatch":
+        """Move all tensors to *device* and return a new ChapteringBatch.
+
+        Mirrors the PyTorch convention so callers can write:
+            batch = collate_lecture_batches(items).to(device)
+        instead of manually moving each field.
+        """
+        def _mv(t: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+            return t.to(device) if t is not None else None
+
+        return ChapteringBatch(
+            timestamps=self.timestamps.to(device),
+            text_features=_mv(self.text_features),
+            visual_features=_mv(self.visual_features),
+            ocr_features=_mv(self.ocr_features),
+            acoustic_features=_mv(self.acoustic_features),
+            mask=_mv(self.mask),
+            targets=_mv(self.targets),
+        )
+
 
 @dataclass
 class ChapteringOutput:

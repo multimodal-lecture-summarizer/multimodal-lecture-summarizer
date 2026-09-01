@@ -247,26 +247,23 @@ def _try_hf(preference: str) -> Optional[BaseLLMEngine]:
         return None
 
 
-def get_llm_engine(preference: str = "auto") -> BaseLLMEngine:
-    """
-    Factory helper to obtain the best available LLM backend.
+# Singleton cache: maps resolved preference key → engine instance.
+# Prevents re-loading HuggingFace models (VRAM / time) on every call.
+_ENGINE_CACHE: Dict[str, BaseLLMEngine] = {}
 
-    preference: auto | hf | hf-bart | deterministic | gemini
-    - auto: HF if available (cuda or hf-bart), else deterministic; gemini only if explicitly preferred
-    - hf / hf-bart: try HF, fallback to deterministic on failure (never raise)
-    - deterministic: always deterministic
-    - gemini: try Gemini (with retry), on 429/failure fallback to HF->deterministic with warning
 
-    Never raises 429 to caller — always returns a working engine.
-    """
-    # Env var used only when preference is auto (so explicit calls like get_llm_engine(deterministic) work)
-    if (preference or "auto").lower().strip() == "auto":
-        env_pref = os.getenv("LLM_PREFERENCE")
-        if env_pref:
-            preference = env_pref
-
+def _resolve_preference(preference: str) -> str:
+    """Normalise preference string and apply LLM_PREFERENCE env-var override for 'auto'."""
     pref = (preference or "auto").lower().strip()
+    if pref == "auto":
+        env_pref = os.getenv("LLM_PREFERENCE", "").lower().strip()
+        if env_pref:
+            pref = env_pref
+    return pref
 
+
+def _build_engine(pref: str) -> BaseLLMEngine:
+    """Create a fresh engine for the given (already-resolved) preference."""
     if pref == "deterministic":
         return DeterministicAbstractiveEngine()
 
@@ -298,3 +295,30 @@ def get_llm_engine(preference: str = "auto") -> BaseLLMEngine:
         return hf
     print("[get_llm_engine] Using DeterministicAbstractiveEngine [auto fallback]")
     return DeterministicAbstractiveEngine()
+
+
+def get_llm_engine(preference: str = "auto") -> BaseLLMEngine:
+    """
+    Factory helper to obtain the best available LLM backend.
+
+    preference: auto | hf | hf-bart | deterministic | gemini
+    - auto: HF if CUDA available, else deterministic; gemini only if explicitly preferred
+    - hf / hf-bart: try HF, fallback to deterministic on failure (never raise)
+    - deterministic: always deterministic (offline, no network)
+    - gemini: try Gemini (with retry), on 429/failure fallback to HF→deterministic with warning
+
+    Singleton-cached per resolved preference key — repeated calls return the
+    same instance so HuggingFace models are only loaded once per process.
+    Never raises 429 to caller — always returns a working engine.
+    """
+    pref = _resolve_preference(preference)
+    if pref not in _ENGINE_CACHE:
+        _ENGINE_CACHE[pref] = _build_engine(pref)
+    else:
+        print(f"[get_llm_engine] Reusing cached {_ENGINE_CACHE[pref].__class__.__name__} (preference={pref})")
+    return _ENGINE_CACHE[pref]
+
+
+def clear_llm_engine_cache() -> None:
+    """Clear the singleton cache (useful for testing or switching preferences at runtime)."""
+    _ENGINE_CACHE.clear()
