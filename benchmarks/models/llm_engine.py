@@ -106,10 +106,27 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
         model_kwargs = {}
         if device == "cuda":
             try:
-                import torch
-                model_kwargs["torch_dtype"] = torch.float16
-                model_kwargs["device_map"] = "auto"
-                device_map = "auto"
+                import torch, gc
+                # Free VRAM before loading a new model (chaptering models may still be resident)
+                gc.collect()
+                torch.cuda.empty_cache()
+                free_gb = torch.cuda.mem_get_info()[0] / 1024**3
+                print(f"[HuggingFaceLLMEngine] Free VRAM before load: {free_gb:.2f} GB")
+
+                # Try 4-bit quantization first (saves ~2.5 GB vs FP16, needs bitsandbytes)
+                try:
+                    from transformers import BitsAndBytesConfig
+                    bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
+                    model_kwargs["quantization_config"] = bnb_cfg
+                    model_kwargs["device_map"] = "auto"
+                    device_map = "auto"
+                    print("[HuggingFaceLLMEngine] Using 4-bit quantization (bitsandbytes) — ~0.8 GB VRAM")
+                except ImportError:
+                    # bitsandbytes not available — fall back to FP16
+                    model_kwargs["torch_dtype"] = torch.float16
+                    model_kwargs["device_map"] = "auto"
+                    device_map = "auto"
+                    print("[HuggingFaceLLMEngine] bitsandbytes not found, using FP16 — ~3 GB VRAM")
             except Exception:
                 pass
 
@@ -136,6 +153,16 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
                 res = self.pipe(prompt, max_length=max_tokens, min_length=max(16, max_tokens // 4), do_sample=False)
                 return res[0]["summary_text"].strip()
             else:
+                # Hard-truncate prompt to MAX_INPUT_TOKENS to avoid OOM on T4 (14.56 GB)
+                # Qwen2.5-1.5B safe limit: ~4096 input tokens (FP16) or ~6000 (4-bit)
+                MAX_INPUT_TOKENS = 3072
+                # Estimate: ~1.3 chars/token on average
+                max_chars = int(MAX_INPUT_TOKENS * 3.5)
+                if len(prompt) > max_chars:
+                    # Keep system instructions (first 300 chars) + truncated body
+                    head = prompt[:300]
+                    tail = prompt[-(max_chars - 300):]
+                    prompt = head + "\n...[truncated for VRAM budget]...\n" + tail
                 messages = [{"role": "user", "content": prompt}]
                 res = self.pipe(messages, max_new_tokens=max_tokens, temperature=max(0.01, temperature), do_sample=temperature > 0, return_full_text=False)
                 # pipeline returns list of dicts with generated_text
