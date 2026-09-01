@@ -8,6 +8,7 @@ Supports:
 
 import os
 import re
+import sys as _sys
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
@@ -71,7 +72,11 @@ class GeminiLLMEngine(BaseLLMEngine):
 
 class HuggingFaceLLMEngine(BaseLLMEngine):
     """Local HF engine with singleton cache. Supports Qwen (chat) and BART (seq2seq)."""
-    _CACHE: Dict[str, Any] = {}  # model_id -> (tokenizer, model, pipe)
+    # Use sys.modules as backing store so the cache survives module reimports in Jupyter.
+    _CACHE_KEY = "__hf_llm_engine_cache__"
+    if _CACHE_KEY not in _sys.modules:
+        _sys.modules[_CACHE_KEY] = {}
+    _CACHE: Dict[str, Any] = _sys.modules[_CACHE_KEY]  # type: ignore
 
     def __init__(self, model_id: str = "Qwen/Qwen2.5-1.5B-Instruct", device: Optional[str] = None, trust_remote_code: bool = False):
         # Auto device: cuda if available, else cpu (plan: auto skip HF on cpu)
@@ -274,9 +279,17 @@ def _try_hf(preference: str) -> Optional[BaseLLMEngine]:
         return None
 
 
-# Singleton cache: maps resolved preference key → engine instance.
-# Prevents re-loading HuggingFace models (VRAM / time) on every call.
-_ENGINE_CACHE: Dict[str, BaseLLMEngine] = {}
+# ---------------------------------------------------------------------------
+# Singleton cache — stored in sys.modules so it survives module reimports
+# inside a Jupyter/Colab kernel session.  Plain module-level dicts are reset
+# every time the module is reloaded; sys.modules entries are not.
+# ---------------------------------------------------------------------------
+_CACHE_KEY = "__llm_engine_cache__"
+if _CACHE_KEY not in _sys.modules:
+    _sys.modules[_CACHE_KEY] = {}          # preference_str -> BaseLLMEngine instance
+
+# Convenience alias used everywhere in this module
+_ENGINE_CACHE: Dict[str, "BaseLLMEngine"] = _sys.modules[_CACHE_KEY]  # type: ignore
 
 
 def _resolve_preference(preference: str) -> str:
