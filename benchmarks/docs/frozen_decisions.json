@@ -1,0 +1,92 @@
+{
+  "schema": "frozen_decisions_v1",
+  "created_at": "2026-09-01T00:00:00Z",
+  "source": "framework/decisions-log.md D-T01..D-T15 + D-S01..D-S04",
+  "technical": {
+    "D-T01": {
+      "decision": "Qwen3-VL-4B-Instruct FP16 primary E4/C7",
+      "commit_hash": null,
+      "status": "pending W2 pilot"
+    },
+    "D-T02": {
+      "decision": "C5 4-layer cross-attn 256h 3 tokens BCE vs C6 concat-only",
+      "status": "Frozen"
+    },
+    "D-T03": {
+      "decision": "C7=E4 shared checkpoint",
+      "status": "Frozen"
+    },
+    "D-T04": {
+      "decision": "PaddleOCR v3 ch_PP-OCRv4 0.6, DINOv2 vits14 384d, TransNetV2",
+      "status": "Frozen"
+    },
+    "D-T05": {
+      "decision": "VISTA has no transcript, self-ASR required",
+      "status": "Frozen"
+    },
+    "D-T06": {
+      "decision": "TIB tib-bench 80 zero leakage",
+      "status": "Frozen"
+    },
+    "D-T07": {
+      "decision": "Holm-Bonferroni per RQ (4+4+3) alpha 0.05, Cohen d/Hedges g, bootstrap 1000",
+      "status": "Frozen"
+    },
+    "D-T08": {
+      "decision": "Equal budget 32k/512/200f strict fail not scale",
+      "status": "Frozen"
+    },
+    "D-T09": {
+      "decision": "HF_HOME SSD vs Drive feature_store",
+      "status": "Frozen"
+    },
+    "D-T10": {
+      "decision": "10-video pilot back-solve n for d=0.3/0.5 @80%",
+      "pilot_results": null,
+      "final_n": null,
+      "status": "pending W13"
+    },
+    "D-T11": {
+      "decision": "S2 oracle on TIB keyframes.timestamp >=3",
+      "status": "pending W14"
+    },
+    "D-T12": {
+      "decision": "VISTA primary+TIB external Nominal Path Active 2026-08-31",
+      "approval": "2026-08-31",
+      "mandatory": true,
+      "status": "Active"
+    },
+    "D-T13": {
+      "decision": "API fixed date snapshot",
+      "date": null,
+      "status": "pending"
+    },
+    "D-T14": {
+      "decision": "Reference audit rubric source_support/coverage/style/action",
+      "status": "Frozen"
+    },
+    "D-T15": {
+      "decision": "Real-data-only 100% no mock (D-T15)",
+      "status": "Frozen 2026-09-01",
+      "grep_mock": 0
+    }
+  },
+  "strategic": {
+    "D-S01": "Thesis+Paper",
+    "D-S02": "English primary, Vietnamese future",
+    "D-S03": "Single-author + LLM-as-Judge",
+    "D-S04": "IDs/features/scripts only"
+  },
+  "budget": {
+    "source_tokens": 32000,
+    "output_tokens": 512,
+    "max_frames": 200,
+    "frame_resolution_px": 448
+  },
+  "seeds": [
+    42,
+    1337,
+    2026
+  ],
+  "vista_approval": "2026-08-31"
+}

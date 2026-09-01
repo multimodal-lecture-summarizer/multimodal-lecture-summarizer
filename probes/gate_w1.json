@@ -1,0 +1,31 @@
+{
+  "created_at": "2026-09-01T04:45:26.699860+00:00",
+  "note": "W1 gate simulate - yt-dlp --simulate + HF load_dataset schema check (no full download)",
+  "datasets": {
+    "YTSeg": {
+      "probe": "yt-dlp --simulate 20 IDs, ytseg load_dataset retkowski/ytseg schema OK",
+      "media_status": "simulated",
+      "failure_rate": "unknown till download",
+      "items": 20
+    },
+    "VISTA": {
+      "probe": "dongqi-me/VISTA gated access Approved 2026-08-31, schema has no transcript per D-T05",
+      "media_status": "approved",
+      "failure_rate": "pending raw download",
+      "items": 20
+    },
+    "TIB-bench": {
+      "probe": "gigant/tib-bench test 80 zero leakage verified 2026-08-30",
+      "media_status": "available",
+      "items": 20
+    },
+    "EduVidQA": {
+      "probe": "eduvidqa 5,252 QA, real_world_test.csv 269 QA sample",
+      "items": 20
+    },
+    "VT-SSum": {
+      "probe": "Dod-o/VT-SSum 962 test cached vtssum test 22axpf...",
+      "items": 20
+    }
+  }
+}

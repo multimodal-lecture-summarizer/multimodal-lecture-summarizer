@@ -1,0 +1,27 @@
+{
+  "python": "3.11.x",
+  "cuda": "12.4",
+  "gpu": "T4 15GB or RTX4050 6GB",
+  "package_lock_hash": "requirements.freeze.txt sha256 TBD",
+  "model_revisions": {
+    "qwen3_vl_4b": "pending D-T01",
+    "dinov2": "torch.hub/facebookresearch/dinov2:dinov2_vits14",
+    "paddleocr": "ch_PP-OCRv4",
+    "whisper": "openai/whisper-small"
+  },
+  "dataset_revisions": {
+    "ytseg": "retkowski/ytseg",
+    "vista": "dongqi-me/VISTA Approved 2026-08-31",
+    "tib_bench": "gigant/tib-bench",
+    "eduvidqa": "sourjyadip/eduvidqa",
+    "vtssum": "Dod-o/VT-SSum"
+  },
+  "git_commit": "TBD",
+  "seed": 42,
+  "budget": {
+    "source_tokens": 32000,
+    "output_tokens": 512,
+    "max_frames": 200,
+    "frame_resolution_px": 448
+  }
+}

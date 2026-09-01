@@ -119,6 +119,20 @@ Report both raw p-values and Holm-corrected p-values. Effect size = Cohen's d; H
 
 ---
 
+### D-T15 — Real-data-only policy (no mock / no synthetic research data)
+**Decision:** **Toàn bộ dữ liệu nghiên cứu phải là dữ liệu thật (100% real datasets). Cấm mọi hình thức mock/synthetic/phát sinh giả cho kết quả nghiên cứu.**  
+**Scope:**
+- **Cấm:** `torch.randn`/`np.random.randn`/`np.random.uniform` để tạo features, boundaries, transcripts, OCR, QA; template-fake OCR (`Slide Concept…`, `Key Slide…`); answer-leak (`...confirms: {ans_text}`); `cumsum` heuristic boundaries; synthetic/mocked benchmark items; placeholder stats.
+- **Cho phép:** (a) `torch.randn` chỉ cho `nn.Parameter` init (ví dụ `chaptering.py:279 boundary_tokens *0.02`) và `statistics.py` bootstrap RNG `np.random.default_rng`; (b) tổng hợp thống kê `synthetic_*` trong `generate_large_testset.py` không phải research claim (phải ghi rõ `notes: synthetic …` và không vào bảng kết quả RQ); (c) `unittest.mock` chỉ trong `tests/`; (d) LLM fallback `DeterministicAbstractiveEngine` là **phương thức suy luận**, không phải dữ liệu giả.
+- **Thực thi:** Mọi notebook/script trước full run phải qua `grep` sweep: `torch.randn` ngoài `chaptering.py`, `np.random.randn/uniform` trong `experiments/notebooks/`, `ans_text` trong evidence, `Slide Concept` template → phải =0. `P2` thay `02_phase2` mock embeddings/boundaries bằng real `cached_features/*.pt` + real `C1–C6` inference; `P6` verification gate fail nếu phát hiện mock trong research path. `pilot_qualification_runner.py` synthetic sanity vectors giữ lại chỉ để validate metric impl, không tính vào RQ tables.
+- **Ngoại lệ duy nhất:** Nếu dữ liệu thật thiếu (ví dụ `probes/cache` mất), phải **fail-loud** + ghi `missing_data_report.md`, không tự sinh mock thay thế.  
+**Source:** User request 2026-09-01 “toàn bộ phải là dữ liệu thật, không dùng mock nữa” + audit 2026-09-01 (`NOTEBOOKS_ASSESSMENT.md`).  
+**Status:** Frozen 2026-09-01.  
+**Decided by:** owner (user) + plan maintainer  
+**Date decided:** 2026-09-01
+
+---
+
 ## Strategic decisions (answered 2026-08-31)
 
 ### D-S01 — Primary output: thesis or paper?

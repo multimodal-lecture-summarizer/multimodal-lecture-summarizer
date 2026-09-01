@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0-frozen-ytseg",
+  "seed": 42,
+  "split": {
+    "train": 0.6,
+    "val": 0.2,
+    "test": 0.2
+  },
+  "leakage": {
+    "passed": true
+  },
+  "items": [
+    {
+      "item_id": "ytseg_dry_000",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "ground_truth_boundaries": [
+        0.0
+      ]
+    },
+    {
+      "item_id": "ytseg_dry_001",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "ground_truth_boundaries": [
+        30.0
+      ]
+    },
+    {
+      "item_id": "ytseg_dry_002",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "ground_truth_boundaries": [
+        60.0
+      ]
+    },
+    {
+      "item_id": "ytseg_dry_003",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "ground_truth_boundaries": [
+        90.0
+      ]
+    },
+    {
+      "item_id": "ytseg_dry_004",
+      "dataset": "tier_a_ytseg",
+      "split": "test",
+      "ground_truth_boundaries": [
+        120.0
+      ]
+    }
+  ],
+  "note": "dry-run stub — replace with real fetch for full 300"
+}
