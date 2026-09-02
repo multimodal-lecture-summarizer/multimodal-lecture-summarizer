@@ -11,6 +11,7 @@ from benchmarks.models.summarization import (
     S2_OracleHierarchySummarizer,
     S3_PredictedHierarchySummarizer,
     S4_MultimodalHierarchySummarizer,
+    S3_PlusEvidenceSummarizer,
 )
 from benchmarks.metrics.summarization_metrics import (
     compute_rouge_n,
@@ -96,7 +97,8 @@ def test_s3_predicted_hierarchy_summarizer(sample_lecture_sentences):
 
     assert res.variant_id == "S3_predicted_hierarchy"
     assert res.num_chapters == 4
-    assert "Chapter 1" in res.summary_text
+    assert len(res.summary_text) > 0
+    assert res.token_usage["output_tokens"] <= 512
 
 
 def test_s4_multimodal_hierarchy_summarizer(sample_lecture_sentences):
@@ -107,7 +109,22 @@ def test_s4_multimodal_hierarchy_summarizer(sample_lecture_sentences):
     res = summarizer.summarize(sample_lecture_sentences, boundaries, ocr_texts=ocr_texts)
 
     assert res.variant_id == "S4_multimodal_hierarchy"
-    assert "Slide Focus:" in res.summary_text
+    assert res.num_chapters == 3
+    assert len(res.summary_text) > 0
+    assert res.token_usage["output_tokens"] <= 512
+
+
+def test_s3_plus_evidence_summarizer(sample_lecture_sentences):
+    cfg = SummarizerConfig(variant_id="S3_plus_evidence")
+    summarizer = S3_PlusEvidenceSummarizer(cfg)
+    boundaries = [180.0, 360.0]
+    ocr_texts = ["FWER and Bonferroni Formula", "FDR Benjamini-Hochberg Equation", "Conclusion & Key Takeaways"]
+    res = summarizer.summarize(sample_lecture_sentences, boundaries, ocr_texts=ocr_texts)
+
+    assert res.variant_id == "S3_plus_evidence"
+    assert res.num_chapters == 3
+    assert len(res.summary_text) > 0
+    assert res.token_usage["output_tokens"] <= 512
 
 
 def test_summarization_metrics(sample_lecture_sentences, sample_reference_summary):

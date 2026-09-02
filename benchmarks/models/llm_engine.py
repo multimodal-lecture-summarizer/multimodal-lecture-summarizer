@@ -10,8 +10,13 @@ import os
 import re
 import sys as _sys
 import time
+import warnings
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
+
+# Suppress benign transformers text-generation warnings
+warnings.filterwarnings("ignore", message=".*Both.*max_new_tokens.*and.*max_length.*")
+warnings.filterwarnings("ignore", message=".*You seem to be using the pipelines sequentially.*")
 
 
 class BaseLLMEngine(ABC):
@@ -100,6 +105,8 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
             self.tokenizer, self.model, self.pipe, self.model_id, self.device = HuggingFaceLLMEngine._CACHE[cache_key]
             return
 
+        import transformers
+        transformers.logging.set_verbosity_error()
         from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, pipeline
 
         self.model_id = model_id
@@ -109,6 +116,7 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
         # Device map and dtype
         device_map = device
         model_kwargs = {}
+        use_4bit = False
         if device == "cuda":
             try:
                 import torch, gc
@@ -118,22 +126,22 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
                 free_gb = torch.cuda.mem_get_info()[0] / 1024**3
                 print(f"[HuggingFaceLLMEngine] Free VRAM before load: {free_gb:.2f} GB")
 
-                # Try 4-bit quantization first (saves ~2.5 GB vs FP16, needs bitsandbytes)
+                # Try 4-bit quantization first (saves ~2.5 GB vs FP16, needs working bitsandbytes)
                 try:
+                    import bitsandbytes as _bnb
                     from transformers import BitsAndBytesConfig
                     bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
                     model_kwargs["quantization_config"] = bnb_cfg
                     model_kwargs["device_map"] = "auto"
-                    device_map = "auto"
+                    use_4bit = True
                     print("[HuggingFaceLLMEngine] Using 4-bit quantization (bitsandbytes) — ~0.8 GB VRAM")
-                except ImportError:
-                    # bitsandbytes not available — fall back to FP16
+                except (ImportError, Exception) as bnb_err:
+                    # bitsandbytes not available — fall back to FP16 directly
                     model_kwargs["torch_dtype"] = torch.float16
                     model_kwargs["device_map"] = "auto"
-                    device_map = "auto"
-                    print("[HuggingFaceLLMEngine] bitsandbytes not found, using FP16 — ~3 GB VRAM")
-            except Exception:
-                pass
+                    print(f"[HuggingFaceLLMEngine] bitsandbytes not available ({bnb_err}), using FP16 — ~3 GB VRAM")
+            except Exception as e:
+                print(f"[HuggingFaceLLMEngine] GPU probe notice: {e}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
 
@@ -141,12 +149,32 @@ class HuggingFaceLLMEngine(BaseLLMEngine):
             self.model = AutoModelForSeq2SeqLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
             self.pipe = pipeline("summarization", model=self.model, tokenizer=self.tokenizer, device=0 if device == "cuda" else -1)
         else:
-            self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
+            except Exception as load_err:
+                if use_4bit and device == "cuda":
+                    import torch
+                    print(f"[HuggingFaceLLMEngine] 4-bit loading failed ({load_err}). Retrying with FP16 (~3 GB VRAM)...")
+                    model_kwargs.pop("quantization_config", None)
+                    model_kwargs["torch_dtype"] = torch.float16
+                    model_kwargs["device_map"] = "auto"
+                    self.model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=trust_remote_code, **model_kwargs)
+                else:
+                    raise load_err
             # pipeline handles device via model device_map; use -1 for cpu, 0 for cuda when not auto
             pipe_device = -1
             if device == "cuda" and model_kwargs.get("device_map") != "auto":
                 pipe_device = 0
+            
+            # Avoid 'Both max_new_tokens and max_length seem to have been set' warning
+            if hasattr(self.model, "generation_config") and self.model.generation_config is not None:
+                self.model.generation_config.max_length = None
+            if hasattr(self.model, "config") and self.model.config is not None:
+                self.model.config.max_length = None
+
             self.pipe = pipeline("text-generation", model=self.model, tokenizer=self.tokenizer, device=pipe_device)
+            if hasattr(self.pipe, "model") and hasattr(self.pipe.model, "generation_config"):
+                self.pipe.model.generation_config.max_length = None
 
         HuggingFaceLLMEngine._CACHE[cache_key] = (self.tokenizer, self.model, self.pipe, self.model_id, self.device)
 
@@ -191,6 +219,7 @@ class DeterministicAbstractiveEngine(BaseLLMEngine):
     High-fidelity offline multi-sentence synthesis engine v2.
     - Tries SBERT centrality (all-MiniLM-L6-v2) if sentence_transformers available
     - Falls back to keyword-length scoring
+    - Handles both full lecture prompts and section/chapter topic prompts cleanly.
     """
     # SBERT model cached in sys.modules to survive reimports and avoid repeated HF downloads
     _SBERT_CACHE_KEY = "__deterministic_sbert_model__"
@@ -240,13 +269,19 @@ class DeterministicAbstractiveEngine(BaseLLMEngine):
 
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.2) -> str:
         source = prompt
+        is_topic_prompt = any(k in prompt for k in ["TOPIC:", "TAKEAWAY:", "SECTION SUMMARY:", "State the core topic", "key takeaway"])
+        
         if "TRANSCRIPT:" in prompt:
             source = prompt.split("TRANSCRIPT:", 1)[1]
         elif "CONTENT:" in prompt:
             source = prompt.split("CONTENT:", 1)[1]
+        elif "FINAL SUMMARY:" in prompt:
+            source = prompt.split("FINAL SUMMARY:", 1)[1]
         
         raw_sents = [s.strip() for s in re.split(r'[.\n]+', source) if len(s.strip().split()) > 3]
         if not raw_sents:
+            if is_topic_prompt:
+                return "Core concepts and methodology"
             return "This lecture provides a comprehensive overview of the discussed concepts and fundamental principles."
 
         # SBERT centrality if available
@@ -266,10 +301,26 @@ class DeterministicAbstractiveEngine(BaseLLMEngine):
             scored_sents.append((score, idx, s))
 
         scored_sents.sort(key=lambda x: x[0], reverse=True)
-        top_sents = sorted(scored_sents[:min(5, len(scored_sents))], key=lambda x: x[1])
 
+        if is_topic_prompt:
+            # For section / chapter topic prompts, return the most salient sentence or concise clause directly
+            top_sent = scored_sents[0][2]
+            if max_tokens < 20:
+                words = top_sent.split()
+                return " ".join(words[:min(10, len(words))])
+            if not top_sent.endswith('.'):
+                top_sent += '.'
+            return top_sent
+
+        # Full lecture summary synthesis
+        top_sents = sorted(scored_sents[:min(5, len(scored_sents))], key=lambda x: x[1])
         summary_parts = []
-        summary_parts.append(f"In this lecture, the core focus centers on {top_sents[0][2].lower() if top_sents else 'the subject'}.")
+        first_text = top_sents[0][2]
+        if not first_text.lower().startswith("in this lecture"):
+            summary_parts.append(f"In this lecture, the core focus centers on {first_text[0].lower() + first_text[1:] if len(first_text) > 1 else first_text}.")
+        else:
+            summary_parts.append(first_text if first_text.endswith('.') else first_text + '.')
+
         for item in top_sents[1:]:
             sent = item[2]
             if not sent.endswith('.'):
