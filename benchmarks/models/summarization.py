@@ -239,26 +239,44 @@ class S3_PredictedHierarchySummarizer(BaseSummarizer):
                     "sentences": ch_sents
                 })
 
-        # Synthesize chapter summaries
+        # Synthesize chapter summaries with DYNAMIC per-chapter budget (D-T08 hard 512-token cap).
+        # Fixed 48 tokens/chapter caused 45-chapter lectures to truncate to ~10 chapters (393 words),
+        # silently dropping 35/45 chapters. Now we split 512 evenly with floor 6 so EVERY chapter is represented.
+        n_chapters = len(chapters)
+        per_chapter_tokens = max(6, self.config.max_output_tokens // max(1, n_chapters))
+        if per_chapter_tokens >= 30:
+            instruction = "1 concise sentence (15-25 words)"
+        elif per_chapter_tokens >= 15:
+            instruction = "1 short sentence (8-12 words)"
+        else:
+            instruction = "a topic label (3-6 words, no period)"
+
         bullets = []
         for c in chapters:
             ch_text = " ".join(c["sentences"])
             prompt = (
-                f"Summarize the core topic and concept of Chapter {c['chapter_id']} in 1 concise sentence:\n\n"
+                f"State the core topic of Chapter {c['chapter_id']} as {instruction}:\n\n"
                 f"CONTENT:\n{ch_text}\n\n"
-                "CONCEPT:"
+                "TOPIC:"
             )
-            salient = self.llm.generate(prompt, max_tokens=48)
-            bullets.append(f"**Chapter {c['chapter_id']} [{c['timestamp']}]**: {salient}")
+            salient = self.llm.generate(prompt, max_tokens=per_chapter_tokens)
+            salient = salient.strip().rstrip(".,;:")
+            bullets.append(f"**Ch.{c['chapter_id']} [{c['timestamp']}]**: {salient}")
 
         summary_text = "\n".join(bullets)
+        # Safety net: if LLM ignored instruction and overflowed, hard-truncate to 512 tokens.
         summary_text = self._truncate_to_budget(summary_text, self.config.max_output_tokens)
 
         return SummaryResult(
             variant_id="S3_predicted_hierarchy",
             summary_text=summary_text,
-            token_usage={"source_tokens": self._estimate_tokens(budgeted_input), "output_tokens": self._estimate_tokens(summary_text)},
-            num_chapters=len(chapters),
+            token_usage={
+                "source_tokens": self._estimate_tokens(budgeted_input),
+                "output_tokens": self._estimate_tokens(summary_text),
+                "per_chapter_tokens": per_chapter_tokens,
+                "num_chapters": n_chapters,
+            },
+            num_chapters=n_chapters,
             hierarchy=chapters
         )
 
@@ -282,48 +300,218 @@ class S4_MultimodalHierarchySummarizer(BaseSummarizer):
         n_sents = len(transcript_sentences)
         num_chapters = max(1, len(predicted_boundaries_sec) + 1)
         chapter_size = max(1, n_sents // num_chapters)
-        
+
+        # Dynamic per-chapter budget (D-T08 hard 512-token cap).
+        # Reserve room for prefix "**Ch.X [ts]**: " (~6 tok) and slide-evidence suffix " (S: ...)" (~4 tok).
+        _PREFIX_TOKENS = 6
+        _SLIDE_EVIDENCE_TOKENS = 4
+        per_chapter_tokens = max(6, self.config.max_output_tokens // max(1, num_chapters))
+        salient_budget = max(4, per_chapter_tokens - _PREFIX_TOKENS - _SLIDE_EVIDENCE_TOKENS)
+        if salient_budget >= 30:
+            instruction = "1 concise sentence (15-25 words)"
+        elif salient_budget >= 15:
+            instruction = "1 short sentence (8-12 words)"
+        else:
+            instruction = "a topic label (3-6 words, no period)"
+
         chapters = []
         for ch_idx in range(num_chapters):
             start_i = ch_idx * chapter_size
             end_i = min(n_sents, (ch_idx + 1) * chapter_size) if ch_idx < num_chapters - 1 else n_sents
             ch_sents = transcript_sentences[start_i:end_i]
-            
-            ocr_concept = ocr_texts[ch_idx] if ocr_texts and ch_idx < len(ocr_texts) else None
+
+            # Truncate slide_evidence to ~3 words so the suffix fits the budget.
+            raw_ocr = ocr_texts[ch_idx] if ocr_texts and ch_idx < len(ocr_texts) else None
+            if raw_ocr:
+                ocr_words = raw_ocr.split()
+                ocr_concept = " ".join(ocr_words[:3]) if len(ocr_words) > 3 else raw_ocr
+            else:
+                ocr_concept = None
             ts_label = f"{int(predicted_boundaries_sec[ch_idx-1])}s" if ch_idx > 0 and ch_idx - 1 < len(predicted_boundaries_sec) else "0s"
-            
+
             ch_text = " ".join(ch_sents)
-            prompt = (
-                f"Summarize Chapter {ch_idx+1} ({ts_label}) synthesizing spoken lecture content and slide focus '{ocr_concept or ''}' into 1-2 insightful sentences:\n\n"
-                f"CONTENT:\n{ch_text}\n\n"
-                "SYNTHESIS:"
-            )
-            salient = self.llm.generate(prompt, max_tokens=64)
-            
+            # Only inject OCR into prompt when budget allows; otherwise OCR is appended as evidence only.
+            if ocr_concept and salient_budget >= 15:
+                prompt = (
+                    f"State the core topic of Chapter {ch_idx+1} ({ts_label}) as {instruction}, "
+                    f"incorporating slide focus '{ocr_concept}':\n\n"
+                    f"CONTENT:\n{ch_text}\n\n"
+                    "TOPIC:"
+                )
+            else:
+                prompt = (
+                    f"State the core topic of Chapter {ch_idx+1} ({ts_label}) as {instruction}:\n\n"
+                    f"CONTENT:\n{ch_text}\n\n"
+                    "TOPIC:"
+                )
+            salient = self.llm.generate(prompt, max_tokens=salient_budget)
+            salient = salient.strip().rstrip(".,;:")
+
             chapters.append({
                 "chapter_id": ch_idx + 1,
                 "timestamp": ts_label,
                 "salient_point": salient,
-                "slide_evidence": ocr_concept
+                "slide_evidence": ocr_concept,
             })
 
-        # Synthesize multimodal grounded hierarchy
+        # Synthesize multimodal grounded hierarchy (post-processing: append slide evidence as compact suffix).
         bullets = []
         for c in chapters:
-            b = f"**Chapter {c['chapter_id']} [{c['timestamp']}]**: {c['salient_point']}"
+            b = f"**Ch.{c['chapter_id']} [{c['timestamp']}]**: {c['salient_point']}"
             if c.get("slide_evidence"):
-                b += f" *(Slide Focus: {c['slide_evidence']})*"
+                b += f" (S:{c['slide_evidence']})"
+            bullets.append(b)
+
+        summary_text = "\n".join(bullets)
+        # Safety net: hard 512-token cap in case LLM ignored per-chapter budget.
+        summary_text = self._truncate_to_budget(summary_text, self.config.max_output_tokens)
+
+        return SummaryResult(
+            variant_id="S4_multimodal_hierarchy",
+            summary_text=summary_text,
+            token_usage={
+                "source_tokens": self._estimate_tokens(budgeted_input),
+                "output_tokens": self._estimate_tokens(summary_text),
+                "per_chapter_tokens": per_chapter_tokens,
+                "salient_budget": salient_budget,
+                "num_chapters": num_chapters,
+            },
+            num_chapters=num_chapters,
+            hierarchy=chapters
+        )
+
+
+class S3_PlusEvidenceSummarizer(BaseSummarizer):
+    """
+    S3+ev ablation: S3's text-only hierarchy with optional slide-evidence injection.
+
+    Purpose: isolate the contribution of slide evidence from the contribution of
+    multi-sentence synthesis. Compared against S3 (no evidence) and S4 (evidence + 1-2 sentence
+    synthesis + Slide Focus label), this variant answers:
+
+        Q1: Does adding transcript-derived slide context help over text-only hierarchy (S3+ev vs S3)?
+        Q2: Does S4's multi-sentence synthesis add value over evidence-injected single-sentence
+            (S4 vs S3+ev)?
+
+    Design:
+        - Same per-chapter logic and dynamic budget as S3 (one sentence / topic label per chapter).
+        - When ocr_texts[i] is provided AND per-chapter budget >= 15, the prompt injects a 3-word
+          slide focus ("incorporating slide focus 'X'"); otherwise prompt falls back to S3's
+          text-only form so the ablation collapses gracefully when evidence is absent.
+        - Output bullet uses the same compact suffix as S4: "(S:ev)" — but only for chapters
+          that have evidence, leaving other chapters text-only. This makes the evidence
+          contribution visible per-chapter.
+    """
+    def summarize(
+        self,
+        transcript_sentences: Sequence[str],
+        predicted_boundaries_sec: Sequence[float],
+        timestamps_sec: Optional[Sequence[float]] = None,
+        ocr_texts: Optional[Sequence[str]] = None,
+    ) -> SummaryResult:
+        full_text = " ".join(transcript_sentences)
+        budgeted_input = self._truncate_to_budget(full_text, self.config.max_source_tokens)
+
+        n_sents = len(transcript_sentences)
+        chapters = []
+
+        # Same chapter partitioning as S3 (timestamp-driven when available, else fixed-size).
+        if timestamps_sec is not None and len(timestamps_sec) == n_sents and len(predicted_boundaries_sec) > 0:
+            boundaries = sorted(list(predicted_boundaries_sec))
+            cur_ch_sents = []
+            cur_b_idx = 0
+            cur_start_ts = 0.0
+
+            for s_idx, (sent, ts) in enumerate(zip(transcript_sentences, timestamps_sec)):
+                if cur_b_idx < len(boundaries) and ts >= boundaries[cur_b_idx]:
+                    if cur_ch_sents:
+                        chapters.append({
+                            "chapter_id": len(chapters) + 1,
+                            "timestamp": f"{int(cur_start_ts)}s",
+                            "sentences": cur_ch_sents,
+                        })
+                    cur_ch_sents = [sent]
+                    cur_start_ts = boundaries[cur_b_idx]
+                    cur_b_idx += 1
+                else:
+                    cur_ch_sents.append(sent)
+            if cur_ch_sents:
+                chapters.append({
+                    "chapter_id": len(chapters) + 1,
+                    "timestamp": f"{int(cur_start_ts)}s",
+                    "sentences": cur_ch_sents,
+                })
+        else:
+            num_chapters = max(1, len(predicted_boundaries_sec) + 1)
+            chapter_size = max(1, n_sents // num_chapters)
+            for ch_idx in range(num_chapters):
+                start_i = ch_idx * chapter_size
+                end_i = min(n_sents, (ch_idx + 1) * chapter_size) if ch_idx < num_chapters - 1 else n_sents
+                ch_sents = transcript_sentences[start_i:end_i]
+                ts_label = f"{int(predicted_boundaries_sec[ch_idx-1])}s" if ch_idx > 0 and ch_idx - 1 < len(predicted_boundaries_sec) else "0s"
+                chapters.append({
+                    "chapter_id": ch_idx + 1,
+                    "timestamp": ts_label,
+                    "sentences": ch_sents,
+                })
+
+        # Dynamic per-chapter budget (D-T08 512-token cap), same allocation as S3.
+        n_chapters = len(chapters)
+        per_chapter_tokens = max(6, self.config.max_output_tokens // max(1, n_chapters))
+        if per_chapter_tokens >= 30:
+            instruction = "1 concise sentence (15-25 words)"
+        elif per_chapter_tokens >= 15:
+            instruction = "1 short sentence (8-12 words)"
+        else:
+            instruction = "a topic label (3-6 words, no period)"
+
+        bullets = []
+        for c in chapters:
+            ch_text = " ".join(c["sentences"])
+
+            # Truncate slide_evidence to 3 words to fit tight budgets.
+            raw_ocr = ocr_texts[c["chapter_id"] - 1] if ocr_texts and (c["chapter_id"] - 1) < len(ocr_texts) else None
+            if raw_ocr:
+                ocr_words = raw_ocr.split()
+                ocr_concept = " ".join(ocr_words[:3]) if len(ocr_words) > 3 else raw_ocr
+            else:
+                ocr_concept = None
+
+            if ocr_concept and per_chapter_tokens >= 15:
+                prompt = (
+                    f"State the core topic of Chapter {c['chapter_id']} as {instruction}, "
+                    f"incorporating slide focus '{ocr_concept}':\n\n"
+                    f"CONTENT:\n{ch_text}\n\n"
+                    "TOPIC:"
+                )
+            else:
+                prompt = (
+                    f"State the core topic of Chapter {c['chapter_id']} as {instruction}:\n\n"
+                    f"CONTENT:\n{ch_text}\n\n"
+                    "TOPIC:"
+                )
+            salient = self.llm.generate(prompt, max_tokens=per_chapter_tokens)
+            salient = salient.strip().rstrip(".,;:")
+
+            b = f"**Ch.{c['chapter_id']} [{c['timestamp']}]**: {salient}"
+            if ocr_concept:
+                b += f" (S:{ocr_concept})"
             bullets.append(b)
 
         summary_text = "\n".join(bullets)
         summary_text = self._truncate_to_budget(summary_text, self.config.max_output_tokens)
 
         return SummaryResult(
-            variant_id="S4_multimodal_hierarchy",
+            variant_id="S3_plus_evidence",
             summary_text=summary_text,
-            token_usage={"source_tokens": self._estimate_tokens(budgeted_input), "output_tokens": self._estimate_tokens(summary_text)},
-            num_chapters=len(chapters),
-            hierarchy=chapters
+            token_usage={
+                "source_tokens": self._estimate_tokens(budgeted_input),
+                "output_tokens": self._estimate_tokens(summary_text),
+                "per_chapter_tokens": per_chapter_tokens,
+                "num_chapters": n_chapters,
+            },
+            num_chapters=n_chapters,
+            hierarchy=chapters,
         )
 
 
