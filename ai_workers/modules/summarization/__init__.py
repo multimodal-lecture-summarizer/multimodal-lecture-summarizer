@@ -1,9 +1,4 @@
-"""LLM Summarizer — Backward-compatible wrapper.
-
-Delegates core execution to the resilient ai_workers.modules.summarization module.
-"""
-
-from __future__ import annotations
+"""Summarization module with resilient LLM clients, standardized errors, and summarizer service."""
 
 from ai_workers.modules.summarization.errors import (
     LLMAuthenticationError,
