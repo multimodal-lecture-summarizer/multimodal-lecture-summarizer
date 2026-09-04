@@ -22,6 +22,7 @@ storage/
 *.bin
 *.onnx
 !benchmarks/models/
+!benchmarks/data/cached_features/*.pt
 
 # Videos (large files)
 /videos/

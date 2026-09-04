@@ -11,7 +11,7 @@ Enforces strict context parity (top-k=3, context <= 1024 tokens) per D-T08.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple, Any
+from typing import Dict, List, Optional, Sequence, Tuple, Any, Union
 import math
 import re
 import numpy as np
@@ -325,10 +325,50 @@ class Q2_PredictedHierarchyRetrievalQA(BaseRetrievalQA):
         )
 
 
+def reciprocal_rank_fusion(
+    dense_ranks: Union[Sequence[Any], Dict[Any, int]],
+    sparse_ranks: Union[Sequence[Any], Dict[Any, int]],
+    k: int = 60
+) -> List[Tuple[Any, float]]:
+    """
+    Reciprocal Rank Fusion (RRF) algorithm (Cormack, Clarke, & Buettcher, SIGIR 2009).
+    Combines ranked lists from heterogeneous retrieval systems without score normalization bias.
+    Formula: RRF(d) = sum_{m in {dense, sparse}} 1 / (k + rank_m(d))
+    """
+    dense_dict: Dict[Any, int] = {}
+    if isinstance(dense_ranks, dict):
+        dense_dict = dense_ranks
+    else:
+        for rank, item in enumerate(dense_ranks, start=1):
+            dense_dict[item] = rank
+
+    sparse_dict: Dict[Any, int] = {}
+    if isinstance(sparse_ranks, dict):
+        sparse_dict = sparse_ranks
+    else:
+        for rank, item in enumerate(sparse_ranks, start=1):
+            sparse_dict[item] = rank
+
+    all_keys = set(dense_dict.keys()).union(set(sparse_dict.keys()))
+    scores: Dict[Any, float] = {}
+
+    for doc_id in all_keys:
+        score = 0.0
+        if doc_id in dense_dict:
+            score += 1.0 / (k + dense_dict[doc_id])
+        if doc_id in sparse_dict:
+            score += 1.0 / (k + sparse_dict[doc_id])
+        scores[doc_id] = score
+
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return ranked
+
+
 class Q3_MultimodalHierarchyRetrievalQA(BaseRetrievalQA):
     """
     Q3: Multimodal Grounded Hierarchy Index (Proposed Q3 representation).
-    Routes query through C5 chapters and integrates slide OCR text & visual context into evidence.
+    Routes query through C5 chapters and integrates slide OCR text & visual context into evidence
+    using Reciprocal Rank Fusion (RRF, k=60).
     """
     def answer_question(
         self,
@@ -374,19 +414,32 @@ class Q3_MultimodalHierarchyRetrievalQA(BaseRetrievalQA):
         best_ch_idx = int(np.argmax(ch_scores))
         best_ch = chapters[best_ch_idx]
 
-        # Stage 2: Within-chapter sentence + slide retrieval
+        # Stage 2: Within-chapter sentence + slide retrieval via Reciprocal Rank Fusion (RRF)
         sents = list(best_ch["sentences"])
         if best_ch["ocr"]:
             sents.append(f"Slide Text Evidence: {best_ch['ocr']}")
 
+        # Dense ranking
         s_vecs = self.embedder.embed_texts(sents, self.config.embedding_dim)
-        s_scores = np.dot(s_vecs, q_vec)
+        dense_scores = np.dot(s_vecs, q_vec)
+        dense_ranks = list(np.argsort(dense_scores)[::-1])
+
+        # Lexical / keyword sparse ranking
+        q_tokens = set(re.findall(r"\b\w+\b", question.lower()))
+        sparse_scores = np.array([
+            len(q_tokens.intersection(set(re.findall(r"\b\w+\b", s.lower()))))
+            for s in sents
+        ], dtype=np.float32)
+        sparse_ranks = list(np.argsort(sparse_scores)[::-1])
+
+        # Reciprocal Rank Fusion (k=60)
+        rrf_fused = reciprocal_rank_fusion(dense_ranks, sparse_ranks, k=60)
         top_k = min(self.config.top_k, len(sents))
-        top_indices = np.argsort(s_scores)[::-1][:top_k]
+        top_indices = [idx for idx, score in rrf_fused[:top_k]]
 
         retrieved_texts = [sents[i] for i in top_indices]
         retrieved_ids = [f"mm_ch_{best_ch_idx}_item_{i}" for i in top_indices]
-        confidence = float(s_scores[top_indices[0]]) if top_indices.size > 0 else 0.0
+        confidence = float(rrf_fused[0][1]) if rrf_fused else 0.0
 
         answer = self._synthesize_answer(question, retrieved_texts)
         if best_ch["ocr"]:
