@@ -1,0 +1,180 @@
+{
+  "timestamp": "2026-09-04 17:22:42",
+  "hardware": "NVIDIA T4 16GB",
+  "systems": {
+    "E1": {
+      "name": "E1 (Transcript-Only)",
+      "description": "C1 Text-only + S1 Fixed-Chunk MapReduce + Q0 Flat Dense RAG",
+      "components": {
+        "chaptering": "C1 (Text-only)",
+        "summarization": "S1 (MapReduce)",
+        "retrieval_qa": "Q0 (Flat Dense)"
+      },
+      "latency": {
+        "chaptering_sec": 0.8,
+        "summarization_sec": 86.4,
+        "retrieval_qa_sec": 5.6,
+        "total_wall_sec": 92.8
+      },
+      "resource": {
+        "peak_vram_mb": 3250.0,
+        "vram_limit_ratio": 0.21158854166666666,
+        "storage_footprint_mb": 2.5,
+        "failure_rate_pct": 0.0
+      },
+      "quality": {
+        "factual_coverage_pct": 27.54,
+        "unsupported_claims_pct": 15.94,
+        "rouge1": 0.226,
+        "rouge2": 0.0299,
+        "rougeL": 0.1116,
+        "qa_recall3_pct": 41.7,
+        "qa_mrr": 0.29,
+        "qa_answer_f1_pct": 30.23,
+        "evidence_time_iou": 0.1208,
+        "chapter_collar_f1_5s": 0.0417,
+        "chapter_window_diff": 0.2304
+      }
+    },
+    "E2": {
+      "name": "E2 (Structured Monomodal)",
+      "description": "C5 Cross-Attn + S3 Predicted Hierarchy + Q2 Predicted Chapter RAG",
+      "components": {
+        "chaptering": "C5 (Cross-Attention)",
+        "summarization": "S3 (Predicted Hierarchy)",
+        "retrieval_qa": "Q2 (Predicted Chapter)"
+      },
+      "latency": {
+        "chaptering_sec": 1.2,
+        "summarization_sec": 19.4,
+        "retrieval_qa_sec": 4.5,
+        "total_wall_sec": 25.1
+      },
+      "resource": {
+        "peak_vram_mb": 3850.0,
+        "vram_limit_ratio": 0.2506510416666667,
+        "storage_footprint_mb": 12.0,
+        "failure_rate_pct": 0.0
+      },
+      "quality": {
+        "factual_coverage_pct": 26.47,
+        "unsupported_claims_pct": 27.87,
+        "rouge1": 0.1761,
+        "rouge2": 0.0258,
+        "rougeL": 0.0925,
+        "qa_recall3_pct": 49.3,
+        "qa_mrr": 0.4933,
+        "qa_answer_f1_pct": 29.31,
+        "evidence_time_iou": 0.1728,
+        "chapter_collar_f1_5s": 0.0417,
+        "chapter_window_diff": 0.3217
+      }
+    },
+    "E3": {
+      "name": "E3 (Proposed Multimodal Structured)",
+      "description": "C5 Multimodal + S4/S3+ev Multimodal Hierarchy + Q3 Multimodal Structured RAG",
+      "components": {
+        "chaptering": "C5 (Multimodal Cross-Attention)",
+        "summarization": "S4/S3+ev (Multimodal + Evidence)",
+        "retrieval_qa": "Q3 (Multimodal Structured)"
+      },
+      "latency": {
+        "chaptering_sec": 1.4,
+        "summarization_sec": 14.0,
+        "retrieval_qa_sec": 2.9,
+        "total_wall_sec": 18.3
+      },
+      "resource": {
+        "peak_vram_mb": 5420.0,
+        "vram_limit_ratio": 0.3528645833333333,
+        "storage_footprint_mb": 35.0,
+        "failure_rate_pct": 0.0
+      },
+      "quality": {
+        "factual_coverage_pct": 33.27,
+        "unsupported_claims_pct": 2.39,
+        "rouge1": 0.2414,
+        "rouge2": 0.0433,
+        "rougeL": 0.1143,
+        "qa_recall3_pct": 49.3,
+        "qa_mrr": 0.4933,
+        "qa_answer_f1_pct": 28.9,
+        "evidence_time_iou": 0.1728,
+        "chapter_collar_f1_5s": 0.0417,
+        "chapter_window_diff": 0.3217
+      }
+    },
+    "E4": {
+      "name": "E4 (End-to-End Compact VLM Baseline)",
+      "description": "Qwen3-VL-4B-Instruct FP16 End-to-End Direct Video Processing",
+      "components": {
+        "chaptering": "Direct Temporal Prompting",
+        "summarization": "Zero-shot Video Summarization",
+        "retrieval_qa": "Direct Video QA"
+      },
+      "latency": {
+        "chaptering_sec": 35.0,
+        "summarization_sec": 75.0,
+        "retrieval_qa_sec": 55.0,
+        "total_wall_sec": 165.0
+      },
+      "resource": {
+        "peak_vram_mb": 13850.0,
+        "vram_limit_ratio": 0.9016927083333334,
+        "storage_footprint_mb": 120.0,
+        "failure_rate_pct": 12.5
+      },
+      "quality": {
+        "factual_coverage_pct": 31.0,
+        "unsupported_claims_pct": 8.5,
+        "rouge1": 0.231,
+        "rouge2": 0.038,
+        "rougeL": 0.108,
+        "qa_recall3_pct": 44.0,
+        "qa_mrr": 0.41,
+        "qa_answer_f1_pct": 29.5,
+        "evidence_time_iou": 0.115,
+        "chapter_collar_f1_5s": 0.035,
+        "chapter_window_diff": 0.35
+      }
+    }
+  },
+  "pareto_analysis": {
+    "E1": {
+      "qual_score": 51.1,
+      "cost_score": 12.453828125,
+      "efficiency_ratio": 4.1031560325953995,
+      "is_pareto_optimal": true,
+      "dominated_by": [],
+      "dominates": []
+    },
+    "E2": {
+      "qual_score": 49.29999999999999,
+      "cost_score": 6.269765625,
+      "efficiency_ratio": 7.863132842385953,
+      "is_pareto_optimal": true,
+      "dominated_by": [],
+      "dominates": []
+    },
+    "E3": {
+      "qual_score": 60.06,
+      "cost_score": 7.12296875,
+      "efficiency_ratio": 8.431877508938951,
+      "is_pareto_optimal": true,
+      "dominated_by": [],
+      "dominates": [
+        "E4"
+      ]
+    },
+    "E4": {
+      "qual_score": 55.5,
+      "cost_score": 30.025390625,
+      "efficiency_ratio": 1.8484355688544851,
+      "is_pareto_optimal": false,
+      "dominated_by": [
+        "E3"
+      ],
+      "dominates": []
+    }
+  }
+}

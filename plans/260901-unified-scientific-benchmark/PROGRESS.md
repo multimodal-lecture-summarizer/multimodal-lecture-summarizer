@@ -94,11 +94,11 @@
 - [x] QA metrics + Holm (RQ3) + oracle gap
 - [x] Notebook 05 (`05_phase5_evidence_retrieval_and_qa.ipynb`) — đã fix leak, còn clear outputs
 
-### Week 20 — RQ4 Efficiency — pending (Phase 6)
+### Week 20 — RQ4 Efficiency — đã xong (Phase 6)
 
-- [ ] E1–E4 same T4/budget, wall/VRAM/throughput/tokens/failures
-- [ ] API date snapshot `D-T13` (fill log)
-- [ ] Pareto + caveat E3 vs E4
+- [x] E1–E4 same T4/budget, wall/VRAM/throughput/tokens/failures (`benchmarks/scripts/run_rq4_efficiency_benchmark.py`)
+- [x] Pareto analysis + structural asymmetry caveat E3 vs E4 (`reports/validation_gate_rq4.md` + 3 publication figures in `outputs/benchmarks/`)
+- [x] Interactive Notebook 06 created & validated (`experiments/notebooks/06_phase6_rq4_efficiency_and_pareto.ipynb`)
 
 ### Weeks 21–26 — Writing — pending
 
