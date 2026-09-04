@@ -21,10 +21,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Ensure UTF-8 stdout
-if sys.platform == "win32":
+# Ensure UTF-8 stdout when run directly from command line
+if __name__ == "__main__" and sys.platform == "win32":
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 def get_default_empirical_data() -> Dict[str, Dict[str, Any]]:
