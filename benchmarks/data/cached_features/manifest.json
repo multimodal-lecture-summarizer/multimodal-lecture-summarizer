@@ -1,0 +1,165 @@
+{
+  "total_lectures": 20,
+  "lectures": [
+    {
+      "lecture_id": "21_Soft_Skills_for_Teachers_Explained",
+      "lecture_title": "21 Soft Skills for Teachers (Explained!)",
+      "file_path": "benchmarks\\data\\cached_features\\21_Soft_Skills_for_Teachers_Explained.pt",
+      "num_sentences": 17,
+      "num_boundaries": 3,
+      "duration_sec": 864.925
+    },
+    {
+      "lecture_id": "Applied_Business_Strategy_01_-_Macroeconomic_Analysis",
+      "lecture_title": "Applied Business Strategy 01 - Macroeconomic Analysis",
+      "file_path": "benchmarks\\data\\cached_features\\Applied_Business_Strategy_01_-_Macroeconomic_Analysis.pt",
+      "num_sentences": 24,
+      "num_boundaries": 3,
+      "duration_sec": 55.919999999999995
+    },
+    {
+      "lecture_id": "Applied_Business_Strategy_02_-_Porter_s_Five_Forces_Some_common_pitfalls",
+      "lecture_title": "Applied Business Strategy 02 - Porter's Five Forces_ Some common pitfalls",
+      "file_path": "benchmarks\\data\\cached_features\\Applied_Business_Strategy_02_-_Porter_s_Five_Forces_Some_common_pitfalls.pt",
+      "num_sentences": 8,
+      "num_boundaries": 1,
+      "duration_sec": 41.6
+    },
+    {
+      "lecture_id": "Business_Research_02_-_Research_Methods",
+      "lecture_title": "Business Research 02 - Research Methods",
+      "file_path": "benchmarks\\data\\cached_features\\Business_Research_02_-_Research_Methods.pt",
+      "num_sentences": 29,
+      "num_boundaries": 3,
+      "duration_sec": 2084.639
+    },
+    {
+      "lecture_id": "CA01",
+      "lecture_title": "CA01",
+      "file_path": "benchmarks\\data\\cached_features\\CA01.pt",
+      "num_sentences": 11,
+      "num_boundaries": 0,
+      "duration_sec": 11.0
+    },
+    {
+      "lecture_id": "CA02",
+      "lecture_title": "CA02",
+      "file_path": "benchmarks\\data\\cached_features\\CA02.pt",
+      "num_sentences": 39,
+      "num_boundaries": 0,
+      "duration_sec": 13.68
+    },
+    {
+      "lecture_id": "CA03",
+      "lecture_title": "CA03",
+      "file_path": "benchmarks\\data\\cached_features\\CA03.pt",
+      "num_sentences": 27,
+      "num_boundaries": 1,
+      "duration_sec": 29.98
+    },
+    {
+      "lecture_id": "CA04",
+      "lecture_title": "CA04",
+      "file_path": "benchmarks\\data\\cached_features\\CA04.pt",
+      "num_sentences": 16,
+      "num_boundaries": 1,
+      "duration_sec": 3.34
+    },
+    {
+      "lecture_id": "CA05",
+      "lecture_title": "CA05",
+      "file_path": "benchmarks\\data\\cached_features\\CA05.pt",
+      "num_sentences": 13,
+      "num_boundaries": 2,
+      "duration_sec": 29.98
+    },
+    {
+      "lecture_id": "Descriptive_Research_Definition_Examples_Explained_in_3_Minutes",
+      "lecture_title": "Descriptive Research_ Definition & Examples (Explained in 3 Minutes)",
+      "file_path": "benchmarks\\data\\cached_features\\Descriptive_Research_Definition_Examples_Explained_in_3_Minutes.pt",
+      "num_sentences": 4,
+      "num_boundaries": 1,
+      "duration_sec": 21.959999999999997
+    },
+    {
+      "lecture_id": "DS11-Recursion-Stack",
+      "lecture_title": "DS11-Recursion-Stack",
+      "file_path": "benchmarks\\data\\cached_features\\DS11-Recursion-Stack.pt",
+      "num_sentences": 35,
+      "num_boundaries": 1,
+      "duration_sec": 2.36
+    },
+    {
+      "lecture_id": "DS12-Queue",
+      "lecture_title": "DS12-Queue",
+      "file_path": "benchmarks\\data\\cached_features\\DS12-Queue.pt",
+      "num_sentences": 42,
+      "num_boundaries": 2,
+      "duration_sec": 27.62
+    },
+    {
+      "lecture_id": "DS16-Tree",
+      "lecture_title": "DS16-Tree",
+      "file_path": "benchmarks\\data\\cached_features\\DS16-Tree.pt",
+      "num_sentences": 41,
+      "num_boundaries": 1,
+      "duration_sec": 16.96
+    },
+    {
+      "lecture_id": "DS20Haep",
+      "lecture_title": "DS20Haep",
+      "file_path": "benchmarks\\data\\cached_features\\DS20Haep.pt",
+      "num_sentences": 38,
+      "num_boundaries": 0,
+      "duration_sec": 26.54
+    },
+    {
+      "lecture_id": "DS6-AlgorithmAnalysis",
+      "lecture_title": "DS6-AlgorithmAnalysis",
+      "file_path": "benchmarks\\data\\cached_features\\DS6-AlgorithmAnalysis.pt",
+      "num_sentences": 40,
+      "num_boundaries": 1,
+      "duration_sec": 9.9
+    },
+    {
+      "lecture_id": "Regions_in_Human_Geography_Explained_in_3_Minutes",
+      "lecture_title": "Regions in Human Geography (Explained in 3 Minutes)",
+      "file_path": "benchmarks\\data\\cached_features\\Regions_in_Human_Geography_Explained_in_3_Minutes.pt",
+      "num_sentences": 3,
+      "num_boundaries": 2,
+      "duration_sec": 184.44
+    },
+    {
+      "lecture_id": "System_Dynamics_and_Control_Module_4_-_Modeling_Mechanical_Systems",
+      "lecture_title": "System Dynamics and Control_ Module 4 - Modeling Mechanical Systems",
+      "file_path": "benchmarks\\data\\cached_features\\System_Dynamics_and_Control_Module_4_-_Modeling_Mechanical_Systems.pt",
+      "num_sentences": 56,
+      "num_boundaries": 2,
+      "duration_sec": 56.6
+    },
+    {
+      "lecture_id": "System_Dynamics_and_Control_Module_7c_-_Introduction_to_Modeling_with_Simulink",
+      "lecture_title": "System Dynamics and Control_ Module 7c - Introduction to Modeling with Simulink",
+      "file_path": "benchmarks\\data\\cached_features\\System_Dynamics_and_Control_Module_7c_-_Introduction_to_Modeling_with_Simulink.pt",
+      "num_sentences": 8,
+      "num_boundaries": 0,
+      "duration_sec": 52.44
+    },
+    {
+      "lecture_id": "Thailand_Stock_Market_Update_March_2024_-_Fundamentals_FY_2023_vs",
+      "lecture_title": "Thailand Stock Market Update March 2024 - Fundamentals FY 2023 vs",
+      "file_path": "benchmarks\\data\\cached_features\\Thailand_Stock_Market_Update_March_2024_-_Fundamentals_FY_2023_vs.pt",
+      "num_sentences": 15,
+      "num_boundaries": 1,
+      "duration_sec": 1114.8890000000001
+    },
+    {
+      "lecture_id": "What_is_Differentiated_Instruction_4_Types_Explained",
+      "lecture_title": "What is Differentiated Instruction_ (4 Types Explained)",
+      "file_path": "benchmarks\\data\\cached_features\\What_is_Differentiated_Instruction_4_Types_Explained.pt",
+      "num_sentences": 19,
+      "num_boundaries": 0,
+      "duration_sec": 962.8
+    }
+  ]
+}

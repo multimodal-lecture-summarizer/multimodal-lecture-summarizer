@@ -33,9 +33,11 @@ storage/
 .vscode/
 
 # Experiments datasets (large)
-experiments/datasets/**/*
+experiments/datasets/*
 !experiments/datasets/.gitkeep
-!experiments/datasets/eduviqa/q_and_a.json
+!experiments/datasets/eduviqa/
+experiments/datasets/eduviqa/*
+!experiments/datasets/eduviqa/*.json
 
 # Docker
 postgres_data/
@@ -48,5 +50,6 @@ Thumbs.db
 benchmarks/official_datasets/
 benchmarks/data/cached_features/*
 !benchmarks/data/cached_features/*.pt
+!benchmarks/data/cached_features/manifest.json
 !benchmarks/data/*.py
 plans/**/probes/cache/
