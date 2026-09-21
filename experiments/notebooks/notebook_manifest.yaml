@@ -1,0 +1,305 @@
+schema_version: 1
+manifest_status: infrastructure_contract
+official_default_profile: full
+allowed_profiles: [smoke, full]
+allowed_network_policies: [none, bounded_acquisition, registry_controlled]
+
+notebooks:
+  - id: 00a_environment_preflight
+    group: "00"
+    task_id: ENVIRONMENT_PREFLIGHT
+    path: experiments/notebooks/00a_environment_preflight.ipynb
+    runner: experiments.scripts.environment_preflight
+    responsibility: Validate environment, hardware, package/model availability and data/cache paths.
+    requires: []
+    produces: [environment.profile, environment.preflight_receipt]
+    profiles: [smoke, full]
+    timeout_seconds: 300
+    network_policy: none
+    expected_schema_version: 1
+
+  - id: 00b_dataset_feasibility
+    group: "00"
+    task_id: DATASET_FEASIBILITY
+    path: experiments/notebooks/00b_dataset_feasibility.ipynb
+    runner: experiments.scripts.probe_dataset_feasibility
+    responsibility: Run D0/D1 source, rights, download, decode, storage and checksum probes.
+    requires: [environment.profile, environment.preflight_receipt]
+    produces: [dataset.feasibility_receipts, dataset.acquisition_inventory]
+    profiles: [smoke, full]
+    timeout_seconds: 7200
+    network_policy: bounded_acquisition
+    expected_schema_version: 1
+
+  - id: 00c_dataset_eda_and_freeze
+    group: "00"
+    task_id: DATASET_EDA_FREEZE
+    path: experiments/notebooks/00c_dataset_eda_and_freeze.ipynb
+    runner: experiments.scripts.profile_dataset
+    responsibility: Generate validated data cards, statistics and figures; audit quality/leakage; freeze eligible IDs and splits.
+    requires: [dataset.feasibility_receipts, dataset.acquisition_inventory]
+    produces:
+      - dataset.profile
+      - dataset.unit_profile
+      - dataset.statistics
+      - dataset.split_statistics
+      - dataset.quality_issues
+      - dataset.attrition
+      - dataset.leakage_audit
+      - dataset.figure_manifest
+      - dataset.frozen_manifest
+      - dataset.registry
+      - dataset.endpoint_matrix
+      - dataset.cross_dataset_comparison
+      - dataset.eda_report
+    profiles: [smoke, full]
+    timeout_seconds: 7200
+    network_policy: none
+    expected_schema_version: 1
+
+  - id: 01a_asr_model_benchmark
+    group: "01"
+    task_id: ASR_MODEL
+    path: experiments/notebooks/01a_asr_model_benchmark.ipynb
+    runner: benchmarks.scripts.run_asr_model_benchmark
+    responsibility: Compare eligible English ASR decoder families on frozen labeled audio.
+    requires: [dataset.frozen_manifest, dataset.registry]
+    produces: [asr.raw_predictions, asr.per_unit_metrics, asr.aggregate, asr.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 01b_asr_preprocessing_ablation
+    group: "01"
+    task_id: ASR_PREPROCESSING_ABLATION
+    path: experiments/notebooks/01b_asr_preprocessing_ablation.ipynb
+    runner: benchmarks.scripts.run_asr_preprocessing_ablation
+    responsibility: Evaluate denoise, VAD, alignment and decoding factors using the frozen ASR shortlist.
+    requires: [dataset.frozen_manifest, asr.shortlist]
+    produces: [asr.ablation_predictions, asr.ablation_metrics, asr.frozen_configuration]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 02a_scene_boundary_benchmark
+    group: "02"
+    task_id: SCENE_BOUNDARY
+    path: experiments/notebooks/02a_scene_boundary_benchmark.ipynb
+    runner: benchmarks.scripts.run_scene_boundary_benchmark
+    responsibility: Compare scene-boundary algorithms with one-to-one collar metrics.
+    requires: [dataset.frozen_manifest, dataset.registry]
+    produces: [scene.raw_predictions, scene.per_unit_metrics, scene.aggregate, scene.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 10800
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 02b_keyframe_selection_benchmark
+    group: "02"
+    task_id: KEYFRAME_SELECTION
+    path: experiments/notebooks/02b_keyframe_selection_benchmark.ipynb
+    runner: benchmarks.scripts.run_keyframe_selection_benchmark
+    responsibility: Compare fixed-budget midpoint, deduplication, diversity and OCR-aware keyframe selectors.
+    requires: [dataset.frozen_manifest, scene.raw_predictions]
+    produces: [keyframe.raw_predictions, keyframe.per_unit_metrics, keyframe.aggregate, keyframe.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 10800
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 02c_ocr_benchmark
+    group: "02"
+    task_id: OCR
+    path: experiments/notebooks/02c_ocr_benchmark.ipynb
+    runner: benchmarks.scripts.run_ocr_benchmark
+    responsibility: Evaluate text detection, recognition-only and end-to-end spotting tracks separately.
+    requires: [dataset.frozen_manifest, dataset.registry]
+    produces: [ocr.raw_predictions, ocr.per_unit_metrics, ocr.aggregate, ocr.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 02d_visual_caption_benchmark
+    group: "02"
+    task_id: VISUAL_CAPTION
+    path: experiments/notebooks/02d_visual_caption_benchmark.ipynb
+    runner: benchmarks.scripts.run_visual_caption_benchmark
+    responsibility: Compare caption/VLM candidates under reference and grounded-evidence tracks.
+    requires: [dataset.frozen_manifest, keyframe.raw_predictions]
+    produces: [caption.raw_predictions, caption.per_unit_metrics, caption.aggregate, caption.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 03a_object_detection_benchmark
+    group: "03"
+    task_id: OBJECT_DETECTION
+    path: experiments/notebooks/03a_object_detection_benchmark.ipynb
+    runner: benchmarks.scripts.run_object_detection_benchmark
+    responsibility: Evaluate closed/open-vocabulary detectors on matching labeled tracks.
+    requires: [dataset.frozen_manifest, dataset.registry]
+    produces: [detection.raw_predictions, detection.per_unit_metrics, detection.aggregate, detection.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 03b_multi_object_tracking_benchmark
+    group: "03"
+    task_id: MULTI_OBJECT_TRACKING
+    path: experiments/notebooks/03b_multi_object_tracking_benchmark.ipynb
+    runner: benchmarks.scripts.run_tracking_benchmark
+    responsibility: Compare trackers under frozen detector inputs before pairwise integration.
+    requires: [dataset.frozen_manifest, detection.raw_predictions, detection.shortlist]
+    produces: [tracking.raw_predictions, tracking.per_unit_metrics, tracking.aggregate, tracking.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 04a_chaptering_benchmark
+    group: "04"
+    task_id: CHAPTERING
+    path: experiments/notebooks/04a_chaptering_benchmark.ipynb
+    runner: benchmarks.scripts.run_chaptering_benchmark
+    responsibility: Compare fixed, lexical, learned and multimodal chaptering algorithm families.
+    requires: [dataset.frozen_manifest, asr.raw_predictions, scene.raw_predictions, ocr.raw_predictions, caption.raw_predictions]
+    produces: [chapter.raw_predictions, chapter.per_unit_metrics, chapter.aggregate, chapter.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 04b_chaptering_modality_ablation
+    group: "04"
+    task_id: CHAPTERING_MODALITY_ABLATION
+    path: experiments/notebooks/04b_chaptering_modality_ablation.ipynb
+    runner: benchmarks.scripts.run_chaptering_modality_ablation
+    responsibility: Measure C1-C6 modality/fusion ablations using the frozen chaptering shortlist.
+    requires: [dataset.frozen_manifest, chapter.shortlist]
+    produces: [chapter.ablation_predictions, chapter.ablation_metrics, chapter.frozen_configuration]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 05a_summarization_benchmark
+    group: "05"
+    task_id: SUMMARY
+    path: experiments/notebooks/05a_summarization_benchmark.ipynb
+    runner: benchmarks.scripts.run_multimodal_summary_benchmark
+    responsibility: Generate synchronized text and visual summaries from shared evidence at frozen 5/10/20 percent budgets.
+    requires: [dataset.frozen_manifest, asr.frozen_configuration, keyframe.raw_predictions, caption.raw_predictions, tracking.raw_predictions, chapter.frozen_configuration]
+    produces: [summary.text_predictions, summary.visual_predictions, summary.multimodal_package, summary.per_unit_metrics, summary.aggregate, summary.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 05b_summary_factuality_and_human_eval
+    group: "05"
+    task_id: SUMMARY_EVIDENCE_EVAL
+    path: experiments/notebooks/05b_summary_factuality_and_human_eval.ipynb
+    runner: benchmarks.scripts.run_summary_evidence_evaluation
+    responsibility: Audit claim support, evidence coverage and existing human labels without tuning generation.
+    requires: [dataset.frozen_manifest, summary.multimodal_package]
+    produces: [summary.evidence_metrics, summary.factuality_gate, summary.human_label_audit]
+    profiles: [smoke, full]
+    timeout_seconds: 7200
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 06a_retrieval_benchmark
+    group: "06"
+    task_id: RETRIEVAL
+    path: experiments/notebooks/06a_retrieval_benchmark.ipynb
+    runner: benchmarks.scripts.run_retrieval_benchmark
+    responsibility: Compare BM25, dense, hybrid and reranked evidence retrieval.
+    requires: [dataset.frozen_manifest, summary.multimodal_package]
+    produces: [retrieval.rankings, retrieval.per_query_metrics, retrieval.aggregate, retrieval.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 10800
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 06b_qa_generation_benchmark
+    group: "06"
+    task_id: QA_GENERATION
+    path: experiments/notebooks/06b_qa_generation_benchmark.ipynb
+    runner: benchmarks.scripts.run_qa_generation_benchmark
+    responsibility: Evaluate answer correctness, evidence grounding, citation quality and abstention on frozen retrieval inputs.
+    requires: [dataset.frozen_manifest, retrieval.rankings, retrieval.shortlist]
+    produces: [qa.raw_predictions, qa.per_query_metrics, qa.aggregate, qa.shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 10800
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 07a_efficiency_pareto
+    group: "07"
+    task_id: EFFICIENCY_PARETO
+    path: experiments/notebooks/07a_efficiency_pareto.ipynb
+    runner: benchmarks.scripts.run_efficiency_pareto
+    responsibility: Build profile-specific quality, latency, memory, cost and failure Pareto frontiers.
+    requires: [asr.aggregate, scene.aggregate, keyframe.aggregate, ocr.aggregate, caption.aggregate, detection.aggregate, tracking.aggregate, chapter.aggregate, summary.aggregate, retrieval.aggregate, qa.aggregate]
+    produces: [selection.stage_pareto, selection.stage_shortlists]
+    profiles: [smoke, full]
+    timeout_seconds: 3600
+    network_policy: none
+    expected_schema_version: 1
+
+  - id: 07b_error_propagation
+    group: "07"
+    task_id: ERROR_PROPAGATION
+    path: experiments/notebooks/07b_error_propagation.ipynb
+    runner: benchmarks.scripts.run_error_propagation_benchmark
+    responsibility: Rerun downstream stages under measured upstream error perturbations.
+    requires: [selection.stage_shortlists, asr.raw_predictions, scene.raw_predictions, ocr.raw_predictions, detection.raw_predictions, tracking.raw_predictions]
+    produces: [integration.perturbed_inputs, integration.error_propagation_metrics]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 08a_stage_compatibility
+    group: "08"
+    task_id: STAGE_COMPATIBILITY
+    path: experiments/notebooks/08a_stage_compatibility.ipynb
+    runner: benchmarks.scripts.run_stage_compatibility
+    responsibility: Measure shortlisted component compatibility and oracle-versus-predicted degradation.
+    requires: [selection.stage_shortlists, integration.error_propagation_metrics]
+    produces: [integration.compatibility_matrix, integration.pipeline_shortlist]
+    profiles: [smoke, full]
+    timeout_seconds: 14400
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 08b_end_to_end_system
+    group: "08"
+    task_id: END_TO_END
+    path: experiments/notebooks/08b_end_to_end_system.ipynb
+    runner: benchmarks.scripts.run_end_to_end_system
+    responsibility: Evaluate frozen pipeline compositions at video level on each eligible hardware profile.
+    requires: [dataset.frozen_manifest, integration.pipeline_shortlist]
+    produces: [system.per_video_results, system.telemetry, system.aggregate, system.final_selection]
+    profiles: [smoke, full]
+    timeout_seconds: 21600
+    network_policy: registry_controlled
+    expected_schema_version: 1
+
+  - id: 09_cross_task_report
+    group: "09"
+    task_id: CROSS_TASK_REPORT
+    path: experiments/notebooks/09_cross_task_report.ipynb
+    runner: experiments.scripts.generate_cross_task_report
+    responsibility: Read eligible artifacts and generate final tables and figures without executing models or mutating raw results.
+    requires: [dataset.figure_manifest, selection.stage_pareto, integration.compatibility_matrix, system.aggregate, system.final_selection]
+    produces: [report.cross_task_tables, report.cross_task_figures, report.claim_evidence_index]
+    profiles: [smoke, full]
+    timeout_seconds: 1800
+    network_policy: none
+    expected_schema_version: 1

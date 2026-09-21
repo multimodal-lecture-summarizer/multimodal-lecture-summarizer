@@ -1,0 +1,72 @@
+schema_version: 1
+decision_status: frozen
+frozen_at: "2026-09-21"
+
+language:
+  primary: en
+  benchmark_track: english
+  non_english_policy: separate_track_only
+  asr_primary_metric: wer
+  asr_secondary_metrics: [cer, macro_talk_wer]
+  normalization_contract: english_v1_to_freeze_in_phase2
+
+outputs:
+  summary_package: multimodal_text_and_visual
+  shared_event_evidence_timeline: true
+  derived_dataset_export: true
+  derived_dataset_field_roles:
+    - source_metadata
+    - ground_truth
+    - prediction
+    - evidence
+  predictions_may_be_ground_truth: false
+
+summary_budgets:
+  short: 0.05
+  medium: 0.10
+  long: 0.20
+  text_denominator: transcript_word_count
+  visual_denominator: source_video_duration
+
+ground_truth:
+  policy: official_or_preexisting_labels_only
+  project_manual_annotation_allowed: false
+  pseudo_labels_allowed_for_official_evaluation: false
+  heuristic_references_allowed_for_official_evaluation: false
+  missing_label_action: fallback_or_not_eligible
+
+speaker_diarization:
+  scope: future_ready_only
+  official_benchmark: false
+  selection_gate: false
+  deferred_metrics: [der, jer, cpwer]
+
+compute_profiles:
+  - id: colab_t4
+    purpose: heavy_tasks
+    accelerator: nvidia_t4
+    leaderboard_scope: separate
+  - id: local_rtx4050_6gb
+    purpose: light_tasks_and_local_smoke
+    accelerator: nvidia_rtx_4050
+    vram_gb: 6
+    leaderboard_scope: separate
+
+model_policy:
+  default: open_source
+  llm_api_exception:
+    allowed_providers: [groq, openrouter]
+    stage_policy: llm_stages_only
+    justification_required: true
+    exact_model_and_date_required: true
+    token_cost_rate_limit_cap_required: true
+    deterministic_fallback_required: true
+    missing_cap_status: blocked_decision
+    compare_api_and_local_efficiency_together: false
+
+large_dataset_policy:
+  vista_full_local_status: not_feasible_local
+  allowed_alternatives:
+    - labeled_subset
+    - registered_fallback_dataset
+    - separately_approved_external_storage_profile

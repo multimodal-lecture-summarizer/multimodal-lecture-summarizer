@@ -1,0 +1,209 @@
+schema_version: 1
+registry_status: phase2_parameters_pending
+allowed_directions: [higher, lower]
+allowed_failure_policies: [count_failure_separately, not_eligible]
+
+tracks:
+  - id: asr_english
+    task_id: ASR_MODEL
+    gt_type: word_transcript
+    primary_metric: {name: corpus_wer, direction: lower}
+    secondary_metrics: [cer, macro_talk_wer, substitutions, deletions, insertions, empty_output_rate, rtf]
+    diagnostic_metrics: [timestamp_mae, peak_ram_mb, peak_vram_mb]
+    scorer: {package: jiwer_or_sclite, version: phase2_pin_required, parameters: {normalizer: english_v1_to_freeze}}
+    aggregation_unit: talk
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: scene_boundary
+    task_id: SCENE_BOUNDARY
+    gt_type: temporal_boundaries
+    primary_metric: {name: boundary_f1, direction: higher}
+    secondary_metrics: [boundary_precision, boundary_recall, matched_boundary_mae_seconds, false_positives_per_minute]
+    diagnostic_metrics: [segment_count_error, over_segmentation_rate, under_segmentation_rate, collar_sensitivity]
+    scorer: {package: project_temporal_metrics, version: 1, parameters: {matching: one_to_one, collar_seconds: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: keyframe_visual_evidence
+    task_id: KEYFRAME_SELECTION
+    gt_type: must_keep_frames_or_required_scenes
+    primary_metric: {name: required_scene_f1, direction: higher}
+    secondary_metrics: [required_scene_recall, keyframe_precision, scene_coverage, temporal_coverage]
+    diagnostic_metrics: [redundancy, downstream_qa_delta, downstream_summary_delta, latency_seconds, uniform_baseline_delta, random_baseline_delta]
+    scorer: {package: project_keyframe_metrics, version: 1, parameters: {budget_source: research_decisions.summary_budgets, matching_tolerance: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: ocr_detection
+    task_id: OCR
+    gt_type: text_boxes
+    primary_metric: {name: detection_hmean, direction: higher}
+    secondary_metrics: [detection_precision, detection_recall, detection_ap]
+    diagnostic_metrics: [empty_prediction_rate, latency_per_frame, small_text_hmean]
+    scorer: {package: project_ocr_metrics, version: 1, parameters: {iou_threshold: phase2_freeze_required}}
+    aggregation_unit: frame
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: ocr_recognition
+    task_id: OCR
+    gt_type: cropped_text_transcription
+    primary_metric: {name: cer, direction: lower}
+    secondary_metrics: [wer, word_accuracy, normalized_edit_distance, exact_match]
+    diagnostic_metrics: [empty_output_rate, latency_per_crop]
+    scorer: {package: jiwer_plus_project_text_metrics, version: phase2_pin_required, parameters: {normalizer: phase2_freeze_required}}
+    aggregation_unit: source_frame
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: ocr_end_to_end_spotting
+    task_id: OCR
+    gt_type: text_boxes_and_transcription
+    primary_metric: {name: spotting_hmean, direction: higher}
+    secondary_metrics: [spotting_precision, spotting_recall, cer]
+    diagnostic_metrics: [empty_prediction_rate, latency_per_frame]
+    scorer: {package: project_ocr_metrics, version: 1, parameters: {iou_threshold: phase2_freeze_required, text_match: phase2_freeze_required}}
+    aggregation_unit: frame
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: caption_multireference
+    task_id: VISUAL_CAPTION
+    gt_type: multiple_human_captions
+    primary_metric: {name: cider, direction: higher}
+    secondary_metrics: [spice, bertscore_f1]
+    diagnostic_metrics: [pac_s, clipscore, object_hallucination_rate, latency_per_frame]
+    scorer: {package: pycocoevalcap_plus_pinned_semantic_metrics, version: phase2_pin_required, parameters: {tokenizer: phase2_freeze_required}}
+    aggregation_unit: source_frame
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: caption_grounded
+    task_id: VISUAL_CAPTION
+    gt_type: grounded_objects_or_claim_support
+    primary_metric: {name: grounded_claim_f1, direction: higher}
+    secondary_metrics: [grounded_claim_precision, grounded_claim_recall, supported_object_recall]
+    diagnostic_metrics: [hallucination_rate, specificity, latency_per_frame]
+    scorer: {package: project_grounding_metrics, version: 1, parameters: {support_policy: phase2_freeze_required}}
+    aggregation_unit: source_frame
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: object_detection_closed
+    task_id: OBJECT_DETECTION
+    gt_type: closed_vocabulary_boxes_classes
+    primary_metric: {name: coco_map_50_95, direction: higher}
+    secondary_metrics: [ap50, ap75, per_class_ap, ap_small, ap_medium, ap_large, average_recall]
+    diagnostic_metrics: [precision, recall, calibration_error, latency_per_frame]
+    scorer: {package: pycocotools, version: phase2_pin_required, parameters: {iou_range: "0.50:0.05:0.95"}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: object_detection_open
+    task_id: OBJECT_DETECTION
+    gt_type: open_vocabulary_boxes_concepts
+    primary_metric: {name: mapped_map_50_95, direction: higher}
+    secondary_metrics: [mapped_ap50, per_concept_ap, average_recall]
+    diagnostic_metrics: [unknown_concept_rate, taxonomy_mapping_coverage, latency_per_frame]
+    scorer: {package: pycocotools_plus_frozen_taxonomy_map, version: phase2_pin_required, parameters: {taxonomy_map: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: tracking_fixed_detector
+    task_id: MULTI_OBJECT_TRACKING
+    gt_type: trajectories_identities
+    primary_metric: {name: hota, direction: higher}
+    secondary_metrics: [deta, assa, loca, idf1]
+    diagnostic_metrics: [mota, id_switches, fragmentation, mostly_tracked, mostly_lost, fps]
+    scorer: {package: trackeval, version: phase2_pin_required, parameters: {detections: fixed, matching: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: chaptering
+    task_id: CHAPTERING
+    gt_type: chapter_boundaries
+    primary_metric: {name: boundary_f1, direction: higher}
+    secondary_metrics: [boundary_similarity, pk, windowdiff]
+    diagnostic_metrics: [segment_count_error, duration_bias, title_relevance]
+    scorer: {package: project_segmentation_metrics, version: 1, parameters: {collar_seconds: phase2_freeze_required, window_definition: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: text_summary_reference
+    task_id: SUMMARY
+    gt_type: native_reference_summaries
+    primary_metric: {name: rouge_lsum, direction: higher}
+    secondary_metrics: [rouge1, rouge2, bertscore_f1, claim_support_precision, claim_support_recall, evidence_coverage]
+    diagnostic_metrics: [qafacteval, summac, compression_ratio, redundancy, budget_compliance]
+    scorer: {package: rouge_score_plus_pinned_semantic_metrics, version: phase2_pin_required, parameters: {budget_levels: [0.05, 0.10, 0.20]}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+    hard_gates: [factual_support, evidence_grounding, text_budget_compliance]
+
+  - id: visual_summary_keyshots
+    task_id: SUMMARY
+    gt_type: human_keyshot_summaries_or_dense_importance
+    primary_metric: {name: keyshot_f1, direction: higher}
+    secondary_metrics: [importance_kendall_tau, importance_spearman_rho, diversity, scene_coverage]
+    diagnostic_metrics: [uniform_baseline_delta, random_baseline_delta, leave_one_annotator_baseline, budget_compliance]
+    scorer: {package: project_video_summary_metrics, version: 1, parameters: {budget_levels: [0.05, 0.10, 0.20], reference_aggregation: phase2_freeze_required}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+    hard_gates: [visual_budget_compliance]
+
+  - id: multimodal_summary_package
+    task_id: SUMMARY
+    gt_type: paired_text_visual_event_evidence
+    selection_mode: pareto_or_gate
+    primary_metric: null
+    metric_vector: [text_summary_reference.rouge_lsum, visual_summary_keyshots.keyshot_f1]
+    secondary_metrics: [text_summary_primary, visual_summary_primary, cross_modal_event_consistency, timestamp_support]
+    diagnostic_metrics: [modality_ablation_delta, evidence_traceability]
+    scorer: {package: project_multimodal_summary_metrics, version: 1, parameters: {scalar_merge_forbidden: true}}
+    aggregation_unit: video
+    failure_policy: not_eligible
+    practical_threshold: component_gates_only
+    hard_gates: [shared_event_evidence_ids, text_budget_compliance, visual_budget_compliance]
+
+  - id: retrieval
+    task_id: RETRIEVAL
+    gt_type: relevant_evidence_ids_or_graded_relevance
+    primary_metric: {name: recall_at_k, direction: higher}
+    secondary_metrics: [precision_at_k, ndcg_at_k, map, mrr]
+    diagnostic_metrics: [empty_retrieval_rate, latency_per_query]
+    scorer: {package: ranx_or_pytrec_eval, version: phase2_pin_required, parameters: {k_values: phase2_freeze_required}}
+    aggregation_unit: question
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: qa_short_answer
+    task_id: QA_GENERATION
+    gt_type: answer_and_evidence
+    primary_metric: {name: token_f1, direction: higher}
+    secondary_metrics: [exact_match, answer_correctness, evidence_recall_at_k, evidence_timestamp_iou, citation_correctness, citation_completeness]
+    diagnostic_metrics: [hallucination_rate, abstention_f1, risk_coverage, latency_per_query]
+    scorer: {package: project_qa_metrics, version: 1, parameters: {answer_normalizer: phase2_freeze_required, k_values: phase2_freeze_required}}
+    aggregation_unit: question
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+
+  - id: end_to_end_system
+    task_id: END_TO_END
+    gt_type: video_level_task_outputs
+    primary_metric: {name: video_success_rate, direction: higher}
+    secondary_metrics: [final_text_quality, final_visual_quality, evidence_correctness, p50_wall_seconds, p95_wall_seconds, rtf, throughput]
+    diagnostic_metrics: [peak_ram_mb, peak_vram_mb, cost_per_video, retry_rate, timeout_rate, oom_rate, stage_failure_attribution]
+    scorer: {package: project_system_metrics, version: 1, parameters: {hardware_profiles: [colab_t4, local_rtx4050_6gb]}}
+    aggregation_unit: video
+    failure_policy: count_failure_separately
+    practical_threshold: phase2_freeze_required
+    hard_gates: [final_quality, factual_support, evidence_grounding]
