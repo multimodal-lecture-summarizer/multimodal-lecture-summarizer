@@ -1,0 +1,109 @@
+# leaderboard_weights.yaml — Multi-metric scoring weights per task
+# Metrics map 1-1 tới keys trong reports/rq*_benchmark_results.json
+# Direction: "higher" (cao tốt), "lower" (thấp tốt), "binary" (1.0/0.0)
+# Composite: score(c, t) = Σᵢ wᵢ × normalize(metricᵢ, direction, all_values)
+
+version: "1.0.0"
+last_updated: "2026-09-21"
+
+leaderboard_weights:
+
+  # ==========================================================================
+  # RQ0-A: ASR — lower is better cho WER/CER/RTF, binary cho success_rate
+  # ==========================================================================
+  RQ0_A:
+    metrics:
+      wer: 0.40               # Word Error Rate (lower better)
+      cer: 0.20               # Character Error Rate (lower better)
+      rtf: 0.20               # Real-Time Factor (lower better)
+      success_rate: 0.20      # 1.0 if all audio processed, else 0.0
+    directions:
+      wer: lower
+      cer: lower
+      rtf: lower
+      success_rate: binary
+
+  # ==========================================================================
+  # RQ0-V: Visual Scene Detection
+  # ==========================================================================
+  RQ0_V:
+    metrics:
+      collar_f1_2s: 0.50      # F1@2s collar (higher better)
+      throughput_fps: 0.30    # FPS (higher better)
+      success_rate: 0.20       # binary
+    directions:
+      collar_f1_2s: higher
+      throughput_fps: higher
+      success_rate: binary
+
+  # ==========================================================================
+  # RQ0-OD: Object Detection
+  # ==========================================================================
+  RQ0_OD:
+    metrics:
+      mAP_50: 0.40            # mAP @ 0.5 IoU (higher better)
+      precision: 0.30         # (higher better)
+      recall: 0.30            # (higher better)
+    directions:
+      mAP_50: higher
+      precision: higher
+      recall: higher
+
+  # ==========================================================================
+  # RQ1: Chaptering — WindowDiff/F1 metrics + success_rate
+  # ==========================================================================
+  RQ1:
+    metrics:
+      window_diff: 0.50       # (lower better)
+      collar_f1_5s: 0.30      # (higher better)
+      success_rate: 0.20      # binary
+    directions:
+      window_diff: lower
+      collar_f1_5s: higher
+      success_rate: binary
+
+  # ==========================================================================
+  # RQ2: Summarization — ROUGE/BERTScore + hallucination + density
+  # ==========================================================================
+  RQ2:
+    metrics:
+      rouge_l: 0.30          # (higher better)
+      bertscore_f1: 0.20     # (higher better)
+      hallucination_rate: 0.40  # (lower better) — quan trọng nhất
+      claim_density: 0.10    # (higher better) — bonus
+    directions:
+      rouge_l: higher
+      bertscore_f1: higher
+      hallucination_rate: lower
+      claim_density: higher
+
+  # ==========================================================================
+  # RQ3: Retrieval — Recall@3 + MRR + latency
+  # ==========================================================================
+  RQ3:
+    metrics:
+      recall_at_3: 0.40       # (higher better)
+      mrr: 0.40               # Mean Reciprocal Rank (higher better)
+      latency_sec: 0.20       # (lower better)
+    directions:
+      recall_at_3: higher
+      mrr: higher
+      latency_sec: lower
+
+  # ==========================================================================
+  # RQ4: System Efficiency — Pareto frontier (special)
+  # ==========================================================================
+  RQ4:
+    metrics:
+      pareto_frontier: 1.0   # Multi-dim Pareto (special handling)
+    directions:
+      pareto_frontier: higher  # special: Pareto-optimal = 1.0 else 0.0
+    note: >
+      RQ4 không dùng composite weighted score; thay vào đó đánh dấu Pareto-optimal
+      candidates (không dominated bởi ai trên latency+VRAM+quality trade-off).
+
+# Tie-breaking rules (applied khi composite scores equal)
+tie_breaking:
+  - "highest_weighted_individual_metric"  # ưu tiên metric có weight cao nhất
+  - "lowest_std_across_seeds"             # stability
+  - "earliest_registry_timestamp"        # favor simpler model

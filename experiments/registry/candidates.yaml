@@ -1,0 +1,583 @@
+# candidates.yaml — Centralized model candidate catalog
+# Multi-Modal Lecture Summarizer — Comparison Framework
+# Mỗi candidate có đầy đủ: id, task, display_name, model_class, kwargs, features, budget, family
+# Sử dụng bởi `registry_loader.py` → dataclass Candidate
+# Cập nhật: 2026-09-21
+
+version: "1.0.0"
+last_updated: "2026-09-21"
+
+candidates:
+
+  # ==========================================================================
+  # RQ0-A: Audio ASR (6 candidates)
+  # ==========================================================================
+
+  - id: RQ0_A.A0_WhisperBase
+    task: RQ0_A
+    display_name: "Whisper Base (CPU baseline)"
+    model_class: faster_whisper.WhisperModel
+    model_kwargs:
+      model_size: base
+      device: cpu
+      compute_type: int8
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 0
+      max_latency_ms: 30000
+    family: transformer_aser
+    reference_paper: "https://arxiv.org/abs/2212.04356"
+    tags: [asr, cpu, baseline]
+
+  - id: RQ0_A.A1_FasterWhisperSmall_GPU
+    task: RQ0_A
+    display_name: "Faster-Whisper Small (GPU float16)"
+    model_class: faster_whisper.WhisperModel
+    model_kwargs:
+      model_size: small
+      device: cuda
+      compute_type: float16
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 10000
+    family: transformer_aser
+    reference_paper: "https://github.com/guillaumekln/faster-whisper"
+    tags: [asr, gpu, baseline, primary]
+
+  - id: RQ0_A.A2_DistilWhisper
+    task: RQ0_A
+    display_name: "Distil-Whisper (distilled small)"
+    model_class: transformers.WhisperForConditionalGeneration
+    model_kwargs:
+      model_name: distil-whisper/distil-small.en
+      device: cuda
+      torch_dtype: float16
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 8000
+    family: distilled_transformer
+    reference_paper: "https://arxiv.org/abs/2311.00430"
+    tags: [asr, gpu, distilled]
+
+  - id: RQ0_A.A3_FasterWhisperMedium_GPU
+    task: RQ0_A
+    display_name: "Faster-Whisper Medium (GPU float16)"
+    model_class: faster_whisper.WhisperModel
+    model_kwargs:
+      model_size: medium
+      device: cuda
+      compute_type: float16
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 5120
+      max_latency_ms: 20000
+    family: transformer_aser
+    reference_paper: "https://github.com/guillaumekln/faster-whisper"
+    tags: [asr, gpu, larger]
+
+  - id: RQ0_A.A4_WhisperX
+    task: RQ0_A
+    display_name: "WhisperX (wav2vec2 alignment)"
+    model_class: whisperx.load_model
+    model_kwargs:
+      model_name: small
+      device: cuda
+      compute_type: float16
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 4096
+      max_latency_ms: 15000
+    family: transformer_aser_with_alignment
+    reference_paper: "https://arxiv.org/abs/2303.00747"
+    tags: [asr, gpu, alignment]
+
+  - id: RQ0_A.A5_DeepFilterNet
+    task: RQ0_A
+    display_name: "DeepFilterNet (denoise + ASR)"
+    model_class: deepfilternet.DeepFilterNet
+    model_kwargs:
+      model_dir: pre-trained-models
+      post_filter: true
+    required_features: [audio.wav]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 20000
+    family: denoise_asr
+    reference_paper: "https://arxiv.org/abs/2305.08227"
+    tags: [asr, denoise]
+
+  # ==========================================================================
+  # RQ0-V: Visual Scene Detection + OCR (4 candidates)
+  # ==========================================================================
+
+  - id: RQ0_V.V0_FixedGrid
+    task: RQ0_V
+    display_name: "Fixed Grid (every 10s) baseline"
+    model_class: scenedetect.detectors.ContentDetector
+    model_kwargs:
+      threshold: 0
+      fixed_grid_sec: 10.0
+    required_features: [video.mp4]
+    compute_budget:
+      max_vram_mb: 0
+      max_latency_ms: 5000
+    family: baseline
+    reference_paper: null
+    tags: [scene, baseline, trivial]
+
+  - id: RQ0_V.V1_ContentDetector
+    task: RQ0_V
+    display_name: "PySceneDetect ContentDetector"
+    model_class: scenedetect.detectors.ContentDetector
+    model_kwargs:
+      threshold: 27.0
+      min_scene_len: 15
+    required_features: [video.mp4]
+    compute_budget:
+      max_vram_mb: 512
+      max_latency_ms: 30000
+    family: pyscenedetect
+    reference_paper: "https://www.scenedetect.com/"
+    tags: [scene, baseline, primary]
+
+  - id: RQ0_V.V2_ThresholdDetector
+    task: RQ0_V
+    display_name: "PySceneDetect ThresholdDetector"
+    model_class: scenedetect.detectors.ThresholdDetector
+    model_kwargs:
+      threshold: 12.0
+      min_scene_len: 15
+    required_features: [video.mp4]
+    compute_budget:
+      max_vram_mb: 512
+      max_latency_ms: 30000
+    family: pyscenedetect
+    reference_paper: "https://www.scenedetect.com/"
+    tags: [scene, baseline]
+
+  - id: RQ0_V.V3_TransNetV2
+    task: RQ0_V
+    display_name: "TransNetV2 (deep scene detector)"
+    model_class: transnetv2.TransNetV2
+    model_kwargs:
+      model_dir: transnetv2-weights
+    required_features: [video.mp4]
+    compute_budget:
+      max_vram_mb: 4096
+      max_latency_ms: 60000
+    family: deep_scene_detector
+    reference_paper: "https://arxiv.org/abs/2102.04619"
+    tags: [scene, deep_learning]
+
+  # ==========================================================================
+  # RQ0-OD: Object Detection (5 candidates — bổ sung theo đề cương)
+  # ==========================================================================
+
+  - id: RQ0_OD.OD-A_YOLOv8n
+    task: RQ0_OD
+    display_name: "YOLOv8n (COCO 80 classes)"
+    model_class: ultralytics.YOLO
+    model_kwargs:
+      model_id: yolov8n.pt
+      imgsz: 640
+      conf: 0.25
+    required_features: [image.jpg]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 50
+    family: yolo_ultralytics
+    reference_paper: "https://github.com/ultralytics/ultralytics"
+    tags: [object_detection, realtime, coco]
+
+  - id: RQ0_OD.OD-B_YOLOv11n
+    task: RQ0_OD
+    display_name: "YOLOv11n (latest nano)"
+    model_class: ultralytics.YOLO
+    model_kwargs:
+      model_id: yolo11n.pt
+      imgsz: 640
+      conf: 0.25
+    required_features: [image.jpg]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 45
+    family: yolo_ultralytics
+    reference_paper: "https://github.com/ultralytics/ultralytics"
+    tags: [object_detection, realtime, latest]
+
+  - id: RQ0_OD.OD-C_RTDETR_r18
+    task: RQ0_OD
+    display_name: "RT-DETR-r18 (DETR-based realtime)"
+    model_class: ultralytics.RTDETR
+    model_kwargs:
+      model_id: rtdetr-r18.pt
+      imgsz: 640
+      conf: 0.25
+    required_features: [image.jpg]
+    compute_budget:
+      max_vram_mb: 3072
+      max_latency_ms: 70
+    family: det_transformer
+    reference_paper: "https://arxiv.org/abs/2304.08069"
+    tags: [object_detection, transformer]
+
+  - id: RQ0_OD.OD-D_Florence2_PhraseGrounding
+    task: RQ0_OD
+    display_name: "Florence-2 Phrase Grounding (open-vocab)"
+    model_class: ai_workers.modules.detection.Florence2Detector
+    model_kwargs:
+      task: "<OD>"
+      text_prompt: "person, laptop, book, screen, slide, table, chair, whiteboard, hand, face"
+      use_vendored: true
+    required_features: [image.jpg]
+    compute_budget:
+      max_vram_mb: 5120
+      max_latency_ms: 250
+    family: vision_language_model
+    reference_paper: "https://arxiv.org/abs/2311.06242"
+    tags: [object_detection, open_vocab, slow]
+
+  - id: RQ0_OD.OD-E_GroundingDINO_base
+    task: RQ0_OD
+    display_name: "GroundingDINO-base (open-vocab)"
+    model_class: autodistill.GroundingDINO
+    model_kwargs:
+      model_id: IDEA-Research/grounding-dino-base
+      box_threshold: 0.25
+      text_threshold: 0.25
+    required_features: [image.jpg]
+    compute_budget:
+      max_vram_mb: 5120
+      max_latency_ms: 200
+    family: open_vocab_detection
+    reference_paper: "https://arxiv.org/abs/2303.05499"
+    tags: [object_detection, open_vocab]
+
+  # ==========================================================================
+  # RQ1: Multimodal Chaptering (6 candidates)
+  # ==========================================================================
+
+  - id: RQ1.C1_TextOnly
+    task: RQ1
+    display_name: "C1 — Text-only baseline"
+    model_class: benchmarks.models.chaptering.TextOnlyChapterer
+    model_kwargs:
+      hidden_dim: 256
+      num_heads: 4
+    required_features: [text_features.pt]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 5000
+    family: text_transformer
+    reference_paper: null
+    tags: [chaptering, baseline]
+
+  - id: RQ1.C2_Acoustic
+    task: RQ1
+    display_name: "C2 — Acoustic ablation"
+    model_class: benchmarks.models.chaptering.AcousticChapterer
+    model_kwargs:
+      acoustic_dim: 32
+      hidden_dim: 256
+    required_features: [text_features.pt, acoustic_features.pt]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 5000
+    family: acoustic_text_fusion
+    reference_paper: null
+    tags: [chaptering, ablation]
+
+  - id: RQ1.C3_Visual_DINOv2
+    task: RQ1
+    display_name: "C3 — Visual (DINOv2) ablation"
+    model_class: benchmarks.models.chaptering.VisualChapterer
+    model_kwargs:
+      visual_dim: 384
+      visual_backbone: "DINOv2 ViT-S/14"
+      hidden_dim: 256
+    required_features: [text_features.pt, visual_features.pt]
+    compute_budget:
+      max_vram_mb: 3072
+      max_latency_ms: 5000
+    family: visual_text_fusion
+    reference_paper: null
+    tags: [chaptering, ablation]
+
+  - id: RQ1.C4_OCR_Slide
+    task: RQ1
+    display_name: "C4 — OCR/Slide ablation"
+    model_class: benchmarks.models.chaptering.OcrChapterer
+    model_kwargs:
+      ocr_dim: 384
+      ocr_backbone: "PaddleOCR v3"
+      hidden_dim: 256
+    required_features: [text_features.pt, ocr_features.pt]
+    compute_budget:
+      max_vram_mb: 3072
+      max_latency_ms: 5000
+    family: ocr_text_fusion
+    reference_paper: null
+    tags: [chaptering, ablation]
+
+  - id: RQ1.C5_CrossAttentionProposed
+    task: RQ1
+    display_name: "C5 — Decoupled Cross-Attention (proposed)"
+    model_class: benchmarks.models.chaptering.DecoupledCrossAttentionModel
+    model_kwargs:
+      d_ac: 32
+      pos_weight: 4.0
+      visual_snapping: true
+      dynamic_nms: true
+      num_layers: 4
+      hidden_dim: 256
+      num_heads: 4
+      boundary_query_tokens: 3
+    required_features: [text_features.pt, visual_features.pt, ocr_features.pt, acoustic_features.pt]
+    compute_budget:
+      max_vram_mb: 6144
+      max_latency_ms: 30000
+    family: cross_attention_transformer
+    reference_paper: null
+    tags: [chaptering, multimodal, proposed, primary]
+
+  - id: RQ1.C6_LateFusion
+    task: RQ1
+    display_name: "C6 — Late Fusion baseline"
+    model_class: benchmarks.models.chaptering.LateFusionChapterer
+    model_kwargs:
+      hidden_dim: 256
+      num_heads: 4
+    required_features: [text_features.pt, visual_features.pt, ocr_features.pt, acoustic_features.pt]
+    compute_budget:
+      max_vram_mb: 6144
+      max_latency_ms: 15000
+    family: late_fusion
+    reference_paper: null
+    tags: [chaptering, baseline]
+
+  # ==========================================================================
+  # RQ2: Hierarchical Summarization (6 candidates)
+  # ==========================================================================
+
+  - id: RQ2.S0_Flat
+    task: RQ2
+    display_name: "S0 — Flat concatenation baseline"
+    model_class: benchmarks.models.summarization.FlatSummarizer
+    model_kwargs:
+      max_input_tokens: 32000
+      max_output_tokens: 512
+    required_features: [transcript.txt]
+    compute_budget:
+      max_vram_mb: 0
+      max_latency_ms: 30000
+    family: flat_baseline
+    reference_paper: null
+    tags: [summarization, baseline]
+
+  - id: RQ2.S1_MapReduce
+    task: RQ2
+    display_name: "S1 — Fixed-Chunk Map-Reduce"
+    model_class: benchmarks.models.summarization.MapReduceSummarizer
+    model_kwargs:
+      chunk_size: 2048
+      max_output_tokens: 512
+    required_features: [transcript.txt]
+    compute_budget:
+      max_vram_mb: 0
+      max_latency_ms: 45000
+    family: map_reduce
+    reference_paper: null
+    tags: [summarization, hierarchical]
+
+  - id: RQ2.S2_Oracle
+    task: RQ2
+    display_name: "S2 — Oracle Hierarchy (uses ground-truth chapters)"
+    model_class: benchmarks.models.summarization.OracleHierarchySummarizer
+    model_kwargs:
+      max_output_tokens: 512
+    required_features: [transcript.txt, chapters.json]
+    compute_budget:
+      max_vram_mb: 0
+      max_latency_ms: 30000
+    family: oracle_hierarchical
+    reference_paper: null
+    tags: [summarization, oracle, upper_bound]
+
+  - id: RQ2.S3_TextHierarchy
+    task: RQ2
+    display_name: "S3 — Text Hierarchy (predicted chapters)"
+    model_class: benchmarks.models.summarization.TextHierarchySummarizer
+    model_kwargs:
+      max_output_tokens: 512
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript.txt, predicted_chapters.json]
+    compute_budget:
+      max_vram_mb: 6144
+      max_latency_ms: 45000
+    family: text_hierarchical
+    reference_paper: null
+    tags: [summarization, hierarchical]
+
+  - id: RQ2.S3+ev_SlideEvidenceGrounded
+    task: RQ2
+    display_name: "S3+ev — Slide Evidence Grounded"
+    model_class: benchmarks.models.summarization.SlideEvidenceSummarizer
+    model_kwargs:
+      max_output_tokens: 512
+      tau_ev: 0.45
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript.txt, predicted_chapters.json, ocr_features.pt]
+    compute_budget:
+      max_vram_mb: 6144
+      max_latency_ms: 60000
+    family: hierarchical_with_evidence
+    reference_paper: null
+    tags: [summarization, evidence_grounding, primary]
+
+  - id: RQ2.S4_MultimodalGrounded
+    task: RQ2
+    display_name: "S4 — Multimodal Grounded (visual + textual)"
+    model_class: benchmarks.models.summarization.MultimodalGroundedSummarizer
+    model_kwargs:
+      max_output_tokens: 512
+      tau_ev: 0.45
+      visual_weight: 0.3
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript.txt, predicted_chapters.json, visual_features.pt, ocr_features.pt]
+    compute_budget:
+      max_vram_mb: 7168
+      max_latency_ms: 90000
+    family: multimodal_hierarchical
+    reference_paper: null
+    tags: [summarization, multimodal]
+
+  # ==========================================================================
+  # RQ3: Evidence Retrieval & Grounded QA (4 candidates)
+  # ==========================================================================
+
+  - id: RQ3.Q0_FlatDense
+    task: RQ3
+    display_name: "Q0 — Flat Dense retrieval baseline"
+    model_class: benchmarks.models.retrieval_qa.FlatDenseRetrieval
+    model_kwargs:
+      embedding_dim: 384
+      top_k: 5
+    required_features: [transcript_chunks.json]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 2000
+    family: flat_dense
+    reference_paper: null
+    tags: [retrieval, baseline]
+
+  - id: RQ3.Q1_OracleHierarchy
+    task: RQ3
+    display_name: "Q1 — Oracle Hierarchy (uses GT chapters)"
+    model_class: benchmarks.models.retrieval_qa.OracleHierarchicalRetrieval
+    model_kwargs:
+      top_k: 5
+    required_features: [transcript_chunks.json, gt_chapters.json]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 2000
+    family: oracle_hierarchical
+    reference_paper: null
+    tags: [retrieval, oracle, upper_bound]
+
+  - id: RQ3.Q2_PredictedHierarchy
+    task: RQ3
+    display_name: "Q2 — Predicted Hierarchy (uses C5 chapters)"
+    model_class: benchmarks.models.retrieval_qa.PredictedHierarchicalRetrieval
+    model_kwargs:
+      top_k: 5
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript_chunks.json, predicted_chapters.json]
+    compute_budget:
+      max_vram_mb: 2048
+      max_latency_ms: 2500
+    family: hierarchical_predicted
+    reference_paper: null
+    tags: [retrieval, hierarchical]
+
+  - id: RQ3.Q3_MultimodalRRF
+    task: RQ3
+    display_name: "Q3 — Multimodal Structured + RRF (proposed)"
+    model_class: benchmarks.models.retrieval_qa.MultimodalRRFRetrieval
+    model_kwargs:
+      rrf_k: 60
+      top_k: 5
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript_chunks.json, predicted_chapters.json, ocr_features.pt, visual_features.pt]
+    compute_budget:
+      max_vram_mb: 4096
+      max_latency_ms: 3000
+    family: multimodal_rrf
+    reference_paper: "https://en.wikipedia.org/wiki/Reciprocal_rank_fusion"
+    tags: [retrieval, multimodal, rrf, primary]
+
+  # ==========================================================================
+  # RQ4: System Efficiency (4 candidates)
+  # ==========================================================================
+
+  - id: RQ4.E1_Text
+    task: RQ4
+    display_name: "E1 — Text-only system"
+    model_class: benchmarks.evaluation.system_text.E1TextSystem
+    model_kwargs:
+      max_latency_sec: 60.0
+    required_features: [transcript.txt]
+    compute_budget:
+      max_vram_mb: 4096
+      max_latency_ms: 60000
+    family: text_only_system
+    reference_paper: null
+    tags: [system, efficiency, baseline]
+
+  - id: RQ4.E2_Structured
+    task: RQ4
+    display_name: "E2 — Structured (chaptered text) system"
+    model_class: benchmarks.evaluation.system_structured.E2StructuredSystem
+    model_kwargs:
+      max_latency_sec: 60.0
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+    required_features: [transcript.txt, predicted_chapters.json]
+    compute_budget:
+      max_vram_mb: 5120
+      max_latency_ms: 60000
+    family: structured_system
+    reference_paper: null
+    tags: [system, efficiency]
+
+  - id: RQ4.E3_ProposedMultimodal
+    task: RQ4
+    display_name: "E3 — Proposed Multimodal system"
+    model_class: benchmarks.evaluation.system_multimodal.E3MultimodalSystem
+    model_kwargs:
+      max_latency_sec: 60.0
+      chapterer_model: RQ1.C5_CrossAttentionProposed
+      summarizer_model: RQ2.S3+ev_SlideEvidenceGrounded
+    required_features: [transcript.txt, predicted_chapters.json, visual_features.pt, ocr_features.pt]
+    compute_budget:
+      max_vram_mb: 6144
+      max_latency_ms: 60000
+    family: multimodal_system
+    reference_paper: null
+    tags: [system, efficiency, primary, proposed]
+
+  - id: RQ4.E4_VLM4B
+    task: RQ4
+    display_name: "E4 — Compact VLM (Qwen3-VL-4B)"
+    model_class: transformers.Qwen3VLForConditionalGeneration
+    model_kwargs:
+      model_id: Qwen/Qwen3-VL-4B-Instruct
+      precision: float16
+      device: cuda
+    required_features: [frames/]
+    compute_budget:
+      max_vram_mb: 8192
+      max_latency_ms: 120000
+    family: vision_language_model
+    reference_paper: "https://github.com/QwenLM/Qwen3-VL"
+    tags: [system, efficiency, vlm]

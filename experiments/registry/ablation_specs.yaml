@@ -1,0 +1,141 @@
+# ablation_specs.yaml — 2^k toggle grids per task
+# Mỗi task định nghĩa: base_candidates + toggles + cap
+
+version: "1.0.0"
+last_updated: "2026-09-21"
+
+ablation_specs:
+
+  # ==========================================================================
+  # RQ0-A: ASR — ablate denoise + VAD
+  # ==========================================================================
+  RQ0_A:
+    description: "ASR ablation với denoise + VAD preprocessors"
+    base_candidates:
+      - RQ0_A.A1_FasterWhisperSmall_GPU
+      - RQ0_A.A2_DistilWhisper
+    toggles:
+      denoise:
+        - false
+        - true
+      vad:
+        - false
+        - true
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ0-V: Scene Detection — ablate confidence threshold
+  # ==========================================================================
+  RQ0_V:
+    description: "Scene detection ablation với confidence threshold variants"
+    base_candidates:
+      - RQ0_V.V1_ContentDetector
+      - RQ0_V.V2_ThresholdDetector
+      - RQ0_V.V3_TransNetV2
+    toggles:
+      conf_threshold:
+        - 0.15
+        - 0.25
+        - 0.35
+      min_scene_len:
+        - 10
+        - 20
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ0-OD: Object Detection — ablate confidence + image size
+  # ==========================================================================
+  RQ0_OD:
+    description: "Object detection ablation với conf threshold + image size"
+    base_candidates:
+      - RQ0_OD.OD-A_YOLOv8n
+      - RQ0_OD.OD-B_YOLOv11n
+      - RQ0_OD.OD-C_RTDETR_r18
+    toggles:
+      conf_threshold:
+        - 0.15
+        - 0.25
+        - 0.35
+      imgsz:
+        - 416
+        - 640
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ1: Chaptering — ablate visual_snapping + dynamic_nms + pos_weight
+  # ==========================================================================
+  RQ1:
+    description: "Chaptering ablation với 3 architectural toggles"
+    base_candidates:
+      - RQ1.C5_CrossAttentionProposed
+      - RQ1.C1_TextOnly
+      - RQ1.C3_Visual_DINOv2
+    toggles:
+      visual_snapping:
+        - true
+        - false
+      dynamic_nms:
+        - true
+        - false
+      pos_weight:
+        - 1.0
+        - 4.0
+        - 8.0
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ2: Summarization — ablate evidence_grounding + max_output_tokens
+  # ==========================================================================
+  RQ2:
+    description: "Summarization ablation với evidence grounding + length control"
+    base_candidates:
+      - RQ2.S3+ev_SlideEvidenceGrounded
+      - RQ2.S4_MultimodalGrounded
+      - RQ2.S1_MapReduce
+    toggles:
+      evidence_grounding:
+        - false
+        - true
+      tau_ev:
+        - 0.30
+        - 0.45
+        - 0.60
+      max_output_tokens:
+        - 256
+        - 512
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ3: Retrieval — ablate RRF k + dense weight
+  # ==========================================================================
+  RQ3:
+    description: "Retrieval ablation với RRF k + hierarchical weight"
+    base_candidates:
+      - RQ3.Q3_MultimodalRRF
+      - RQ3.Q2_PredictedHierarchy
+    toggles:
+      rrf_k:
+        - 30
+        - 60
+        - 90
+      top_k:
+        - 3
+        - 5
+        - 10
+    max_combinations_per_base: 8
+
+  # ==========================================================================
+  # RQ4: Efficiency — ablate model selection + caching
+  # ==========================================================================
+  RQ4:
+    description: "Efficiency ablation với model composition + caching"
+    base_candidates:
+      - RQ4.E3_ProposedMultimodal
+    toggles:
+      enable_feature_cache:
+        - true
+        - false
+      enable_batch_inference:
+        - true
+        - false
+    max_combinations_per_base: 8
