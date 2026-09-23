@@ -14,6 +14,7 @@ from experiments.scripts.benchmark_artifacts import (
     write_json_artifact,
     write_run_manifest,
 )
+from experiments.scripts.tedlium_qualification import qualify_tedlium
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -108,11 +109,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         preflight = read_json_artifact(context, "environment.preflight_receipt")
         if not preflight["records"][0].get("disk_gate_passed"):
             raise RuntimeError("upstream disk gate did not pass")
-        inventories = [
-            _inventory_dataset(path, context.profile)
-            for path in sorted(DATA_ROOT.iterdir())
-            if path.is_dir() and any(_dataset_files(path))
-        ]
+        inventories = []
+        for path in sorted(DATA_ROOT.iterdir()):
+            if not path.is_dir() or not any(_dataset_files(path)):
+                continue
+            if context.profile == "full" and path.name == "tedlium3":
+                inventory = qualify_tedlium(
+                    path,
+                    run_root=context.namespace_root,
+                    run_id=context.run_id,
+                    config_sha256=context.config_sha256,
+                    code_sha256=context.source_sha256,
+                )
+                if inventory["status"] != "completed":
+                    raise RuntimeError(
+                        "TED-LIUM D1 pilot did not complete; resume from operational checkpoint"
+                    )
+                inventories.append(inventory)
+            else:
+                inventories.append(_inventory_dataset(path, context.profile))
         if not inventories:
             raise RuntimeError(f"no local datasets found under {DATA_ROOT}")
         feasibility = [
@@ -129,10 +144,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "eligible_for_profiling": (
                     item["selected_files"] > 0
                     and item["readable_files"] == item["selected_files"]
+                    and (
+                        item.get("dataset_id") != "tedlium3"
+                        or (
+                            item.get("status") == "completed"
+                            and item.get("decode_gate_passed") is True
+                        )
+                    )
                 ),
                 "scientific_selection_eligible": False,
-                "eligibility_reason": "bounded local file probe; rights, task GT and media decode remain unadjudicated",
+                "eligibility_reason": item.get(
+                    "eligibility_reason",
+                    "bounded local file probe; rights, task GT and media decode remain unadjudicated",
+                ),
                 "network_used": False,
+                "decode_success_rate": item.get("decode_success_rate"),
+                "qualification_status": item.get("status", "completed"),
             }
             for item in inventories
         ]

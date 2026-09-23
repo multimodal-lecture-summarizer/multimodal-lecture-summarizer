@@ -25,6 +25,23 @@ from experiments.evaluation.dataset_contracts import (
 )
 
 
+def _profile_unit(dataset_id: str, item: dict[str, Any]) -> dict[str, Any]:
+    inferred_split = split_for(item["relative_path"])
+    return {
+        "dataset_id": dataset_id,
+        "unit_id": item["unit_id"],
+        "relative_path": item["relative_path"],
+        "split": item.get("split", inferred_split),
+        "original_split": item.get("original_split", item.get("split", inferred_split)),
+        "bytes": item["bytes"],
+        "extension": item["extension"],
+        "sha256": item["sha256"],
+        "readable": item["readable"],
+        "decoded": item["decoded"],
+        "probe_status": item["probe_status"],
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         context = parse_context(__doc__ or "", "00c_dataset_eda_and_freeze", argv)
@@ -49,18 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for dataset in inventory:
             dataset_units = []
             for item in dataset["files"]:
-                unit = {
-                    "dataset_id": dataset["dataset_id"],
-                    "unit_id": item["unit_id"],
-                    "relative_path": item["relative_path"],
-                    "split": split_for(item["relative_path"]),
-                    "bytes": item["bytes"],
-                    "extension": item["extension"],
-                    "sha256": item["sha256"],
-                    "readable": item["readable"],
-                    "decoded": item["decoded"],
-                    "probe_status": item["probe_status"],
-                }
+                unit = _profile_unit(dataset["dataset_id"], item)
                 units.append(unit)
                 dataset_units.append(unit)
                 checksum_index[unit["sha256"]].append(

@@ -36,6 +36,87 @@ def test_research_decisions_freeze_user_choices():
     assert decisions["speaker_diarization"]["official_benchmark"] is False
 
 
+def test_research_decisions_freeze_phase2_dataset_execution():
+    decisions = load_yaml(DEFAULT_DECISIONS)
+    phase2 = decisions["phase2_dataset_execution"]
+    assert phase2 == {
+        "first_target": {
+            "dataset_id": "tedlium3",
+            "track_id": "asr_english",
+            "qualification_compute_profile": "local_rtx4050_6gb",
+            "acquisition_policy": "existing_local_integrity_scan_only",
+            "source_of_truth": "local",
+            "split_mapping": {
+                "official_dev": "validation",
+                "official_test": "final_test",
+                "preserve_original_split": True,
+            },
+        },
+        "artifact_formats": {
+            "unit_level": "parquet",
+            "aggregate": "csv",
+            "manifests": "json",
+        },
+        "next_target": {"dataset_id": "iiit_cvid", "endpoint": "ocr"},
+        "downstream_execution": {
+            "prerequisite": "d2_validated",
+            "asr_model_benchmark_compute_profile": "colab_t4",
+            "asr_ablation_compute_profile": "colab_t4",
+        },
+        "artifact_transport": {
+            "provider": "google_drive",
+            "logical_root": "MyDrive",
+            "role": "immutable_artifact_transport",
+        },
+        "run_control": {
+            "target_run_minutes": 60,
+            "checkpoint_policy": "adaptive",
+            "log_format": "jsonl",
+            "log_granularity": "per_task_detailed",
+            "long_task_progress_required": True,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "invalid_value"),
+    [
+        (("first_target", "dataset_id"), "other_dataset"),
+        (("first_target", "track_id"), "ocr"),
+        (("first_target", "qualification_compute_profile"), "colab_t4"),
+        (("first_target", "acquisition_policy"), "redownload"),
+        (("first_target", "source_of_truth"), "google_drive"),
+        (("first_target", "split_mapping", "official_dev"), "train"),
+        (("first_target", "split_mapping", "official_test"), "test"),
+        (("first_target", "split_mapping", "preserve_original_split"), False),
+        (("artifact_formats", "unit_level"), "json"),
+        (("artifact_formats", "aggregate"), "parquet"),
+        (("artifact_formats", "manifests"), "yaml"),
+        (("next_target", "dataset_id"), "eduvidqa"),
+        (("next_target", "endpoint"), "qa"),
+        (("downstream_execution", "prerequisite"), "d1_validated"),
+        (("downstream_execution", "asr_model_benchmark_compute_profile"), "local_rtx4050_6gb"),
+        (("downstream_execution", "asr_ablation_compute_profile"), "local_rtx4050_6gb"),
+        (("artifact_transport", "provider"), "local_disk"),
+        (("artifact_transport", "logical_root"), "MyDrive/benchmark"),
+        (("artifact_transport", "role"), "source_of_truth"),
+        (("run_control", "target_run_minutes"), 120),
+        (("run_control", "checkpoint_policy"), "per_unit"),
+        (("run_control", "log_format"), "text"),
+        (("run_control", "log_granularity"), "summary_only"),
+        (("run_control", "long_task_progress_required"), False),
+    ],
+)
+def test_research_decisions_reject_phase2_mutations(path, invalid_value):
+    decisions = load_yaml(DEFAULT_DECISIONS)
+    target = decisions["phase2_dataset_execution"]
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = invalid_value
+    errors = validate_research_decisions(decisions)
+    assert any("phase2_dataset_execution" in error for error in errors)
+
+
 def test_research_decisions_reject_manual_ground_truth():
     decisions = load_yaml(DEFAULT_DECISIONS)
     decisions["ground_truth"]["project_manual_annotation_allowed"] = True

@@ -146,6 +146,46 @@ def validate_research_decisions(data: dict[str, Any]) -> list[str]:
             "vista_full_local_status": "not_feasible_local",
             "allowed_alternatives": ["labeled_subset", "registered_fallback_dataset", "separately_approved_external_storage_profile"],
         },
+        "phase2_dataset_execution": {
+            "first_target": {
+                "dataset_id": "tedlium3",
+                "track_id": "asr_english",
+                "qualification_compute_profile": "local_rtx4050_6gb",
+                "acquisition_policy": "existing_local_integrity_scan_only",
+                "source_of_truth": "local",
+                "split_mapping": {
+                    "official_dev": "validation",
+                    "official_test": "final_test",
+                    "preserve_original_split": True,
+                },
+            },
+            "artifact_formats": {
+                "unit_level": "parquet",
+                "aggregate": "csv",
+                "manifests": "json",
+            },
+            "next_target": {
+                "dataset_id": "iiit_cvid",
+                "endpoint": "ocr",
+            },
+            "downstream_execution": {
+                "prerequisite": "d2_validated",
+                "asr_model_benchmark_compute_profile": "colab_t4",
+                "asr_ablation_compute_profile": "colab_t4",
+            },
+            "artifact_transport": {
+                "provider": "google_drive",
+                "logical_root": "MyDrive",
+                "role": "immutable_artifact_transport",
+            },
+            "run_control": {
+                "target_run_minutes": 60,
+                "checkpoint_policy": "adaptive",
+                "log_format": "jsonl",
+                "log_granularity": "per_task_detailed",
+                "long_task_progress_required": True,
+            },
+        },
     }
     allowed_top_level = set(expected_sections) | {"frozen_at"}
     if set(data) != allowed_top_level:
