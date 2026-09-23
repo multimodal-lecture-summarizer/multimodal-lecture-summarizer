@@ -17,6 +17,7 @@ from experiments.scripts.dataset_profile_helpers import (
     split_for,
     write_size_figure,
 )
+from experiments.evaluation.dataset_contracts import validate_dataset_bundle
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -61,6 +62,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             sizes = [unit["bytes"] for unit in dataset_units]
             split_counts = Counter(unit["split"] for unit in dataset_units)
+            issue_count = sum(not unit["readable"] or unit["bytes"] <= 0 for unit in dataset_units)
+            eligible_count = len(dataset_units) - issue_count
+            excluded_count = dataset["selected_files"] - len(dataset_units) + issue_count
             profiles.append(
                 {
                     "dataset_id": dataset["dataset_id"],
@@ -68,8 +72,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "acquisition_level": dataset["acquisition_level"],
                     "profile": context.profile,
                     "raw_file_count": dataset["total_files"],
-                    "eligible_file_count": len(dataset_units),
-                    "excluded_file_count": dataset["selected_files"] - len(dataset_units),
+                    "eligible_file_count": eligible_count,
+                    "excluded_file_count": excluded_count,
                     "unresolved_file_count": dataset["total_files"] - dataset["selected_files"],
                     "selected_bytes": sum(sizes),
                     "selection_policy": dataset["selection_policy"],
@@ -89,7 +93,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {"dataset_id": dataset["dataset_id"], "split": split, "n": count}
                 for split, count in sorted(split_counts.items())
             )
-            issue_count = sum(not unit["readable"] or unit["bytes"] <= 0 for unit in dataset_units)
             quality.append(
                 {"dataset_id": dataset["dataset_id"], "checked_units": len(dataset_units), "issue_count": issue_count}
             )
@@ -97,8 +100,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "dataset_id": dataset["dataset_id"],
                     "raw": dataset["total_files"],
-                    "eligible": len(dataset_units),
-                    "excluded": issue_count,
+                    "eligible": eligible_count,
+                    "excluded": excluded_count,
                     "unresolved": dataset["total_files"] - dataset["selected_files"],
                     "scope": context.profile,
                 }
@@ -142,6 +145,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
             for row in profiles
         ]
+
+        validate_dataset_bundle(
+            registry=profiles,
+            feasibility_receipts=feasibility,
+            units=units,
+            profiles=profiles,
+            attrition=attrition,
+            frozen_manifest=frozen_scope,
+            endpoint_matrix=endpoint_matrix,
+        )
 
         write_json_artifact(context, "dataset.profile", profiles)
         write_json_artifact(context, "dataset.unit_profile", units)

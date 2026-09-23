@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lecture-summarizer.local/contracts/dataset-profile-v1.json",
+  "title": "Dataset evidence contracts",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "registry", "feasibility_receipts", "units", "profiles", "attrition",
+    "frozen_manifest", "endpoint_matrix"
+  ],
+  "properties": {
+    "registry": {"type": "array", "items": {"$ref": "#/$defs/registry_record"}},
+    "feasibility_receipts": {"type": "array", "items": {"$ref": "#/$defs/feasibility_receipt"}},
+    "units": {"type": "array", "items": {"$ref": "#/$defs/unit_record"}},
+    "profiles": {"type": "array", "items": {"$ref": "#/$defs/profile_record"}},
+    "attrition": {"type": "array", "items": {"$ref": "#/$defs/attrition_record"}},
+    "frozen_manifest": {"type": "array", "items": {"$ref": "#/$defs/frozen_manifest_record"}},
+    "endpoint_matrix": {"type": "array", "items": {"$ref": "#/$defs/endpoint_record"}}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ground_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "source", "revision", "annotation_protocol"],
+      "properties": {
+        "status": {"const": "released"},
+        "source": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "annotation_protocol": {"type": "string", "minLength": 1}
+      }
+    },
+    "registry_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "source", "revision", "rights", "access_status",
+        "expected_bytes", "predicted_peak_bytes", "acquisition_level",
+        "fallback_dataset", "data_root_key", "receipt_path", "leakage_exception"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "rights": {"type": "string", "minLength": 1},
+        "access_status": {"enum": ["available", "gated", "unavailable"]},
+        "expected_bytes": {"type": "integer", "minimum": 0},
+        "predicted_peak_bytes": {"type": "integer", "minimum": 0},
+        "acquisition_level": {"enum": ["D0", "D1", "D2"]},
+        "fallback_dataset": {"type": ["string", "null"]},
+        "data_root_key": {"type": "string", "minLength": 1},
+        "receipt_path": {"type": "string", "minLength": 1}
+        ,"leakage_exception": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "profile_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "source", "acquisition_level", "profile", "raw_file_count",
+        "eligible_file_count", "excluded_file_count", "unresolved_file_count",
+        "selected_bytes", "selection_policy", "ground_truth_status"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "profile": {"type": "string", "minLength": 1},
+        "raw_file_count": {"type": "integer", "minimum": 0},
+        "eligible_file_count": {"type": "integer", "minimum": 0},
+        "excluded_file_count": {"type": "integer", "minimum": 0},
+        "unresolved_file_count": {"type": "integer", "minimum": 0},
+        "selected_bytes": {"type": "integer", "minimum": 0},
+        "selection_policy": {"type": "string", "minLength": 1},
+        "ground_truth_status": {"type": "string", "minLength": 1}
+      }
+    },
+    "attrition_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "raw", "eligible", "excluded", "unresolved", "scope"],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "raw": {"type": "integer", "minimum": 0},
+        "eligible": {"type": "integer", "minimum": 0},
+        "excluded": {"type": "integer", "minimum": 0},
+        "unresolved": {"type": "integer", "minimum": 0},
+        "scope": {"type": "string", "minLength": 1}
+      }
+    },
+    "endpoint_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "endpoint", "eligibility", "scientific_selection_eligible", "reason"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "endpoint": {"type": "string", "minLength": 1},
+        "eligibility": {"type": "string", "minLength": 1},
+        "scientific_selection_eligible": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "unit_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "unit_id", "source", "revision", "rights", "split",
+        "bytes", "sha256", "decoded", "ground_truth"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "unit_id": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "rights": {"type": "string", "minLength": 1},
+        "split": {"enum": ["train", "validation", "final_test"]},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "decoded": {"const": true},
+        "ground_truth": {"$ref": "#/$defs/ground_truth"}
+        ,"speaker_id": {"type": ["string", "null"]}
+        ,"talk_id": {"type": ["string", "null"]}
+      }
+    },
+    "feasibility_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "acquisition_level", "schema_success_rate",
+        "checksum_success_rate", "download_success_rate", "decode_success_rate",
+        "predicted_peak_bytes", "estimated_completion_hours"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "acquisition_level": {"enum": ["D1", "D2"]},
+        "schema_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "checksum_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "download_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "decode_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "predicted_peak_bytes": {"type": "integer", "minimum": 0},
+        "estimated_completion_hours": {"type": "number", "minimum": 0}
+      }
+    },
+    "frozen_manifest_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "freeze_status", "scientific_selection_eligible",
+        "unit_ids", "reason"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "freeze_status": {"enum": ["eligible", "not_eligible", "blocked_decision"]},
+        "scientific_selection_eligible": {"type": "boolean"},
+        "unit_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "reason": {"type": "string", "minLength": 1}
+        ,"profile": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
