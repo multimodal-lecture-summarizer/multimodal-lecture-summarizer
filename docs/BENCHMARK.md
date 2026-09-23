@@ -4,6 +4,41 @@ Hướng dẫn thiết lập, chạy và ghi nhận benchmark cho pipeline **mul
 
 ---
 
+## 0. Evidence contracts hiện đã triển khai
+
+Phần này mô tả contract đang được code kiểm tra. Nó không xác nhận đã tải D2 hoặc đã có kết quả benchmark thực.
+
+### 0.1 Dataset freeze D2
+
+API `validate_dataset_bundle()` trong `experiments/evaluation/dataset_contracts.py` fail closed khi một dataset được khai báo `eligible`. Một D2 freeze chỉ hợp lệ khi:
+
+- dataset ID khớp giữa registry, profile, attrition, frozen manifest và endpoint matrix; số lượng profile/attrition/frozen unit nhất quán;
+- registry và feasibility receipt đều là `D2`, source `available`, revision/rights rõ ràng;
+- receipt đạt schema/checksum 100%, download tối thiểu 90%, decode tối thiểu 95%, predicted peak không quá 50 GiB và thời gian ước tính không quá 12 giờ;
+- frozen unit ID khác rỗng, sorted, unique, resolve được; mỗi unit có bytes dương, SHA-256 hợp lệ, decode thành công và released ground truth kèm source, revision, annotation protocol;
+- có cả split `validation` và `final_test`; không trùng unit ID, checksum, source, speaker hoặc talk giữa hai split. Registry phải ghi rõ `leakage_exception` nếu release không cung cấp speaker/talk identity;
+- endpoint matrix cũng đánh dấu `scientific_selection_eligible: true`.
+
+Dataset `not_eligible` vẫn được phép đi qua kiểm tra cấu trúc mà không giả lập D2: nó phải có `scientific_selection_eligible: false` và không có frozen unit ID. Official smoke hiện nằm tại `experiments/outputs/artifacts/official/smoke/payloads/`; các acquisition record vẫn là D0 local inventory và frozen manifests vẫn là `not_eligible`. Vì vậy smoke này không phải bằng chứng acquisition D2 hoặc benchmark chính thức.
+
+### 0.2 Fail-closed ablation runner
+
+CLI hiện có adapter cho `RQ0_OD` với hai toggle `conf_threshold` và `imgsz`:
+
+```bash
+python -m experiments.scripts.ablation_runner --task RQ0_OD --max-per-base 1 --seeds 42 --dry-run
+```
+
+`--dry-run` chỉ lập kế hoạch: mỗi row có `evidence_status=not_run`, `success=false` và metrics rỗng. Exit code 0 ở chế độ này chỉ xác nhận toàn bộ combo đã được lập kế hoạch, không xác nhận model đã chạy hay metric đã được đo.
+
+Real result chỉ được chấp nhận khi subprocess tạo output mới khớp chính xác task/candidate/toggles/seed và config hash, có `evidence_status=real`, metrics hữu hạn gồm `map50`, `precision`, `recall`, cùng provenance đầy đủ về dataset/revision/checksum, ground-truth revision, model revision, runner version, prediction count và frame count. Runner object-detection hiện phát output `diagnostic` vì chưa nối released box/class ground truth; do đó chưa thể cung cấp real ablation evidence.
+
+Các task ngoài `RQ0_OD` bị từ chối vì chưa có adapter. Real `RQ0_OD` chỉ nhận một seed vì pipeline hiện được xem là deterministic. `--parallel` trong real mode cũng fail closed cho đến khi frame input bất biến; parallel dry-run chỉ lập kế hoạch.
+
+Audit mặc định được append vào `experiments/scratch/ablation_audit.csv`; output theo combo nằm dưới `experiments/outputs/ablations/`. Chỉ các run mà mọi combo có trạng thái `real` mới trả exit code 0 trong real mode.
+
+---
+
 ## 1. Mục tiêu benchmark
 
 | Mục tiêu | Metric chính |
