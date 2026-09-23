@@ -21,7 +21,19 @@ API `validate_dataset_bundle()` trong `experiments/evaluation/dataset_contracts.
 
 Dataset `not_eligible` vẫn được phép đi qua kiểm tra cấu trúc mà không giả lập D2: nó phải có `scientific_selection_eligible: false` và không có frozen unit ID. Official smoke hiện nằm tại `experiments/outputs/artifacts/official/smoke/payloads/`; các acquisition record vẫn là D0 local inventory và frozen manifests vẫn là `not_eligible`. Vì vậy smoke này không phải bằng chứng acquisition D2 hoặc benchmark chính thức.
 
-### 0.2 Fail-closed ablation runner
+### 0.2 Characterization gate của notebook `00c`
+
+Runner `experiments.scripts.profile_dataset` gọi `validate_dataset_characterization_bundle()` trước khi ghi các artifact `00c`. Gate này kết hợp JSON Schema với kiểm tra ngữ nghĩa liên-artifact:
+
+- đối chiếu dataset ID, revision, acquisition level, profile/scope, denominator, split count, attrition/quality exclusion, selected bytes và numeric summary với unit profile;
+- ràng buộc `source_table_sha256` với payload nguồn đã canonicalize; figure phải dùng source artifact đã đăng ký, nằm trong artifact root, tồn tại trên đĩa và khớp SHA-256;
+- tính lại exact cross-split overlap và duplicate checksum group từ unit profile, thay vì tin số đếm/findings do artifact tự khai báo; D2 còn yêu cầu near-duplicate đã adjudicate hoàn tất và không có exact overlap;
+- với dataset D2, yêu cầu đủ tám figure ID phổ quát (`scale_bytes`, hai distribution, GT/missingness, attrition, split, source overlap, duplicate matrix) và kiểm tra semantic contract của từng figure: source artifact, unit, plot kind và measure. Nội dung của các universal figure không được trùng hash;
+- kiểm tra cross-dataset comparison có metric definition tương thích, source hash/denominator đúng và `selected_bytes` khớp statistics.
+
+Phạm vi hiện tại vẫn có giới hạn rõ ràng: lần chạy `00c` thực tế chỉ profile local inventory D0/D1 và phát `frozen_manifest: not_eligible`; nó không tạo bằng chứng D2. JSON envelope/storage layout chuẩn cho bộ artifact và acquisition D2 thực vẫn chưa hoàn thành. Test hoặc smoke exit code 0 chỉ chứng minh contract từ chối/nhận fixture đúng kỳ vọng, không phải kết quả benchmark hay bằng chứng scientific-selection.
+
+### 0.3 Fail-closed ablation runner
 
 CLI hiện có adapter cho `RQ0_OD` với hai toggle `conf_threshold` và `imgsz`:
 
