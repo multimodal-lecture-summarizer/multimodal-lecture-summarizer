@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +19,12 @@ import nbformat
 import yaml
 from nbclient import NotebookClient
 
+# Support both ``python -m benchmarks.scripts...`` and direct script execution.
+# The latter otherwise places only ``benchmarks/scripts`` on sys.path.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from experiments.registry.contract_validator import (
     DEFAULT_NOTEBOOKS,
     load_yaml,
@@ -24,7 +32,6 @@ from experiments.registry.contract_validator import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "experiments" / "outputs" / "executed_notebooks"
 DEFAULT_ARTIFACT_ROOT = PROJECT_ROOT / "experiments" / "outputs" / "artifacts"
 ELIGIBLE_ARTIFACT_STATUS = "real"
@@ -32,6 +39,8 @@ EVIDENCE_STATUSES = {
     "real", "dry", "proxy", "partial", "failed", "not_run", "not_eligible", "blocked_decision"
 }
 USABLE_DIAGNOSTIC_STATUSES = {"real", "dry", "proxy", "partial"}
+SMOKE_DISK_CAP_BYTES = 10 * 1024**3
+FALLBACK_MARKERS = {"dry", "fallback", "mock", "proxy"}
 
 
 class ManifestError(ValueError):
@@ -134,11 +143,11 @@ def build_plan(
             "source_exists": (PROJECT_ROOT / entry["path"]).is_file(),
             "timeout_seconds": entry["timeout_seconds"],
             "network_policy": entry["network_policy"],
-            "disk_budget": {
-                "status": "not_declared",
-                "estimated_peak_bytes": None,
-                "must_be_resolved_by": "00a_environment_preflight",
-            },
+            "runner": entry["runner"],
+            "runner_exists": _runner_source_path(entry).is_file(),
+            "runner_source_sha256": _runner_source_sha256(entry),
+            "disk_budget": _disk_budget(profile),
+            "network_budget": _network_budget(entry["network_policy"], profile),
             "requires": entry["requires"],
             "upstream_notebooks": sorted(
                 {producers[item] for item in entry["requires"] if item in producers}
@@ -157,11 +166,108 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _runner_source_path(entry: dict[str, Any]) -> Path:
+    return PROJECT_ROOT.joinpath(*entry["runner"].split(".")).with_suffix(".py")
+
+
+def _runner_source_sha256(entry: dict[str, Any]) -> str | None:
+    path = _runner_source_path(entry)
+    return _sha256(path) if path.is_file() else None
+
+
+def _code_state_sha256(entry: dict[str, Any]) -> str:
+    fixed_candidates = (
+        Path(__file__).resolve(),
+        _runner_source_path(entry),
+        PROJECT_ROOT / "experiments" / "scripts" / "benchmark_artifacts.py",
+        PROJECT_ROOT / "experiments" / "registry" / "contract_validator.py",
+    )
+    dependency_roots = tuple(
+        PROJECT_ROOT / package for package in ("ai_workers", "benchmarks", "experiments")
+    )
+    candidates = set(fixed_candidates)
+    for dependency_root in dependency_roots:
+        if dependency_root.is_dir():
+            candidates.update(dependency_root.rglob("*.py"))
+    state = []
+    for path in sorted(candidates, key=lambda item: item.as_posix()):
+        if not path.is_file():
+            continue
+        try:
+            label = path.resolve().relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            label = path.name
+        state.append({"path": label, "sha256": _sha256(path)})
+    return hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _disk_budget(profile: str) -> dict[str, Any]:
+    if profile == "smoke":
+        return {
+            "status": "planning_upper_bound_requires_runtime_receipt",
+            "estimated_peak_bytes": SMOKE_DISK_CAP_BYTES,
+            "estimate_kind": "conservative_planning_upper_bound",
+            "runtime_metering": "runner_receipt_required",
+            "reserve_rule": "max(100 GiB, 15% volume)",
+            "validated_by": "00a_environment_preflight",
+        }
+    return {
+        "status": "requires_preflight_estimate",
+        "estimated_peak_bytes": None,
+        "estimate_kind": "runner_specific",
+        "reserve_rule": "max(100 GiB, 15% volume)",
+        "validated_by": "00a_environment_preflight",
+    }
+
+
+def _network_budget(policy: str, profile: str) -> dict[str, Any]:
+    if policy == "none":
+        return {"policy": policy, "network_allowed": False, "max_download_bytes": 0}
+    return {
+        "policy": policy,
+        "network_allowed": True,
+        "max_download_bytes": SMOKE_DISK_CAP_BYTES if profile == "smoke" else None,
+        "status": "bounded_smoke" if profile == "smoke" else "registry_receipt_required",
+        "runtime_metering": "runner_receipt_required",
+    }
+
+
+def _declared_metric_names() -> set[str]:
+    registry_path = PROJECT_ROOT / "experiments" / "registry" / "metric_registry.yaml"
+    try:
+        registry = load_yaml(registry_path)
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return set()
+    names: set[str] = set()
+    tracks = registry.get("tracks", registry)
+    if isinstance(tracks, dict):
+        track_values = tracks.values()
+    elif isinstance(tracks, list):
+        track_values = tracks
+    else:
+        return names
+    for track in track_values:
+        if not isinstance(track, dict):
+            continue
+        primary = track.get("primary_metric")
+        if isinstance(primary, dict) and isinstance(primary.get("name"), str):
+            names.add(primary["name"].lower())
+        for field in ("secondary_metrics", "diagnostic_metrics"):
+            values = track.get(field, [])
+            if isinstance(values, list):
+                names.update(str(value).lower() for value in values)
+    return names
+
+
 def _entry_config_sha256(entry: dict[str, Any], profile: str, run_namespace: str) -> str:
     payload = {
         "entry": entry,
         "profile": profile,
         "run_namespace": run_namespace,
+        "runner_source_sha256": _runner_source_sha256(entry),
+        "code_state_sha256": _code_state_sha256(entry),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -189,8 +295,12 @@ def _validate_payload(payload_path: Path, artifact_id: str) -> tuple[list[str], 
             if isinstance(value, list):
                 return [], len(value)
             for key in ("records", "rows", "items", "predictions", "metrics", "results"):
-                if isinstance(value, dict) and isinstance(value.get(key), list):
-                    return [], len(value[key])
+                if isinstance(value, dict) and key in value:
+                    collection = value[key]
+                    if collection in (None, {}, []):
+                        return [f"{artifact_id}: JSON field {key!r} is empty"], 0
+                    if isinstance(collection, (list, dict)):
+                        return [], len(collection)
             return [], 1
         elif suffix in {".csv", ".tsv"}:
             rows = [line for line in payload_path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -200,6 +310,182 @@ def _validate_payload(payload_path: Path, artifact_id: str) -> tuple[list[str], 
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return [f"{artifact_id}: payload is not parseable: {exc}"], 0
     return [], None
+
+
+def _fallback_only_errors(payload_path: Path, artifact_id: str) -> list[str]:
+    scientific_tokens = (
+        "prediction", "metric", "aggregate", "ranking", "shortlist", "selection"
+    )
+    if payload_path.suffix.lower() != ".json" or not any(
+        token in artifact_id for token in scientific_tokens
+    ):
+        return []
+    try:
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    def is_fallback(value: Any) -> bool:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == "fallback_used" and child is True:
+                    return True
+                if key == "model_loaded" and child is False:
+                    return True
+                if key in {"evidence_status", "execution_mode", "mode", "status"}:
+                    marker = re.sub(r"[\s-]+", "_", str(child).strip().lower())
+                    if any(
+                        marker == item
+                        or marker.startswith(f"{item}_")
+                        for item in FALLBACK_MARKERS
+                    ):
+                        return True
+                if is_fallback(child):
+                    return True
+        elif isinstance(value, list):
+            return any(is_fallback(child) for child in value)
+        return False
+
+    if is_fallback(payload):
+        return [f"{artifact_id}: fallback-only evidence is not eligible for official success"]
+    return []
+
+
+def _scientifically_empty_errors(payload_path: Path, artifact_id: str) -> list[str]:
+    scientific_tokens = ("prediction", "metric", "aggregate", "ranking")
+    if payload_path.suffix.lower() != ".json" or not any(
+        token in artifact_id for token in scientific_tokens
+    ):
+        return []
+    try:
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+
+    metric_keys = {"metric", "metrics", "score", "scores"}
+    prediction_keys = {"prediction", "predictions"}
+    ranking_keys = {"ranking", "rankings"}
+    invalid_sentinels = {
+        "n/a", "na", "nan", "none", "null", "not_run", "not-run", "failed",
+        "failure", "blocked", "blocked_decision", "not_eligible", "not-eligible",
+        "fallback", "mock", "proxy", "dry",
+    }
+    metadata_keys = {
+        "candidate", "count", "denominator", "evidence_status", "execution_mode",
+        "fallback_used", "id", "model_loaded", "mode", "n", "provenance",
+        "record_count", "sample_count", "status", "unit_id",
+    }
+    metric_name_tokens = {
+        "accuracy", "ap", "bertscore", "bleu", "cer", "collar", "coverage",
+        "density", "elapsed", "error", "f1", "factuality", "faithfulness", "fps",
+        "hallucination", "hit", "iou", "latency", "loss", "map", "memory",
+        "meteor", "mrr", "ndcg", "pk", "precision", "rate", "ratio", "recall",
+        "rouge", "rtf", "runtime", "score", "similarity", "speed", "throughput",
+        "wall_time", "wer", "window_diff",
+    }
+    allowed_count_metrics = {"chapter_count", "keyframe_count", "token_count"}
+    metric_statistic_keys = {
+        "ci_high", "ci_low", "lower", "mean", "median", "std", "upper", "value",
+    }
+
+    def is_metadata_key(key: str) -> bool:
+        normalized = key.lower()
+        return normalized in metadata_keys or normalized.endswith(
+            ("_at", "_bytes", "_count", "_duration", "_id", "_seconds")
+        )
+
+    def is_metric_key(key: str) -> bool:
+        normalized = key.lower()
+        if normalized.endswith("_count"):
+            return normalized in allowed_count_metrics
+        if normalized in {"offset", "rank"} or normalized.startswith("timestamp_"):
+            return False
+        if normalized.endswith(("_id", "_index")):
+            return False
+        return normalized in allowed_count_metrics | metric_name_tokens | _declared_metric_names()
+
+    def finite_metric(value: Any, *, scalar_allowed: bool = False) -> bool:
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, (int, float)):
+            return scalar_allowed and math.isfinite(float(value))
+        if isinstance(value, list):
+            return any(finite_metric(item, scalar_allowed=scalar_allowed) for item in value)
+        if isinstance(value, dict):
+            return any(
+                finite_metric(
+                    child,
+                    scalar_allowed=is_metric_key(key)
+                    or (scalar_allowed and key.lower() in metric_statistic_keys),
+                )
+                for key, child in value.items()
+                if not is_metadata_key(key) or is_metric_key(key)
+            )
+        return False
+
+    def meaningful_prediction(value: Any) -> bool:
+        if value is None or value == "":
+            return False
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, (int, float)):
+            return math.isfinite(float(value))
+        if isinstance(value, str):
+            normalized = re.sub(r"[\s-]+", "_", value.strip().lower())
+            return bool(normalized) and normalized not in invalid_sentinels
+        if isinstance(value, list):
+            return any(meaningful_prediction(item) for item in value)
+        if isinstance(value, dict):
+            return any(
+                meaningful_prediction(child)
+                for key, child in value.items()
+                if not is_metadata_key(key)
+            )
+        return False
+
+    keyed_values: dict[str, list[Any]] = {
+        "metric": [], "prediction": [], "ranking": [],
+    }
+
+    def collect_measurements(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                normalized_key = key.lower()
+                if normalized_key in metric_keys:
+                    keyed_values["metric"].append(child)
+                elif normalized_key in prediction_keys:
+                    keyed_values["prediction"].append(child)
+                elif normalized_key in ranking_keys:
+                    keyed_values["ranking"].append(child)
+                collect_measurements(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect_measurements(child)
+
+    collect_measurements(payload)
+    if "metric" in artifact_id or "aggregate" in artifact_id:
+        candidates = keyed_values["metric"] or [payload]
+        is_meaningful = any(
+            finite_metric(value, scalar_allowed=not isinstance(value, (dict, list)))
+            for value in candidates
+        )
+    elif "prediction" in artifact_id:
+        is_meaningful = bool(keyed_values["prediction"]) and any(
+            meaningful_prediction(value) for value in keyed_values["prediction"]
+        )
+    elif "ranking" in artifact_id:
+        is_meaningful = bool(keyed_values["ranking"]) and any(
+            meaningful_prediction(value) for value in keyed_values["ranking"]
+        )
+    else:
+        candidates = keyed_values["metric"] + keyed_values["prediction"] + keyed_values["ranking"]
+        is_meaningful = any(
+            finite_metric(value, scalar_allowed=not isinstance(value, (dict, list)))
+            or meaningful_prediction(value)
+            for value in candidates
+        )
+    if not is_meaningful:
+        return [f"{artifact_id}: scientific payload has no finite metric or non-empty prediction"]
+    return []
 
 
 def _validate_artifacts(
@@ -261,6 +547,9 @@ def _validate_artifacts(
             errors.extend(payload_errors)
         elif _sha256(payload_path) != expected_hash:
             errors.append(f"{artifact_id}: payload checksum mismatch")
+        elif run_namespace == "official":
+            errors.extend(_fallback_only_errors(payload_path, artifact_id))
+            errors.extend(_scientifically_empty_errors(payload_path, artifact_id))
         record_count = receipt.get("record_count")
         denominator = receipt.get("denominator")
         if not isinstance(record_count, int) or record_count <= 0:
@@ -284,6 +573,7 @@ def validate_required_artifacts(
     errors = _validate_artifacts(
         entry["requires"], entry["expected_schema_version"], artifact_root, profile, run_namespace
     )
+    receipts_by_producer: dict[str, list[tuple[str, dict[str, Any]]]] = {}
     for artifact_id in entry["requires"]:
         receipt_path = _artifact_receipt_path(
             artifact_root.resolve(), run_namespace, profile, artifact_id
@@ -302,6 +592,8 @@ def validate_required_artifacts(
                 f"{artifact_id}: producer {producer!r} does not match manifest "
                 f"{expected_producers.get(artifact_id)!r}"
             )
+        elif expected_producers:
+            receipts_by_producer.setdefault(producer, []).append((artifact_id, receipt))
         run_id = receipt.get("run_id")
         try:
             uuid.UUID(str(run_id))
@@ -310,6 +602,61 @@ def validate_required_artifacts(
         for field in ("source_sha256", "config_sha256", "dependency_state_sha256"):
             if not re.fullmatch(r"[0-9a-f]{64}", str(receipt.get(field, ""))):
                 errors.append(f"{artifact_id}: {field} must be a SHA-256 hex digest")
+        if artifact_id == "dataset.frozen_manifest":
+            try:
+                payload_path = (
+                    artifact_root.resolve() / str(receipt["payload_path"])
+                ).resolve()
+                payload_path.relative_to(artifact_root.resolve())
+                payload = json.loads(payload_path.read_text(encoding="utf-8"))
+                records = payload.get("records", [])
+                eligible = [
+                    record
+                    for record in records
+                    if record.get("freeze_status") == "eligible"
+                    and record.get("scientific_selection_eligible") is True
+                    and (record.get("unit_ids") or record.get("unit_id"))
+                ]
+                if not eligible:
+                    errors.append(
+                        "dataset.frozen_manifest: no scientifically eligible frozen units"
+                    )
+            except (
+                KeyError, OSError, UnicodeError, json.JSONDecodeError, AttributeError, ValueError
+            ) as exc:
+                errors.append(f"dataset.frozen_manifest: semantic validation failed: {exc}")
+    for producer, producer_receipts in receipts_by_producer.items():
+        manifest_path = (
+            _namespace_root(artifact_root.resolve(), run_namespace, profile)
+            / "runs"
+            / f"{producer}.run.json"
+        )
+        try:
+            run_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            errors.append(f"{producer}: upstream run manifest is missing or unreadable: {exc}")
+            continue
+        expected_manifest = {
+            "schema_version": 1,
+            "notebook_id": producer,
+            "profile": profile,
+            "run_namespace": run_namespace,
+        }
+        for key, wanted in expected_manifest.items():
+            if run_manifest.get(key) != wanted:
+                errors.append(
+                    f"{producer}: upstream run manifest {key}={run_manifest.get(key)!r} "
+                    f"(expected {wanted!r})"
+                )
+        for artifact_id, receipt in producer_receipts:
+            for key in (
+                "run_id", "status", "source_sha256", "config_sha256",
+                "dependency_state_sha256",
+            ):
+                if receipt.get(key) != run_manifest.get(key):
+                    errors.append(
+                        f"{artifact_id}: {key} does not match upstream run manifest"
+                    )
     return errors
 
 
@@ -629,6 +976,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "source_sha256": _sha256(source),
             "config_sha256": _entry_config_sha256(entry, profile, args.run_namespace),
             "dependency_state_sha256": dependency_sha256,
+            "runner_source_sha256": _runner_source_sha256(entry),
+            "code_state_sha256": _code_state_sha256(entry),
             "started_at": datetime.now(timezone.utc).isoformat(),
         }
         _write_start_record(
