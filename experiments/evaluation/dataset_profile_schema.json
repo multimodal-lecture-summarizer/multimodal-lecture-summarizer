@@ -16,7 +16,13 @@
     "profiles": {"type": "array", "items": {"$ref": "#/$defs/profile_record"}},
     "attrition": {"type": "array", "items": {"$ref": "#/$defs/attrition_record"}},
     "frozen_manifest": {"type": "array", "items": {"$ref": "#/$defs/frozen_manifest_record"}},
-    "endpoint_matrix": {"type": "array", "items": {"$ref": "#/$defs/endpoint_record"}}
+    "endpoint_matrix": {"type": "array", "items": {"$ref": "#/$defs/endpoint_record"}},
+    "statistics": {"type": "array", "items": {"$ref": "#/$defs/statistics_record"}},
+    "split_statistics": {"type": "array", "items": {"$ref": "#/$defs/split_statistics_record"}},
+    "quality_issues": {"type": "array", "items": {"$ref": "#/$defs/quality_record"}},
+    "leakage_audit": {"type": "array", "items": {"$ref": "#/$defs/leakage_audit_record"}},
+    "figure_manifest": {"type": "array", "items": {"$ref": "#/$defs/figure_manifest_record"}},
+    "cross_dataset_comparison": {"type": "array", "items": {"$ref": "#/$defs/cross_dataset_comparison_record"}}
   },
   "$defs": {
     "sha256": {
@@ -165,6 +171,137 @@
         },
         "reason": {"type": "string", "minLength": 1}
         ,"profile": {"type": "string", "minLength": 1}
+      }
+    },
+    "statistics_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "selected_files", "selected_bytes", "file_size_bytes",
+        "extension_counts", "revision", "acquisition_level", "scope",
+        "denominator", "source_table_sha256"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "selected_files": {"type": "integer", "minimum": 0},
+        "selected_bytes": {"type": "integer", "minimum": 0},
+        "file_size_bytes": {"type": "object"},
+        "extension_counts": {"type": "object"},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "denominator": {"type": "integer", "minimum": 0},
+        "source_table_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "split_statistics_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "split", "n", "denominator", "revision",
+        "acquisition_level", "scope"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "split": {"type": "string", "minLength": 1},
+        "n": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 0},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1}
+      }
+    },
+    "quality_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "checked_units", "issue_count", "excluded_units",
+        "revision", "acquisition_level", "scope", "issue_policy"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "checked_units": {"type": "integer", "minimum": 0},
+        "issue_count": {"type": "integer", "minimum": 0},
+        "excluded_units": {"type": "integer", "minimum": 0},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "issue_policy": {"type": "string", "minLength": 1}
+      }
+    },
+    "leakage_audit_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "revision", "acquisition_level", "scope",
+        "exact_overlap_count", "duplicate_group_count", "near_duplicate_status",
+        "adjudication_status", "findings"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "exact_overlap_count": {"type": "integer", "minimum": 0},
+        "duplicate_group_count": {"type": "integer", "minimum": 0},
+        "near_duplicate_status": {"enum": ["not_run", "adjudicated"]},
+        "adjudication_status": {"type": "string", "minLength": 1},
+        "findings": {"type": "array"}
+      }
+    },
+    "figure_manifest_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "figure_id", "path", "sha256", "source_table_sha256",
+        "revision", "acquisition_level", "split_scope", "profile", "unit", "n",
+        "missing_policy", "exclusion_policy", "source_artifact", "code_revision",
+        "plot_config"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "figure_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "source_table_sha256": {"$ref": "#/$defs/sha256"},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "split_scope": {"type": "string", "minLength": 1},
+        "profile": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1},
+        "n": {"type": "integer", "minimum": 0},
+        "missing_policy": {"type": "string", "minLength": 1},
+        "exclusion_policy": {"type": "string", "minLength": 1},
+        "source_artifact": {"type": "string", "minLength": 1},
+        "code_revision": {"$ref": "#/$defs/sha256"},
+        "plot_config": {
+          "type": "object",
+          "required": ["kind", "measure"],
+          "properties": {
+            "kind": {"type": "string", "minLength": 1},
+            "measure": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "cross_dataset_comparison_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id", "metric_id", "value", "definition_id", "unit", "revision",
+        "acquisition_level", "scope", "denominator", "source_table_sha256"
+      ],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "metric_id": {"type": "string", "minLength": 1},
+        "value": {"type": "number", "minimum": 0},
+        "definition_id": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "acquisition_level": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "denominator": {"type": "integer", "minimum": 0},
+        "source_table_sha256": {"$ref": "#/$defs/sha256"}
       }
     }
   }

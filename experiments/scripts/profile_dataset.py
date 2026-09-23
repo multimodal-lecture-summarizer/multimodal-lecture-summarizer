@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import hashlib
+import json
 from typing import Any, Sequence
 
 from experiments.scripts.benchmark_artifacts import (
@@ -17,7 +19,10 @@ from experiments.scripts.dataset_profile_helpers import (
     split_for,
     write_size_figure,
 )
-from experiments.evaluation.dataset_contracts import validate_dataset_bundle
+from experiments.evaluation.dataset_contracts import (
+    derive_cross_split_overlap_findings,
+    validate_dataset_characterization_bundle,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -39,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         quality: list[dict[str, Any]] = []
         attrition: list[dict[str, Any]] = []
         checksum_index: dict[str, list[dict[str, str]]] = defaultdict(list)
+        dataset_contract_meta: dict[str, dict[str, Any]] = {}
 
         for dataset in inventory:
             dataset_units = []
@@ -61,6 +67,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     {"dataset_id": unit["dataset_id"], "unit_id": unit["unit_id"], "split": unit["split"]}
                 )
             sizes = [unit["bytes"] for unit in dataset_units]
+            source_table_sha256 = hashlib.sha256(
+                json.dumps(dataset_units, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            dataset_revision = f"local-inventory-{source_table_sha256[:12]}"
+            dataset_contract_meta[dataset["dataset_id"]] = {
+                "revision": dataset_revision,
+                "source_table_sha256": source_table_sha256,
+                "acquisition_level": dataset["acquisition_level"],
+            }
             split_counts = Counter(unit["split"] for unit in dataset_units)
             issue_count = sum(not unit["readable"] or unit["bytes"] <= 0 for unit in dataset_units)
             eligible_count = len(dataset_units) - issue_count
@@ -87,14 +102,36 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "selected_bytes": sum(sizes),
                     "file_size_bytes": numeric_summary(sizes),
                     "extension_counts": dict(Counter(unit["extension"] for unit in dataset_units)),
+                    "revision": dataset_revision,
+                    "acquisition_level": dataset["acquisition_level"],
+                    "scope": context.profile,
+                    "denominator": len(dataset_units),
+                    "source_table_sha256": source_table_sha256,
                 }
             )
             split_statistics.extend(
-                {"dataset_id": dataset["dataset_id"], "split": split, "n": count}
+                {
+                    "dataset_id": dataset["dataset_id"],
+                    "split": split,
+                    "n": count,
+                    "denominator": len(dataset_units),
+                    "revision": dataset_revision,
+                    "acquisition_level": dataset["acquisition_level"],
+                    "scope": context.profile,
+                }
                 for split, count in sorted(split_counts.items())
             )
             quality.append(
-                {"dataset_id": dataset["dataset_id"], "checked_units": len(dataset_units), "issue_count": issue_count}
+                {
+                    "dataset_id": dataset["dataset_id"],
+                    "checked_units": len(dataset_units),
+                    "issue_count": excluded_count,
+                    "excluded_units": excluded_count,
+                    "revision": dataset_revision,
+                    "acquisition_level": dataset["acquisition_level"],
+                    "scope": context.profile,
+                    "issue_policy": "unreadable or zero-byte selected files are excluded",
+                }
             )
             attrition.append(
                 {
@@ -108,22 +145,75 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         leakage = []
-        for checksum, occurrences in sorted(checksum_index.items()):
-            if len(occurrences) > 1:
-                leakage.append({"sha256": checksum, "duplicate_count": len(occurrences), "occurrences": occurrences})
-        if not leakage:
-            leakage = [{"sha256": None, "duplicate_count": 0, "occurrences": [], "scope": context.profile}]
+        for profile in profiles:
+            dataset_id = profile["dataset_id"]
+            dataset_units = [unit for unit in units if unit["dataset_id"] == dataset_id]
+            duplicate_groups = [
+                checksum
+                for checksum, occurrences in sorted(checksum_index.items())
+                if len([row for row in occurrences if row["dataset_id"] == dataset_id]) > 1
+            ]
+            overlap_findings = derive_cross_split_overlap_findings(dataset_units)
+            leakage.append(
+                {
+                    "dataset_id": dataset_id,
+                    "revision": dataset_contract_meta[dataset_id]["revision"],
+                    "acquisition_level": profile["acquisition_level"],
+                    "scope": context.profile,
+                    "exact_overlap_count": len(overlap_findings),
+                    "duplicate_group_count": len(duplicate_groups),
+                    "near_duplicate_status": "not_run",
+                    "adjudication_status": "not_applicable_smoke",
+                    "findings": overlap_findings,
+                }
+            )
 
         comparison = [
             {
                 "dataset_id": row["dataset_id"],
-                "selected_files": row["selected_files"],
-                "selected_bytes": row["selected_bytes"],
-                "profile": context.profile,
+                "metric_id": "selected_bytes",
+                "value": row["selected_bytes"],
+                "definition_id": "physical_selected_file_bytes_v1",
+                "unit": "bytes",
+                "revision": row["revision"],
+                "acquisition_level": row["acquisition_level"],
+                "scope": context.profile,
+                "denominator": row["denominator"],
+                "source_table_sha256": row["source_table_sha256"],
             }
             for row in statistics
         ]
-        figure_manifest = [write_size_figure(context, comparison)]
+        base_figure = write_size_figure(
+            context,
+            [
+                {"dataset_id": row["dataset_id"], "selected_bytes": row["value"]}
+                for row in comparison
+            ],
+        )
+        figure_manifest = [
+            {
+                **base_figure,
+                "dataset_id": row["dataset_id"],
+                "revision": row["revision"],
+                "acquisition_level": row["acquisition_level"],
+                "split_scope": "all_profiled_splits",
+                "n": row["denominator"],
+                "missing_policy": "missing values reported, never imputed",
+                "exclusion_policy": "unreadable or zero-byte selected files excluded",
+                "source_artifact": "dataset.cross_dataset_comparison",
+                "source_table_sha256": hashlib.sha256(
+                    json.dumps(comparison, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest(),
+                "code_revision": context.dependency_state_sha256,
+                "plot_config": {
+                    "kind": "bar",
+                    "measure": "selected_bytes",
+                    "x": "dataset_id",
+                    "y": "selected_bytes",
+                },
+            }
+            for row in comparison
+        ]
         endpoint_matrix = [
             {
                 "dataset_id": row["dataset_id"],
@@ -146,7 +236,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for row in profiles
         ]
 
-        validate_dataset_bundle(
+        validate_dataset_characterization_bundle(
             registry=profiles,
             feasibility_receipts=feasibility,
             units=units,
@@ -154,6 +244,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             attrition=attrition,
             frozen_manifest=frozen_scope,
             endpoint_matrix=endpoint_matrix,
+            statistics=statistics,
+            split_statistics=split_statistics,
+            quality_issues=quality,
+            leakage_audit=leakage,
+            figure_manifest=figure_manifest,
+            cross_dataset_comparison=comparison,
+            artifact_root=context.artifact_root,
         )
 
         write_json_artifact(context, "dataset.profile", profiles)
