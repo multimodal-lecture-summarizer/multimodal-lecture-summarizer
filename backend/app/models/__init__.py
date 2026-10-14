@@ -5,6 +5,7 @@ from app.models.job import Job
 from app.models.summary import Summary
 from app.models.qa import QALog
 from app.models.stats import SystemStat
+from app.models.evaluation import EvaluationLog
 
 # Export all models for easier imports and database initialization
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "Summary",
     "QALog",
     "SystemStat",
+    "EvaluationLog",
 ]

@@ -24,6 +24,7 @@ class Summary(Base):
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     chapters_json: Mapped[Any] = mapped_column(JSON, nullable=False)
     keyframes_json: Mapped[Any] = mapped_column(JSON, nullable=False)
+    key_takeaways_json: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     transcript_text: Mapped[str] = mapped_column(Text, nullable=False)
     model_used: Mapped[str] = mapped_column(Text, nullable=False)
     processing_time: Mapped[float] = mapped_column(Float, nullable=False)

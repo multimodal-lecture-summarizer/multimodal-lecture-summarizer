@@ -1,5 +1,5 @@
 import uuid
-from typing import List
+from typing import List, Any
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -77,4 +77,7 @@ class SummaryDTO(SummaryBase):
     )
     transcript_segments: List[TranscriptLineDTO] = Field(
         default=[], description="The list of segmented speech transcript segments with word-level timestamps"
+    )
+    key_takeaways: List[Any] = Field(
+        default=[], description="List of key takeaways or core events"
     )

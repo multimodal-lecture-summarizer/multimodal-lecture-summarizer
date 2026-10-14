@@ -106,6 +106,13 @@ def release_worker_resources(label: str) -> None:
                 libc.malloc_trim(0)
             except Exception as malloc_err:
                 pass
+        elif sys.platform == "win32":
+            import ctypes
+            try:
+                # Force Windows kernel to trim unneeded pages from process working set back to OS free list
+                ctypes.windll.psapi.EmptyWorkingSet(ctypes.windll.kernel32.GetCurrentProcess())
+            except Exception:
+                pass
     except Exception as cleanup_err:
         print(f"[Cleanup] Resource cleanup warning after {label}: {cleanup_err}", flush=True)
 

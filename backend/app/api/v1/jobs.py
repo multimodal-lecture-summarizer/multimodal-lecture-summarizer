@@ -102,11 +102,14 @@ def sync_job_status(job: Job, db: Session):
                     summary_text=result.get("summary", ""),
                     chapters_json=result.get("chapters", []),
                     keyframes_json=result.get("keyframes", []),
+                    key_takeaways_json=result.get("key_takeaways", []),
                     transcript_text=transcript_content,
                     model_used=result.get("model_used", "Groq Llama 3.1 8B"),
                     processing_time=result.get("processing_time", 0.0)
                 )
                 db.add(summary)
+            else:
+                existing_summary.key_takeaways_json = result.get("key_takeaways", [])
                 
             # Save VideoScenes
             from app.models.video import VideoScene
@@ -128,6 +131,43 @@ def sync_job_status(job: Job, db: Session):
                     script=scene.get("script", "")
                 )
                 db.add(db_scene)
+
+            # Save or Update VideoMetadata if provided in Celery task result
+            if "video_metadata" in result and result["video_metadata"] and result["video_metadata"].get("video"):
+                from app.models.video import VideoMetadata
+                v_meta = result["video_metadata"]
+                v_stream = v_meta.get("video") or {}
+                a_stream = v_meta.get("audio") or {}
+                existing_meta = db.query(VideoMetadata).filter(VideoMetadata.video_id == job.video_id).first()
+                if not existing_meta:
+                    db_meta = VideoMetadata(
+                        video_id=job.video_id,
+                        video_codec=v_stream.get("codec_name"),
+                        audio_codec=a_stream.get("codec_name") if a_stream else None,
+                        fps=float(v_stream.get("fps") or 0.0),
+                        frame_count=int(v_stream.get("frame_count") or 0),
+                        width=int(v_stream.get("width") or 0),
+                        height=int(v_stream.get("height") or 0),
+                        bitrate=v_stream.get("bitrate"),
+                        video_source="youtube" if (video and video.original_url) else "upload",
+                        video_path=video.file_path if video and video.file_path else "",
+                    )
+                    db.add(db_meta)
+                else:
+                    if v_stream.get("codec_name"):
+                        existing_meta.video_codec = v_stream.get("codec_name")
+                    if a_stream and a_stream.get("codec_name"):
+                        existing_meta.audio_codec = a_stream.get("codec_name")
+                    if v_stream.get("fps"):
+                        existing_meta.fps = float(v_stream.get("fps"))
+                    if v_stream.get("width"):
+                        existing_meta.width = int(v_stream.get("width"))
+                    if v_stream.get("height"):
+                        existing_meta.height = int(v_stream.get("height"))
+                    if v_stream.get("bitrate"):
+                        existing_meta.bitrate = v_stream.get("bitrate")
+                    if v_stream.get("frame_count"):
+                        existing_meta.frame_count = int(v_stream.get("frame_count"))
                 
             # Trigger Background RAG Indexing
             from app.core.constants import RagStatus

@@ -129,6 +129,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     local_video_path = video_path
     is_temp_file = False
     video_file_url = None
+    video_streams_info = None
 
     if is_resumed:
         # Load verified intermediate state from checkpoint
@@ -142,6 +143,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         sprint_stats = ckpt_data.get("sprint_stats")
         export_meta = ckpt_data.get("export_meta")
         video_file_url = ckpt_data.get("video_file_url")
+        video_streams_info = ckpt_data.get("video_metadata")
         log_step(
             "Tìm thấy checkpoint hợp lệ (Quality Complete). Bỏ qua ASR, Visual, Fusion, Quality và tiếp tục từ Summarization.",
             STATUS_INTERMEDIATE_READY,
@@ -261,10 +263,54 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     os.remove(local_video_path)
                 raise e
 
+        # Stage 0: Video Inspector & Technical Standards Validation
+        check_revoked()
+        log_step("Thẩm định kỹ thuật tệp video (codec, độ phân giải, luồng dữ liệu)...", "preflight", 4)
+        video_streams_info = None
+        if os.path.exists(local_video_path):
+            try:
+                from app.services.video_inspector import inspect_video_streams, validate_video_standards
+                video_streams_info = inspect_video_streams(local_video_path)
+                
+                # Fetch active standard from DB
+                try:
+                    from app.core.database import SessionLocal
+                    from app.models.video import VideoStandard
+                    _db = SessionLocal()
+                    try:
+                        active_std = _db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
+                    finally:
+                        _db.close()
+                except Exception as db_err:
+                    print(f"[Inspector] Warning: Could not fetch VideoStandard from DB: {db_err}")
+                    active_std = None
+
+                if active_std is not None:
+                    is_valid_std, val_err = validate_video_standards(video_streams_info, active_std)
+                    if not is_valid_std:
+                        err_msg = f"Tệp video không đáp ứng tiêu chuẩn kỹ thuật: {val_err}"
+                        log_step(err_msg, "failed", 100)
+                        raise ValueError(err_msg)
+
+                v_info = video_streams_info.get("video") or {}
+                log_step(
+                    f"Thẩm định video hoàn tất: Codec={v_info.get('codec_name', 'N/A')}, "
+                    f"Resolution={v_info.get('width', 0)}x{v_info.get('height', 0)}, "
+                    f"FPS={v_info.get('fps', 0)}.",
+                    "preflight",
+                    5,
+                )
+            except ValueError:
+                raise
+            except Exception as insp_err:
+                print(f"[Inspector] Non-fatal inspection warning: {insp_err}")
+        else:
+            log_step("Tệp video cục bộ không tồn tại trên ổ đĩa để trích xuất metadata luồng, tiếp tục pipeline.", "preflight", 5)
+
         try:
             # Stage 1: Audio
             check_revoked()
-            log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 5)
+            log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 6)
             log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
             audio = AudioTranscriber()
             audio_result = audio.process(local_video_path)
@@ -455,6 +501,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     "sprint_stats": sprint_stats,
                     "export_meta": export_meta,
                     "video_file_url": video_file_url,
+                    "video_metadata": video_streams_info,
                 },
             )
             if not checkpoint_saved:
@@ -557,6 +604,8 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         result["sprint_stats"] = sprint_stats
     if export_meta is not None:
         result["export_meta"] = export_meta
+    if video_streams_info is not None:
+        result["video_metadata"] = video_streams_info
     if "llm_error" in text_result and text_result["llm_error"]:
         result["llm_error"] = text_result["llm_error"]
 

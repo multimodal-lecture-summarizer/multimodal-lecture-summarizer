@@ -10,6 +10,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DocsPage } from './pages/DocsPage';
+import { EvaluationBenchmarkPage } from './pages/EvaluationBenchmarkPage';
 import { api } from './services/api';
 import { ToastProvider } from './context/ToastContext';
 import { TopProgress } from './components/TopProgress';
@@ -86,6 +87,10 @@ function App() {
               <Route 
                 path="/admin/*" 
                 element={isLoggedIn ? (user?.role === 'admin' ? <AdminPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
+              />
+              <Route 
+                path="/evaluation" 
+                element={isLoggedIn ? (user?.role === 'admin' ? <EvaluationBenchmarkPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
               />
               <Route 
                 path="/history" 

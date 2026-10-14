@@ -87,6 +87,22 @@ export const api = {
 
 
   // Videos endpoints
+  async inspectPreflight(file: File | null, originalUrl: string | null) {
+    const formData = new FormData();
+    if (file) formData.append("file", file);
+    if (originalUrl) formData.append("originalUrl", originalUrl);
+
+    const response = await customFetch(`${CONFIG.API_BASE_URL}/videos/inspect-preflight`, {
+      method: "POST",
+      headers: getAuthHeaders(true),
+      body: formData,
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Thẩm định tệp video thất bại");
+    return result;
+  },
+
   async uploadVideo(
     file: File | null,
     originalUrl: string | null,
@@ -250,8 +266,13 @@ export const api = {
   async updateStandards(standards: {
     maxDuration: number;
     allowedFormats: string;
+    allowedCodecs?: string;
     maxFileSize: number;
     minAudioQuality: number;
+    minWidth?: number;
+    minHeight?: number;
+    maxWidth?: number;
+    maxHeight?: number;
   }) {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/videos/standards`,
@@ -384,6 +405,21 @@ export const api = {
     return result; // returns BaseDTO[AdminStatsDTO]
   },
 
+  async getPerformanceStats() {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/stats/performance`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(
+        result.message || "Không thể lấy báo cáo phân tích hiệu năng RTF"
+      );
+    return result; // returns BaseDTO[PerformanceAnalyticsDTO]
+  },
+
   async cancelJob(jobId: string) {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/jobs/${jobId}/cancel`,
@@ -397,4 +433,42 @@ export const api = {
       throw new Error(result.message || "Không thể dừng tiến trình này");
     return result; // returns BaseDTO[JobDTO]
   },
+
+  // Evaluation & Benchmark endpoints
+  async getEvaluationBenchmarks() {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/evaluation/benchmarks`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(
+        result.message || "Không thể lấy dữ liệu benchmark so sánh mô hình"
+      );
+    return result; // returns BaseDTO[BenchmarksData]
+  },
+
+  async evaluateVideo(payload: {
+    videoId: string;
+    referenceTranscript?: string;
+    referenceSummary?: string;
+  }) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/evaluation/evaluate-video`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(
+        result.message || "Chấm điểm đánh giá video thất bại"
+      );
+    return result; // returns BaseDTO[VideoEvaluationResult]
+  },
 };
+

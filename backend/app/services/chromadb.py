@@ -11,23 +11,23 @@ def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, ap
     import urllib.error
     if not host:
         return False
-    try:
-        p = int(port) if port else (443 if ssl else 8000)
-        proto = "https" if ssl or p == 443 else "http"
-        url = f"{proto}://{host}:{p}/api/v1/heartbeat"
-        req = urllib.request.Request(url)
-        if api_key:
-            req.add_header("Authorization", f"Bearer {api_key}")
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            if response.getcode() == 200:
+    p = int(port) if port else (443 if ssl else 8000)
+    proto = "https" if ssl or p == 443 else "http"
+    for endpoint in ("/api/v2/heartbeat", "/api/v1/heartbeat"):
+        try:
+            url = f"{proto}://{host}:{p}{endpoint}"
+            req = urllib.request.Request(url)
+            if api_key:
+                req.add_header("Authorization", f"Bearer {api_key}")
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                if response.getcode() == 200:
+                    return True
+        except urllib.error.HTTPError as e:
+            # If the server returned auth/deprecation HTTP errors (like 401, 403, 410, 501), it is responsive.
+            if e.code in (401, 403, 410, 501):
                 return True
-    except urllib.error.HTTPError as e:
-        # If the server returned auth/deprecation HTTP errors (like 401, 403, 410), it is responsive.
-        if e.code in (401, 403, 410):
-            return True
-        return False
-    except Exception:
-        pass
+        except Exception:
+            pass
     return False
 
 

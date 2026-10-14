@@ -303,6 +303,13 @@ class Summarizer:
             "analysis": "Keep this concise (max 150 words). Step-by-step reasoning...",
             "video_title": "Concise Descriptive Video Title Here",
             "summary": "Plain text summary content here...",
+            "key_takeaways": [
+                {{
+                    "timestamp": 12.0,
+                    "title": "Core insight or event title",
+                    "description": "Clear, concise takeaway sentence."
+                }}
+            ],
             "chapters": [
                 {{
                     "title": "Chapter title",

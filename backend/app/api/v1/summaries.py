@@ -132,6 +132,30 @@ def get_video_summary(
                 "words": word_tokens
             })
 
+    # Extract or infer key takeaways
+    raw_takeaways = getattr(summary, "key_takeaways_json", None) or []
+    if not raw_takeaways:
+        bullet_points = []
+        if summary.summary_text:
+            lines = summary.summary_text.splitlines()
+            for line in lines:
+                stripped = line.strip()
+                if re.match(r"^(\*|\-|\•|\d+\.)\s+", stripped):
+                    cleaned = re.sub(r"^(\*|\-|\•|\d+\.)\s+", "", stripped)
+                    if len(cleaned) > 5:
+                        bullet_points.append(cleaned)
+        if bullet_points:
+            raw_takeaways = bullet_points[:6]
+        elif chapters:
+            raw_takeaways = [
+                {
+                    "timestamp": c.start_time,
+                    "title": c.title,
+                    "description": c.summary or c.title,
+                }
+                for c in chapters[:6]
+            ]
+
     dto = SummaryDTO(
         summary_id=summary.summary_id,
         video_id=summary.video_id,
@@ -140,6 +164,7 @@ def get_video_summary(
         keyframes=keyframes,
         transcript_text=clean_transcript_text,
         transcript_segments=parsed_segments,
+        key_takeaways=raw_takeaways,
         model_used=summary.model_used,
         processing_time=summary.processing_time,
     )

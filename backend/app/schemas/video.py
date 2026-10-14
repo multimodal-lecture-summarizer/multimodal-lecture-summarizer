@@ -7,12 +7,15 @@ from app.core.constants import VideoStatus, RagStatus
 
 
 class VideoMetadataBase(CamelModel):
+    video_codec: Optional[str] = Field(None, description="Video stream codec (e.g. h264, hevc)")
+    audio_codec: Optional[str] = Field(None, description="Audio stream codec (e.g. aac, opus)")
     fps: float = Field(..., description="Frames per second of the video")
-    frame_count: int = Field(..., description="Total frame count of the video")
+    frame_count: Optional[int] = Field(0, description="Total frame count of the video")
     width: int = Field(..., description="Width of the video in pixels")
     height: int = Field(..., description="Height of the video in pixels")
-    video_source: str = Field(..., description="Source of the video (e.g. youtube)")
-    video_path: str = Field(..., description="Original video file path/key")
+    bitrate: Optional[int] = Field(None, description="Overall or video bit rate in bps")
+    video_source: Optional[str] = Field("upload", description="Source of the video (e.g. youtube, upload)")
+    video_path: Optional[str] = Field("", description="Original video file path/key")
 
 
 class VideoMetadataDTO(VideoMetadataBase):
@@ -176,6 +179,41 @@ class VideoStandardBase(CamelModel):
         0.0,
         description="The minimum allowed Signal-to-Noise Ratio (SNR) for audio",
     )
+    allowed_codecs: List[str] = Field(
+        default_factory=lambda: ["h264", "hevc"],
+        description="List of accepted video codecs (e.g. ['h264', 'hevc', 'av1', 'vp9'])",
+    )
+    min_width: int = Field(
+        640, description="Minimum video width in pixels"
+    )
+    min_height: int = Field(
+        360, description="Minimum video height in pixels"
+    )
+    max_width: int = Field(
+        1920, description="Maximum video width in pixels"
+    )
+    max_height: int = Field(
+        1080, description="Maximum video height in pixels"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_codecs(cls, data: any) -> any:
+        if isinstance(data, dict):
+            raw = data.get("allowed_codecs") or data.get("allowedCodecs")
+            if isinstance(raw, str):
+                data["allowed_codecs"] = [
+                    c.strip().lower() for c in raw.split(",") if c.strip()
+                ]
+            elif isinstance(raw, list):
+                data["allowed_codecs"] = [
+                    str(c).strip().lower() for c in raw if str(c).strip()
+                ]
+        elif hasattr(data, "allowed_codecs") and isinstance(data.allowed_codecs, str):
+            data.allowed_codecs = [
+                c.strip().lower() for c in data.allowed_codecs.split(",") if c.strip()
+            ]
+        return data
 
 
 class VideoStandardDTO(VideoStandardBase):

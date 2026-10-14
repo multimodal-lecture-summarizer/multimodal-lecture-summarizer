@@ -19,7 +19,14 @@ from app.schemas.video import (
 from app.schemas.job import JobDTO
 from app.schemas.summary import SummaryDTO, ChapterDTO, KeyframeDTO
 from app.schemas.qa import QAAskRequest, QALogDTO
-from app.schemas.stats import AdminDashboardStats, SystemStatDTO
+from app.schemas.stats import (
+    AdminDashboardStats,
+    SystemStatDTO,
+    PerformanceAnalyticsDTO,
+    PerformanceSummaryDTO,
+    ScatterDataPointDTO,
+    DurationBucketDTO,
+)
 
 __all__ = [
     "BaseDTO",
@@ -47,5 +54,9 @@ __all__ = [
     "QALogDTO",
     "AdminDashboardStats",
     "SystemStatDTO",
+    "PerformanceAnalyticsDTO",
+    "PerformanceSummaryDTO",
+    "ScatterDataPointDTO",
+    "DurationBucketDTO",
 ]
 

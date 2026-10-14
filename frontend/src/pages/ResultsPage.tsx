@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { TranscriptLine, Chapter } from '../types';
+import type { TranscriptLine, Chapter, TakeawayItem } from '../types';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
+import { KeyTakeawaysWidget } from '../components/results/KeyTakeawaysWidget';
 
 interface ChapterDTO {
   title: string;
@@ -32,6 +33,8 @@ interface SummaryDTO {
   processingTime: number;
   chapters: ChapterDTO[];
   keyframes: KeyframeDTO[];
+  keyTakeaways?: TakeawayItem[];
+  key_takeaways?: TakeawayItem[];
 }
 
 interface VideoDTO {
@@ -633,6 +636,13 @@ export const ResultsPage: React.FC = () => {
            <span className="material-symbols-outlined text-primary">insights</span>
            {t('results.ai_insights', 'AI Insights & Analysis')}
         </h2>
+
+        {/* Key Takeaways & Highlights Component */}
+        <KeyTakeawaysWidget
+          takeaways={summaryData?.keyTakeaways || (summaryData as any)?.key_takeaways}
+          onSeekTimestamp={seekTo}
+          isLoading={loading}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 bg-white border border-slate-200 rounded-xl p-6 shadow-sm ">
           {/* Summary */}

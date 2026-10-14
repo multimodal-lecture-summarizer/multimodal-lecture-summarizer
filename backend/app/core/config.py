@@ -34,17 +34,33 @@ class Settings(BaseSettings):
     ] = ["*"]
 
     # PostgreSQL Connection
+    DATABASE_URL: Optional[str] = None
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "password"
     POSTGRES_DB: str = "lecture_summarizer"
+    POSTGRES_SSLMODE: Optional[str] = None
 
     @property
     def sqlalchemy_database_uri(self) -> str:
+        # If POSTGRES_SERVER is customized (not default localhost), use it
+        if self.POSTGRES_SERVER and self.POSTGRES_SERVER != "localhost":
+            uri = f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            sslmode = self.POSTGRES_SSLMODE or "require"
+            return f"{uri}?sslmode={sslmode}"
+
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgres://"):
+                url = "postgresql://" + url[len("postgres://"):]
+            elif url.startswith("postgresql+asyncpg://"):
+                url = "postgresql://" + url[len("postgresql+asyncpg://"):]
+            return url
+
         uri = f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        if "aivencloud.com" in self.POSTGRES_SERVER:
-            uri += "?sslmode=require"
+        if self.POSTGRES_SSLMODE:
+            uri += f"?sslmode={self.POSTGRES_SSLMODE}"
         return uri
 
     # Cloudflare R2 / S3 Storage

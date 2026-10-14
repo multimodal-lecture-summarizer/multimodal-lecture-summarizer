@@ -5,20 +5,31 @@ import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { parseUTCDate } from '../utils/dateUtils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { VideoPreflightModal } from '../components/VideoPreflightModal';
+import { 
+  validateVideoFileClient, 
+  buildClientPreflightData, 
+  normalizeVideoStandards, 
+  parseAllowedFormats,
+  type VideoStandardConfig, 
+  type ClientVideoMetadata,
+  type ClientPreflightData
+} from '../utils/videoValidator';
 import { 
   UploadCloud, 
   Link as LinkIcon, 
   ClipboardPaste, 
   DownloadCloud, 
   Film, 
-  ArrowRight,
-  Loader2,
-  CheckCircle2,
-  Mic,
-  FileText,
-  Image as ImageIcon,
-  Sparkles,
-  AlertCircle
+  ArrowRight, 
+  Loader2, 
+  CheckCircle2, 
+  Mic, 
+  Image as ImageIcon, 
+  Sparkles, 
+  AlertCircle,
+  FileCheck2,
+  X
 } from 'lucide-react';
 
 export const UploadPage: React.FC = () => {
@@ -31,10 +42,40 @@ export const UploadPage: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+  const [stagedUrl, setStagedUrl] = useState<string | null>(null);
+
+  // Client-side Video Validation & Standards State
+  const [standards, setStandards] = useState<VideoStandardConfig>(() => normalizeVideoStandards(null));
+  const [isValidatingClient, setIsValidatingClient] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [clientMetadata, setClientMetadata] = useState<ClientVideoMetadata | null>(null);
+  const [stagedPreflightData, setStagedPreflightData] = useState<ClientPreflightData | null>(null);
+
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollIntervalRef = useRef<any>(null);
   const isPollingRef = useRef(false);
+  const isUploadingRef = useRef(false);
+  const activeVideoIdRef = useRef<string | null>(null);
+
+  // Fetch active system standards from Backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    api.getStandards()
+      .then((res) => {
+        if (isMounted && res.success && res.data) {
+          setStandards(normalizeVideoStandards(res.data));
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch dynamic video standards from backend, using presets:", err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -54,7 +95,7 @@ export const UploadPage: React.FC = () => {
       if (pastedText.trim() && (pastedText.includes('youtube.com') || pastedText.includes('youtu.be'))) {
         setYoutubeUrl(pastedText.trim());
         toast.info(t('upload.toast_yt_clip'), t('upload.toast_yt_received'));
-        handleStartProcessing(null, pastedText.trim());
+        triggerPreflight(null, pastedText.trim());
       }
     };
 
@@ -73,15 +114,16 @@ export const UploadPage: React.FC = () => {
           if (res.success && res.data) {
             setRecentVideos(res.data);
             
-            // Auto resume polling overlay if a video is still processing
-            if (!isProcessing) {
-              const activeVideo = res.data.find(
+            // Auto resume polling overlay if a video is processing and we are not currently polling
+            if (!activeVideoIdRef.current) {
+              const activeVideos = res.data.filter(
                 (v: any) => v.status === 'PROCESSING' || v.status === 'PENDING'
               );
-              if (activeVideo) {
-                const videoId = activeVideo.videoId;
+              if (activeVideos.length > 0) {
+                // Prioritize video with highest progress or active run
+                const target = activeVideos.sort((a: any, b: any) => (b.progress || 0) - (a.progress || 0))[0];
                 setIsProcessing(true);
-                startPolling(videoId);
+                startPolling(target.videoId);
               }
             }
           }
@@ -92,23 +134,58 @@ export const UploadPage: React.FC = () => {
     fetchRecent();
     const interval = setInterval(fetchRecent, 4000);
     return () => clearInterval(interval);
-  }, [isProcessing]);
+  }, []);
+
+  const mapStageToStep = (stage: string | null | undefined): number => {
+    if (!stage) return 1;
+    const s = stage.toLowerCase();
+    if (s === 'queued' || s === 'uploading' || s === 'download' || s === 'preflight') {
+      return 1;
+    }
+    if (s === 'audio' || s === 'speaker') {
+      return 2;
+    }
+    if (s === 'visual') {
+      return 3;
+    }
+    if (s === 'semantic') {
+      return 4;
+    }
+    if (
+      s === 'timeline' || 
+      s === 'quality' || 
+      s === 'storage' || 
+      s === 'intermediate_ready' || 
+      s === 'summarizing' || 
+      s === 'text' || 
+      s === 'rag' || 
+      s === 'completed'
+    ) {
+      return 5;
+    }
+    return 1;
+  };
 
   const getStageText = (stage: string) => {
     switch (stage) {
-      case 'queued': return t('upload.stage_queued');
-      case 'download': return t('upload.stage_download');
-      case 'audio': return t('upload.stage_audio');
-      case 'speaker': return t('upload.stage_speaker');
-      case 'visual': return t('upload.stage_visual');
-      case 'semantic': return t('upload.stage_semantic');
-      case 'storage': return t('upload.stage_storage');
-      case 'timeline': return t('upload.stage_timeline');
-      case 'text': return t('upload.stage_text');
-      case 'rag': return t('upload.stage_rag');
-      case 'completed': return t('upload.stage_completed');
-      case 'failed': return t('upload.stage_failed');
-      default: return t('upload.stage_default');
+      case 'queued': return 'Đang trong hàng đợi xử lý...';
+      case 'uploading': return 'Đang gửi tệp video lên máy chủ...';
+      case 'download': return 'Đang chuẩn bị tệp video...';
+      case 'preflight': return 'Đang thẩm định thông số kỹ thuật...';
+      case 'audio': return 'Đang trích xuất & nhận dạng âm thanh (WhisperX)...';
+      case 'speaker': return 'Đang phân biệt người nói (Diarization)...';
+      case 'visual': return 'Đang phát hiện phân cảnh & trích xuất slide...';
+      case 'semantic': return 'Đang phân tích thị giác & OCR nội dung...';
+      case 'timeline': return 'Đang đồng bộ trục thời gian bài giảng...';
+      case 'quality': return 'Đang tối ưu hóa chất lượng slide bài giảng...';
+      case 'storage': return 'Đang đồng bộ lưu trữ slide keyframes...';
+      case 'intermediate_ready': return 'Đã sẵn sàng dữ liệu, bắt đầu tóm tắt...';
+      case 'summarizing': return 'Đang sinh tóm tắt đa phương thức với AI...';
+      case 'text': return 'Đang tổng hợp nội dung bài học...';
+      case 'rag': return 'Đang tạo chỉ mục hỏi đáp RAG...';
+      case 'completed': return 'Xử lý bài giảng hoàn tất!';
+      case 'failed': return 'Xử lý thất bại';
+      default: return 'Đang xử lý phân tích bài giảng...';
     }
   };
 
@@ -117,8 +194,8 @@ export const UploadPage: React.FC = () => {
       clearInterval(pollIntervalRef.current);
     }
     
-    setProgressPercent(0);
-    setCurrentStage('queued');
+    activeVideoIdRef.current = videoId;
+    setProgressPercent(prev => (prev > 0 ? prev : 2));
     
     pollIntervalRef.current = setInterval(async () => {
       if (pollIntervalRef.current === null) return;
@@ -138,6 +215,7 @@ export const UploadPage: React.FC = () => {
             }
             if (job.stage) {
               setCurrentStage(job.stage);
+              setCurrentStep(mapStageToStep(job.stage));
             }
 
             const jobStatusUpper = (job.status || "").toUpperCase();
@@ -145,6 +223,7 @@ export const UploadPage: React.FC = () => {
               if (pollIntervalRef.current !== null) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
+                activeVideoIdRef.current = null;
                 toast.success(t('upload.toast_success_done'), t('common.success'));
                 setCurrentStep(5);
                 setProgressPercent(100);
@@ -155,36 +234,16 @@ export const UploadPage: React.FC = () => {
               }
             } else if (jobStatusUpper === 'FAILED') {
               clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+              activeVideoIdRef.current = null;
               setIsProcessing(false);
               setErrorMsg(job.errorLog || 'Đã xảy ra lỗi trong quá trình xử lý video.');
               toast.error(job.errorLog || t('upload.toast_err_process'), t('upload.toast_upload_failed'));
-            } else {
-              let step = 1;
-              const stage = job.stage;
-              if (stage === 'audio' || stage === 'speaker') {
-                step = 2;
-              } else if (stage === 'visual') {
-                step = 3;
-              } else if (stage === 'semantic' || stage === 'storage' || stage === 'timeline') {
-                step = 4;
-              } else if (stage === 'text' || stage === 'rag' || stage === 'completed') {
-                step = 5;
-              }
-              setCurrentStep(step);
             }
-          } else {
-            clearInterval(pollIntervalRef.current);
-            setIsProcessing(false);
           }
-        } else {
-          clearInterval(pollIntervalRef.current);
-          setIsProcessing(false);
         }
       } catch (err) {
         console.error("Error polling job status:", err);
-        // Do not immediately clear interval on a network error/500, to allow recovery
-        // clearInterval(pollIntervalRef.current);
-        // setIsProcessing(false);
       } finally {
         isPollingRef.current = false;
       }
@@ -192,8 +251,12 @@ export const UploadPage: React.FC = () => {
   };
 
   const handleStartProcessing = async (file: File | null, url: string | null) => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
     setIsProcessing(true);
     setCurrentStep(1);
+    setProgressPercent(2);
+    setCurrentStage('uploading');
     setErrorMsg('');
     
     try {
@@ -210,18 +273,112 @@ export const UploadPage: React.FC = () => {
       setErrorMsg(err.message || "Không thể gửi video lên máy chủ.");
       toast.error(err.message || t('upload.toast_upload_err'), t('upload.toast_upload_failed'));
       setIsProcessing(false);
+      activeVideoIdRef.current = null;
+    } finally {
+      isUploadingRef.current = false;
+    }
+  };
+
+  const processSelectedFile = async (file: File) => {
+    if (isProcessing) return;
+    setValidationErrors([]);
+    setErrorMsg('');
+    setIsValidatingClient(true);
+
+    try {
+      const result = await validateVideoFileClient(file, standards);
+      if (!result.valid) {
+        setValidationErrors(result.errors);
+        setStagedFile(null);
+        setClientMetadata(null);
+        setStagedPreflightData(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        toast.error(
+          result.errors[0] || "Tệp video không đáp ứng tiêu chuẩn hệ thống.",
+          "Tiêu chuẩn Video Không Hợp Lệ"
+        );
+        return;
+      }
+
+      // Valid: save metadata and construct client preflight checklist
+      setClientMetadata(result.metadata || null);
+      setStagedFile(file);
+      setStagedUrl(null);
+
+      if (result.metadata) {
+        const clientPreflight = buildClientPreflightData(file, result.metadata, standards);
+        setStagedPreflightData(clientPreflight);
+      }
+
+      // Open tactile preflight inspector modal
+      setPreflightOpen(true);
+    } catch (err: any) {
+      console.error("Client video validation exception:", err);
+      const msg = err.message || "Không thể phân tích metadata tệp video trên trình duyệt.";
+      setValidationErrors([msg]);
+      toast.error(msg, "Lỗi Tệp Video");
+    } finally {
+      setIsValidatingClient(false);
+    }
+  };
+
+  const triggerPreflight = (file: File | null, url: string | null) => {
+    if (isProcessing) return;
+    setStagedFile(file);
+    setStagedUrl(url);
+    setPreflightOpen(true);
+  };
+
+  const handlePreflightProceed = () => {
+    const f = stagedFile;
+    const u = stagedUrl;
+    setPreflightOpen(false);
+    setStagedFile(null);
+    setStagedUrl(null);
+    setClientMetadata(null);
+    setStagedPreflightData(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    handleStartProcessing(f, u);
+  };
+
+  const handlePreflightClose = () => {
+    setPreflightOpen(false);
+    setStagedFile(null);
+    setStagedUrl(null);
+    setClientMetadata(null);
+    setStagedPreflightData(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleClearStagedFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setStagedFile(null);
+    setClientMetadata(null);
+    setStagedPreflightData(null);
+    setValidationErrors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
   const handleYoutubeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!youtubeUrl.trim()) return;
-    handleStartProcessing(null, youtubeUrl);
+    setValidationErrors([]);
+    setClientMetadata(null);
+    setStagedPreflightData(null);
+    triggerPreflight(null, youtubeUrl.trim());
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      handleStartProcessing(e.target.files[0], null);
+      processSelectedFile(e.target.files[0]);
     }
   };
 
@@ -248,24 +405,27 @@ export const UploadPage: React.FC = () => {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleStartProcessing(e.dataTransfer.files[0], null);
+      processSelectedFile(e.dataTransfer.files[0]);
       return;
     }
     const droppedText = e.dataTransfer.getData('text');
     if (droppedText && (droppedText.includes('youtube.com') || droppedText.includes('youtu.be'))) {
       setYoutubeUrl(droppedText.trim());
+      setValidationErrors([]);
+      setClientMetadata(null);
+      setStagedPreflightData(null);
       toast.info(t('upload.toast_yt_drop'), t('upload.toast_yt_received'));
-      handleStartProcessing(null, droppedText.trim());
+      triggerPreflight(null, droppedText.trim());
     }
   };
 
-  // Pipeline Steps Configuration
+  // Pipeline Steps Configuration matching real AI worker lifecycle
   const pipelineSteps = [
-    { id: 1, icon: DownloadCloud, title: t('upload.step1_title') },
-    { id: 2, icon: Mic, title: t('upload.step2_title') },
-    { id: 3, icon: FileText, title: t('upload.step3_title') },
-    { id: 4, icon: ImageIcon, title: t('upload.step4_title') },
-    { id: 5, icon: Sparkles, title: t('upload.step5_title') },
+    { id: 1, icon: DownloadCloud, title: 'Tải & Thẩm định video' },
+    { id: 2, icon: Mic, title: 'Xử lý Âm thanh & Người nói' },
+    { id: 3, icon: Film, title: 'Phát hiện Phân cảnh & Trích xuất Slide' },
+    { id: 4, icon: ImageIcon, title: 'Phân tích Thị giác & Nhận dạng OCR' },
+    { id: 5, icon: Sparkles, title: 'Tóm tắt Đa phương thức & Tổng hợp AI' },
   ];
 
   return (
@@ -287,16 +447,51 @@ export const UploadPage: React.FC = () => {
               </p>
             </header>
 
+            {/* Server Error Message */}
             <AnimatePresence>
               {errorMsg && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="mb-8 p-4 glass border-l-4 border-l-red-500 rounded-xl flex items-start gap-3"
+                  className="mb-6 p-4 glass border-l-4 border-l-red-500 rounded-xl flex items-start gap-3 shadow-sm"
                 >
                   <AlertCircle className="text-red-500 mt-0.5 shrink-0" size={20} />
-                  <span className="font-medium text-slate-700">{errorMsg}</span>
+                  <span className="font-medium text-slate-700 text-sm">{errorMsg}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Client-Side Validation Error Alert (0ms Instant Pre-upload Rejection) */}
+            <AnimatePresence>
+              {validationErrors.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl shadow-sm text-xs text-rose-900"
+                >
+                  <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-rose-200/60">
+                    <div className="flex items-center gap-2 font-bold text-rose-700">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>Tệp không đáp ứng quy chuẩn hệ thống (Đã chặn trước tải lên):</span>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => setValidationErrors([])}
+                      className="p-1 hover:bg-rose-100 rounded text-rose-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 font-medium pl-1 text-rose-800">
+                    {validationErrors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[11px] text-rose-600 italic">
+                    Hệ thống đã hủy tiến trình để tiết kiệm 100% băng thông tải lên mạng.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -306,7 +501,11 @@ export const UploadPage: React.FC = () => {
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
               className={`relative overflow-hidden cursor-pointer rounded-[2rem] border-2 transition-all duration-300 ${
-                dragActive ? 'border-primary bg-primary/5 shadow-2xl shadow-primary/20 scale-[1.02]' : 'border-slate-200/50 glass hover:border-primary/40 hover:shadow-xl hover:bg-white/40'
+                dragActive 
+                  ? 'border-primary bg-primary/5 shadow-2xl shadow-primary/20 scale-[1.02]' 
+                  : stagedFile && clientMetadata
+                  ? 'border-emerald-300 bg-emerald-50/30 hover:border-emerald-400'
+                  : 'border-slate-200/50 glass hover:border-primary/40 hover:shadow-xl hover:bg-white/40'
               }`}
               onDragEnter={handleDrag}
               onDragOver={handleDrag}
@@ -322,19 +521,131 @@ export const UploadPage: React.FC = () => {
                 style={{ display: 'none' }} 
                 onClick={(e) => e.stopPropagation()}
               />
-              <div className="flex flex-col items-center justify-center p-16 text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-primary-light to-white rounded-full flex items-center justify-center mb-6 shadow-inner text-primary">
-                  <UploadCloud size={40} />
-                </div>
-                <h3 className="font-heading text-2xl font-bold text-slate-900 mb-2">{t('upload.drag_drop')}</h3>
-                <p className="text-slate-500 font-body mb-8">{t('upload.support_formats')}</p>
-                <button 
-                  onClick={handleBrowseClick}
-                  disabled={isProcessing}
-                  className="btn primary shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isProcessing ? <Loader2 className="animate-spin mx-auto" size={20} /> : t('upload.browse_files')}
-                </button>
+              
+              <div className="flex flex-col items-center justify-center p-8 md:p-12 text-center">
+                {isValidatingClient ? (
+                  <div className="py-8 flex flex-col items-center gap-3">
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                    <p className="text-sm font-semibold text-slate-700">Đang kiểm tra metadata video tại trình duyệt...</p>
+                    <span className="text-xs text-slate-500">Đọc container, duration & độ phân giải (0ms upload overhead)</span>
+                  </div>
+                ) : stagedFile && clientMetadata ? (
+                  /* Staged Valid File Preview Card */
+                  <div className="w-full max-w-md bg-white rounded-2xl p-5 border border-emerald-200 shadow-sm text-left">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                          <FileCheck2 size={24} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm truncate max-w-[220px]" title={stagedFile.name}>
+                            {stagedFile.name}
+                          </h4>
+                          <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                            <CheckCircle2 size={12} /> Đã kiểm định hợp lệ tại trình duyệt
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={handleClearStagedFile}
+                        className="p-1 text-slate-400 hover:text-rose-500 hover:bg-slate-100 rounded-lg transition-colors"
+                        title="Hủy tệp"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {/* Metadata Badges */}
+                    <div className="grid grid-cols-3 gap-2 py-2.5 px-3 bg-slate-50 rounded-xl mb-4 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Dung lượng</span>
+                        <span className="font-bold text-slate-800">{clientMetadata.sizeMb} MB</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Thời lượng</span>
+                        <span className="font-bold text-slate-800">
+                          {Math.floor(clientMetadata.duration / 60)}m {Math.floor(clientMetadata.duration % 60)}s
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Độ phân giải</span>
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded text-[11px]">
+                          {clientMetadata.width}×{clientMetadata.height}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreflightOpen(true);
+                        }}
+                        className="btn primary flex-1 py-2 text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="animate-spin" size={14} />
+                            <span>Đang xử lý tệp...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Kiểm tra chi tiết & Bắt đầu</span>
+                            <ArrowRight size={14} />
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={handleBrowseClick}
+                        className="btn bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Đổi tệp
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Drag and Drop State with Dynamic Standards Badge */
+                  <>
+                    <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-primary-light to-white rounded-full flex items-center justify-center mb-4 shadow-inner text-primary">
+                      <UploadCloud size={36} />
+                    </div>
+                    <h3 className="font-heading text-xl md:text-2xl font-bold text-slate-900 mb-2">
+                      {t('upload.drag_drop')}
+                    </h3>
+                    
+                    {/* Dynamic Standards Indicators */}
+                    <div className="w-full max-w-lg mb-6">
+                      <div className="inline-flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-slate-600 font-body">
+                        <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20">
+                          Định dạng: {parseAllowedFormats(standards.allowedFormats).map((f) => f.toUpperCase()).join(', ')}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200/80">
+                          Tối đa: {standards.maxFileSize} MB
+                        </span>
+                        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200/80">
+                          Thời lượng: ≤ {Math.floor(standards.maxDuration / 60)} phút
+                        </span>
+                        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200/80">
+                          Độ phân giải: {standards.minHeight}p - {standards.maxHeight}p
+                        </span>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="button"
+                      onClick={handleBrowseClick}
+                      disabled={isProcessing}
+                      className="btn primary shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm px-6 py-2.5"
+                    >
+                      {isProcessing ? <Loader2 className="animate-spin mx-auto" size={18} /> : t('upload.browse_files')}
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
 
@@ -449,18 +760,24 @@ export const UploadPage: React.FC = () => {
                             {step.title}
                           </h4>
                         </div>
-                        <div className={`text-xs font-mono font-medium ${isActive ? 'text-primary animate-pulse' : isCompleted ? 'text-emerald-500' : 'text-slate-400'}`}>
-                          {isActive && step.id === 1 && currentStage !== 'queued' ? `${getStageText(currentStage)} ${progressPercent}%` : 
-                           isActive ? t('upload.status_processing') : 
-                           isCompleted ? t('upload.status_complete') : 
-                           t('upload.status_pending')}
+                        <div className={`text-xs font-mono font-medium ${isActive ? 'text-primary' : isCompleted ? 'text-emerald-500' : 'text-slate-400'}`}>
+                          {isActive ? (
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <span className="inline-block w-2 h-2 rounded-full bg-primary animate-ping" />
+                              {getStageText(currentStage)} ({progressPercent}%)
+                            </span>
+                          ) : isCompleted ? (
+                            <span className="font-semibold text-emerald-600">HOÀN TẤT</span>
+                          ) : (
+                            <span>ĐANG CHỜ</span>
+                          )}
                         </div>
                         {isActive && (
                           <div className="w-full bg-slate-200 h-1.5 rounded-full mt-3 overflow-hidden">
                             <motion.div 
                               className="bg-primary h-full" 
                               initial={{ width: 0 }}
-                              animate={{ width: `${progressPercent}%` }}
+                              animate={{ width: `${Math.max(8, progressPercent)}%` }}
                               transition={{ duration: 0.5 }}
                             />
                           </div>
@@ -552,6 +869,17 @@ export const UploadPage: React.FC = () => {
         </div>
         
       </div>
+
+      {/* Pre-flight Technical Inspector Modal */}
+      <VideoPreflightModal
+        isOpen={preflightOpen}
+        onClose={handlePreflightClose}
+        onProceed={handlePreflightProceed}
+        file={stagedFile}
+        url={stagedUrl}
+        preloadedData={stagedPreflightData}
+        standards={standards}
+      />
     </div>
   );
 };
