@@ -14,20 +14,21 @@ class WorkerSettings(BaseSettings):
 
     # GPU
     CUDA_VISIBLE_DEVICES: str = "0"
-    PROCESS_MIN_AVAILABLE_MEMORY_MB: int = 1536
-    PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB: int = 800
+    PROCESS_MIN_AVAILABLE_MEMORY_MB: int = 1024
+    PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB: int = 700
     PROCESS_MEMORY_RETRY_SECONDS: int = 30
     PROCESS_MEMORY_RETRY_INTERVAL_SECONDS: int = 5
 
-    # Audio module
+    # Audio module. ASR is Faster-Whisper. WHISPERX_* is unused and kept so old env files still load.
+    FASTER_WHISPER_MODEL: str = "small"
     WHISPERX_MODEL: str = "large-v3"
     WHISPERX_BATCH_SIZE: int = 16
     WHISPERX_COMPUTE_TYPE: str = "float16"
 
     # Visual module
     SCENE_THRESHOLD: float = 27.0
-    KEYFRAME_STRATEGY: str = "middle"
-    FLORENCE_DEVICE: str = "cuda"
+    KEYFRAME_STRATEGY: str = "sharpest"
+    FLORENCE_DEVICE: str = "cpu"
     ENABLE_FLORENCE_CAPTIONING: bool = True
     FLORENCE_MAX_BATCH_SIZE: int = 4
     FLORENCE_MIN_AVAILABLE_MEMORY_MB: int = 1024
@@ -36,6 +37,13 @@ class WorkerSettings(BaseSettings):
     FLORENCE_CUDA_NUM_BEAMS: int = 1
     SEMANTIC_CLIP_DEVICE: str = "auto"
     PADDLEOCR_USE_GPU: bool = False
+
+    # Object Detection & Tracking module
+    YOLO_MODEL: str = "yolov8n.pt"
+    YOLO_CONF_THRESHOLD: float = 0.40
+    YOLO_IOU_THRESHOLD: float = 0.5
+    OBJECT_TRACKING_SAMPLE_FPS: int = 3
+    OBJECT_TRACKING_DEVICE: str = "auto"
 
     # Fusion module
     LLM_PROVIDER: str = "openai"
@@ -46,7 +54,7 @@ class WorkerSettings(BaseSettings):
     # recommended = S1+S3+S4v2+S7; sprint10/full = +S5+S8soft+S9+S10
     ENABLE_SPRINT_STACK: bool = True
     SPRINT_STACK: str = "recommended"
-    MIN_CHAPTER_SEC: float = 45.0
+    MIN_CHAPTER_SEC: float = 25.0
 
     # API Keys (injected from .env)
     OPENAI_API_KEY: str = ""

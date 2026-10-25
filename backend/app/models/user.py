@@ -33,6 +33,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    output_language: Mapped[str] = mapped_column(
+        String(10), default="vi", nullable=False
+    )
 
     # Relationships
     videos: Mapped[List["Video"]] = relationship(

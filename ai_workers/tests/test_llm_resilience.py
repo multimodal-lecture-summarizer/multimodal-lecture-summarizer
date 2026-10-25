@@ -374,7 +374,8 @@ class LLMResilienceTests(unittest.TestCase):
         json_response = json.dumps({
             "analysis": "Analysis CoT...",
             "video_title": "Bài giảng Trí tuệ Nhân tạo",
-            "summary": "Tóm tắt bài giảng chi tiết về AI.",
+            "title_evidence": "Trí tuệ Nhân tạo",
+            "summary": "Tóm tắt bài giảng chi tiết và toàn diện về Trí tuệ Nhân tạo và ứng dụng thực tiễn.",
             "chapters": [
                 {
                     "title": "Giới thiệu AI",
@@ -388,14 +389,14 @@ class LLMResilienceTests(unittest.TestCase):
         mock_resp = make_mock_response(json_response)
         summarizer.openrouter_client._client.chat.completions.create.return_value = mock_resp
 
-        utterances = [{"start": 0.0, "end": 60.0, "text": "Hello AI world"}]
+        utterances = [{"start": 0.0, "end": 60.0, "text": "Bài học hôm nay nói về Trí tuệ Nhân tạo."}]
         slides = []
         chapters = [{"title": "Chương 1", "startTime": 0.0, "endTime": 60.0, "summary": "Demo"}]
 
         result = summarizer.summarize(utterances, slides, chapters, job_id="job-success")
 
         self.assertEqual(result["video_title"], "Bài giảng Trí tuệ Nhân tạo")
-        self.assertEqual(result["summary"], "Tóm tắt bài giảng chi tiết về AI.")
+        self.assertEqual(result["summary"], "Tóm tắt bài giảng chi tiết và toàn diện về Trí tuệ Nhân tạo và ứng dụng thực tiễn.")
         self.assertEqual(len(result["chapters"]), 1)
         self.assertEqual(result["chapters"][0]["title"], "Giới thiệu AI")
 

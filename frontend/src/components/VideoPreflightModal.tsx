@@ -24,6 +24,7 @@ import {
   normalizeVideoStandards,
   type VideoStandardConfig
 } from '../utils/videoValidator';
+import type { SummaryLength } from '../types';
 
 export interface PreflightCheckItem {
   id: string;
@@ -54,6 +55,8 @@ interface VideoPreflightModalProps {
   url: string | null;
   preloadedData?: PreflightData | null;
   standards?: VideoStandardConfig | null;
+  summaryLength?: SummaryLength;
+  onSummaryLengthChange?: (length: SummaryLength) => void;
 }
 
 export const VideoPreflightModal: React.FC<VideoPreflightModalProps> = ({
@@ -64,6 +67,8 @@ export const VideoPreflightModal: React.FC<VideoPreflightModalProps> = ({
   url,
   preloadedData,
   standards,
+  summaryLength,
+  onSummaryLengthChange,
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -470,6 +475,67 @@ export const VideoPreflightModal: React.FC<VideoPreflightModalProps> = ({
                       </div>
                     </div>
                   </motion.div>
+                )}
+
+                {/* Summary Depth Selection in Modal */}
+                {isAllCompleted && summaryLength && (
+                  <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                      <span>Cấp độ tóm tắt khởi tạo:</span>
+                      <span className="text-[11px] font-medium text-primary font-bold">
+                        {summaryLength === 'short' ? 'Ngắn gọn (TL;DR)' : summaryLength === 'detailed' ? 'Chi tiết (Chuyên sâu)' : 'Tiêu chuẩn (Tổng quan)'}
+                      </span>
+                    </div>
+                    {onSummaryLengthChange && (
+                      <div className="grid grid-cols-3 gap-1.5 p-1 bg-white border border-slate-200 rounded-lg text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+                            setCountdown(null);
+                            onSummaryLengthChange('short');
+                          }}
+                          className={`py-1.5 px-2 rounded-md font-medium transition-all text-center ${
+                            summaryLength === 'short'
+                              ? 'bg-primary text-white font-bold shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                          }`}
+                        >
+                          Ngắn gọn
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+                            setCountdown(null);
+                            onSummaryLengthChange('medium');
+                          }}
+                          className={`py-1.5 px-2 rounded-md font-medium transition-all text-center ${
+                            summaryLength === 'medium'
+                              ? 'bg-primary text-white font-bold shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                          }`}
+                        >
+                          Tiêu chuẩn
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+                            setCountdown(null);
+                            onSummaryLengthChange('detailed');
+                          }}
+                          className={`py-1.5 px-2 rounded-md font-medium transition-all text-center ${
+                            summaryLength === 'detailed'
+                              ? 'bg-primary text-white font-bold shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                          }`}
+                        >
+                          Chi tiết
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

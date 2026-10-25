@@ -90,26 +90,66 @@ def sync_job_status(job: Job, db: Session):
             
             # Save Summary
             from app.models.summary import Summary
+            from datetime import datetime
             existing_summary = db.query(Summary).filter(Summary.video_id == job.video_id).first()
+            import json
+            transcript_content = result.get("transcript_text", "")
+            if "transcript_segments" in result and result["transcript_segments"]:
+                transcript_content = json.dumps(result["transcript_segments"])
+
+            summary_len = result.get("summary_length", "medium") or "medium"
+            variants = result.get("summary_variants") or {}
+            active_summary_text = result.get("summary", "")
+            if not variants and active_summary_text:
+                w_cnt = result.get("word_count") or len(active_summary_text.split())
+                r_sec = result.get("reading_time_sec") or max(1, w_cnt // 3)
+                variants = {
+                    summary_len: {
+                        "summary_text": active_summary_text,
+                        "key_takeaways_json": result.get("key_takeaways", []),
+                        "word_count": w_cnt,
+                        "reading_time_sec": r_sec,
+                        "model_used": result.get("model_used", "Groq Llama 3.1 8B"),
+                        "generated_at": datetime.utcnow().isoformat(),
+                    }
+                }
+
             if not existing_summary:
-                import json
-                transcript_content = result.get("transcript_text", "")
-                if "transcript_segments" in result and result["transcript_segments"]:
-                    transcript_content = json.dumps(result["transcript_segments"])
-                    
                 summary = Summary(
                     video_id=job.video_id,
-                    summary_text=result.get("summary", ""),
+                    summary_text=active_summary_text,
+                    summary_length=summary_len,
+                    summary_variants_json=variants,
                     chapters_json=result.get("chapters", []),
                     keyframes_json=result.get("keyframes", []),
                     key_takeaways_json=result.get("key_takeaways", []),
+                    objects_summary_json=result.get("video_objects_summary"),
                     transcript_text=transcript_content,
                     model_used=result.get("model_used", "Groq Llama 3.1 8B"),
                     processing_time=result.get("processing_time", 0.0)
                 )
                 db.add(summary)
             else:
-                existing_summary.key_takeaways_json = result.get("key_takeaways", [])
+                if active_summary_text:
+                    existing_summary.summary_text = active_summary_text
+                existing_summary.summary_length = summary_len
+                current_cache = dict(existing_summary.summary_variants_json or {})
+                current_cache.update(variants)
+                existing_summary.summary_variants_json = current_cache
+                if result.get("chapters"):
+                    existing_summary.chapters_json = result["chapters"]
+                if result.get("keyframes"):
+                    existing_summary.keyframes_json = result["keyframes"]
+                if result.get("key_takeaways") is not None:
+                    existing_summary.key_takeaways_json = result["key_takeaways"]
+                if "video_objects_summary" in result:
+                    existing_summary.objects_summary_json = result.get("video_objects_summary")
+                if transcript_content:
+                    existing_summary.transcript_text = transcript_content
+                if result.get("model_used"):
+                    existing_summary.model_used = result["model_used"]
+                if result.get("processing_time"):
+                    existing_summary.processing_time = result["processing_time"]
                 
             # Save VideoScenes
             from app.models.video import VideoScene
@@ -128,7 +168,9 @@ def sync_job_status(job: Job, db: Session):
                     keyframe_path=scene["keyframe_path"],
                     keyframe_url=scene["keyframe_url"],
                     caption=scene.get("caption", f"Phân cảnh {scene['scene_index']}"),
-                    script=scene.get("script", "")
+                    script=scene.get("script", ""),
+                    detected_objects_json=scene.get("detected_objects"),
+                    object_counts_json=scene.get("object_counts"),
                 )
                 db.add(db_scene)
 

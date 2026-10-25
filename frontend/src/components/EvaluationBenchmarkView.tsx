@@ -23,6 +23,7 @@ import {
   Info,
   FileText,
   AlertCircle,
+  Crosshair,
 } from 'lucide-react';
 
 interface EvaluationBenchmarkViewProps {
@@ -43,6 +44,8 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
   const [selectedVideoId, setSelectedVideoId] = useState<string>('');
   const [referenceTranscript, setReferenceTranscript] = useState<string>('');
   const [referenceSummary, setReferenceSummary] = useState<string>('');
+  const [referenceObjectsJson, setReferenceObjectsJson] = useState<string>('');
+  const [showOdInput, setShowOdInput] = useState<boolean>(false);
   const [evaluating, setEvaluating] = useState<boolean>(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalResult, setEvalResult] = useState<VideoEvaluationResult | null>(null);
@@ -228,6 +231,31 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
     setReferenceSummary(
       "Bài giảng giới thiệu nguyên lý mạng nơ-ron nhân tạo và học sâu, tập trung vào thuật toán lan truyền ngược (backpropagation) và tối ưu hóa hàm mất mát bằng gradient descent. Phân tích các hàm kích hoạt phi tuyến tính chính bao gồm ReLU, Sigmoid và Tanh thể hiện trên slide trực quan."
     );
+    setReferenceObjectsJson(
+      JSON.stringify(
+        [
+          {
+            scene_index: 1,
+            objects: [
+              { label: "person", bbox_norm: [0.35, 0.15, 0.65, 0.85] },
+              { label: "laptop", bbox_norm: [0.20, 0.60, 0.45, 0.88] },
+              { label: "tv", bbox_norm: [0.05, 0.05, 0.50, 0.55] }
+            ]
+          },
+          {
+            scene_index: 2,
+            objects: [
+              { label: "person", bbox_norm: [0.32, 0.14, 0.63, 0.87] },
+              { label: "chair", bbox_norm: [0.25, 0.50, 0.55, 0.90] },
+              { label: "book", bbox_norm: [0.60, 0.68, 0.75, 0.82] }
+            ]
+          }
+        ],
+        null,
+        2
+      )
+    );
+    setShowOdInput(true);
   };
 
   // Run live evaluation
@@ -236,9 +264,25 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
       setEvalError('Vui lòng chọn video cần đánh giá từ danh sách.');
       return;
     }
-    if (!referenceTranscript.trim() && !referenceSummary.trim()) {
-      setEvalError('Vui lòng nhập ít nhất Bản gỡ băng chuẩn (Transcript) hoặc Bản tóm tắt chuẩn (Summary).');
+    if (!referenceTranscript.trim() && !referenceSummary.trim() && !referenceObjectsJson.trim()) {
+      setEvalError('Vui lòng nhập ít nhất một thông tin chuẩn (Transcript, Summary hoặc Ground-Truth Objects JSON).');
       return;
+    }
+
+    let parsedObjects = undefined;
+    if (referenceObjectsJson.trim()) {
+      try {
+        parsedObjects = JSON.parse(referenceObjectsJson.trim());
+        if (!Array.isArray(parsedObjects) && typeof parsedObjects === 'object' && parsedObjects.reference_objects) {
+          parsedObjects = parsedObjects.reference_objects;
+        }
+        if (!Array.isArray(parsedObjects)) {
+          throw new Error('Dữ liệu Ground Truth Objects phải là danh sách mảng JSON [ ... ].');
+        }
+      } catch (jsonErr: any) {
+        setEvalError(`Lỗi định dạng JSON của Reference Objects: ${jsonErr.message}`);
+        return;
+      }
     }
 
     setEvaluating(true);
@@ -248,6 +292,7 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
         videoId: selectedVideoId,
         referenceTranscript: referenceTranscript.trim() || undefined,
         referenceSummary: referenceSummary.trim() || undefined,
+        referenceObjects: parsedObjects,
       });
 
       if (res.success && res.data) {
@@ -558,6 +603,68 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
             </table>
           </div>
         )}
+
+        {/* Object Detection & Tracking Benchmark Table */}
+        {benchmarks?.objectDetectionBenchmarks && benchmarks.objectDetectionBenchmarks.length > 0 && (
+          <div className="bg-white border-2 border-slate-200 rounded-xl p-4 overflow-x-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Crosshair className="w-3.5 h-3.5 text-indigo-600" />
+                So Sánh Mô Hình Nhận Diện & Theo Dõi Đối Tượng (Object Detection & Tracking)
+              </h3>
+              <span className="text-[11px] text-slate-400 font-mono">Đo mAP@50, mAP@50:95 & FPS trên tập EduVid-OD</span>
+            </div>
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 text-[11px] font-bold uppercase">
+                  <th className="py-2 px-3">Mô hình OD & Tracker</th>
+                  <th className="py-2 px-3">Tham số</th>
+                  <th className="py-2 px-3">mAP@50</th>
+                  <th className="py-2 px-3">mAP@50:95</th>
+                  <th className="py-2 px-3">Precision</th>
+                  <th className="py-2 px-3">Recall</th>
+                  <th className="py-2 px-3">Độ trễ / frame</th>
+                  <th className="py-2 px-3">Tốc độ (FPS)</th>
+                  <th className="py-2 px-3 text-right">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
+                {benchmarks.objectDetectionBenchmarks.map((od) => {
+                  const isProd = od.isProduction !== undefined ? od.isProduction : od.is_production;
+                  const latency = od.latencyMs !== undefined ? od.latencyMs : od.latency_ms || 0;
+                  const map95 = od.map50_95 !== undefined ? od.map50_95 : od.map5095 || 0;
+
+                  return (
+                    <tr key={od.model} className={isProd ? 'bg-indigo-50/40 font-bold' : ''}>
+                      <td className="py-2.5 px-3 font-sans text-slate-900 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                        <span>{od.model}</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500">{od.params}</td>
+                      <td className="py-2.5 px-3 text-indigo-700 font-bold">{od.map50.toFixed(1)}%</td>
+                      <td className="py-2.5 px-3 text-slate-800 font-bold">{map95.toFixed(1)}%</td>
+                      <td className="py-2.5 px-3 text-emerald-600">{od.precision.toFixed(1)}%</td>
+                      <td className="py-2.5 px-3 text-cyan-600">{od.recall.toFixed(1)}%</td>
+                      <td className="py-2.5 px-3">{latency.toFixed(1)}ms</td>
+                      <td className="py-2.5 px-3 text-emerald-700 font-bold">{od.fps.toFixed(1)} FPS</td>
+                      <td className="py-2.5 px-3 text-right">
+                        {isProd ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-800 font-bold font-sans">
+                            Tích hợp chính
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500 font-sans">
+                            Candidate
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* 4. KHU VỰC 3: CÔNG CỤ CHẤM ĐIỂM TRỰC TIẾP */}
@@ -662,6 +769,36 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
                 placeholder="Dán bản tóm tắt mẫu của chuyên gia/giảng viên vào đây để đo độ bao phủ từ vựng (ROUGE) và tương đồng ngữ nghĩa sâu (BERTScore-F1)..."
                 className="w-full p-3 text-xs font-sans text-slate-900 border-2 border-slate-200 rounded-lg focus:border-slate-900 focus:outline-none transition-colors resize-none placeholder:text-slate-400"
               />
+            </div>
+
+            {/* Optional Reference Objects JSON */}
+            <div className="md:col-span-2 space-y-1.5 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Crosshair className="w-3.5 h-3.5 text-indigo-600" />
+                  Bản gán nhãn đối tượng chuẩn (Ground-Truth Objects JSON) — Tùy chọn
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400">Đo mAP@50, mAP@50:95, Precision & Recall</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOdInput(!showOdInput)}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline"
+                  >
+                    {showOdInput ? 'Thu gọn' : 'Mở rộng ô nhập JSON'}
+                  </button>
+                </div>
+              </div>
+              {showOdInput && (
+                <textarea
+                  rows={4}
+                  value={referenceObjectsJson}
+                  onChange={(e) => setReferenceObjectsJson(e.target.value)}
+                  disabled={evaluating}
+                  placeholder='[ { "scene_index": 1, "objects": [ { "label": "person", "bbox_norm": [0.35, 0.15, 0.65, 0.85] } ] } ]'
+                  className="w-full p-3 text-xs font-mono text-slate-900 border-2 border-slate-200 rounded-lg focus:border-slate-900 focus:outline-none transition-colors resize-none placeholder:text-slate-400"
+                />
+              )}
             </div>
           </div>
 
@@ -821,6 +958,137 @@ export const EvaluationBenchmarkView: React.FC<EvaluationBenchmarkViewProps> = (
                     Chưa cung cấp Ground Truth Summary để tính ROUGE và BERTScore.
                   </div>
                 )}
+
+                {/* Object Detection & Tracking Metric Card */}
+                {(evalResult.odMetrics || evalResult.odDetails || evalResult.hasObjectDetection || evalResult.odMap50 !== undefined) ? (
+                  <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-xl space-y-3 md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Crosshair className="w-4 h-4 text-indigo-600" />
+                        Chất Lượng Nhận Diện & Theo Dõi Đối Tượng (Object Detection & Tracking)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded">
+                          YOLOv8 + ByteTrack
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-200 text-slate-700 rounded">
+                          {evalResult.odDetails?.evaluation_mode === 'ground_truth' || evalResult.odDetails?.evaluationMode === 'ground_truth'
+                            ? 'Mode: Ground-Truth'
+                            : 'Mode: Pseudo-GT Tracking'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                          OD Precision
+                        </span>
+                        <div className="text-2xl font-mono font-bold text-indigo-700 mt-0.5">
+                          {evalResult.odPrecision !== undefined && evalResult.odPrecision !== null
+                            ? `${(evalResult.odPrecision * (evalResult.odPrecision <= 1.0 ? 100 : 1)).toFixed(1)}%`
+                            : '—'}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">Độ chuẩn xác phát hiện</span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                          OD Recall
+                        </span>
+                        <div className="text-2xl font-mono font-bold text-cyan-700 mt-0.5">
+                          {evalResult.odRecall !== undefined && evalResult.odRecall !== null
+                            ? `${(evalResult.odRecall * (evalResult.odRecall <= 1.0 ? 100 : 1)).toFixed(1)}%`
+                            : '—'}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">Độ bao phủ đối tượng</span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                          mAP@50
+                        </span>
+                        <div className="text-2xl font-mono font-bold text-emerald-700 mt-0.5">
+                          {evalResult.odMap50 !== undefined && evalResult.odMap50 !== null
+                            ? `${(evalResult.odMap50 * (evalResult.odMap50 <= 1.0 ? 100 : 1)).toFixed(1)}%`
+                            : '—'}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">IoU threshold = 0.50</span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                          mAP@50:95
+                        </span>
+                        <div className="text-2xl font-mono font-bold text-purple-700 mt-0.5">
+                          {evalResult.odMap50_95 !== undefined && evalResult.odMap50_95 !== null
+                            ? `${(evalResult.odMap50_95 * (evalResult.odMap50_95 <= 1.0 ? 100 : 1)).toFixed(1)}%`
+                            : evalResult.odMap5095 !== undefined && evalResult.odMap5095 !== null
+                            ? `${(evalResult.odMap5095 * (evalResult.odMap5095 <= 1.0 ? 100 : 1)).toFixed(1)}%`
+                            : '—'}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">COCO Primary Metric</span>
+                      </div>
+                    </div>
+
+                    {/* Tracking Metrics Row */}
+                    {(evalResult.odDetails?.tracking_metrics || evalResult.odDetails?.trackingMetrics) && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-white rounded-lg border border-slate-200 text-[11px] font-mono text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400">Unique Tracks:</span>
+                          <span className="font-bold text-slate-900">
+                            {evalResult.odDetails.tracking_metrics?.total_unique_tracks ?? evalResult.odDetails.trackingMetrics?.totalUniqueTracks ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400">Thời gian theo dõi TB:</span>
+                          <span className="font-bold text-slate-900">
+                            {evalResult.odDetails.tracking_metrics?.avg_track_duration_sec ?? evalResult.odDetails.trackingMetrics?.avgTrackDurationSec ?? 0}s
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400">Độ tin cậy TB:</span>
+                          <span className="font-bold text-emerald-600">
+                            {Math.round(((evalResult.odDetails.tracking_metrics?.avg_confidence ?? evalResult.odDetails.trackingMetrics?.avgConfidence ?? 0)) * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Per-class Metrics Breakdown Table */}
+                    {evalResult.odDetails?.per_class_metrics && Object.keys(evalResult.odDetails.per_class_metrics).length > 0 && (
+                      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="px-3 py-1.5 bg-slate-100/60 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-500">
+                          Chi tiết đánh giá theo từng lớp đối tượng (Per-Class AP Breakdown)
+                        </div>
+                        <table className="w-full text-[11px] text-left font-mono">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-400 text-[10px]">
+                              <th className="py-1.5 px-3">Class</th>
+                              <th className="py-1.5 px-3">Precision</th>
+                              <th className="py-1.5 px-3">Recall</th>
+                              <th className="py-1.5 px-3">AP@50</th>
+                              <th className="py-1.5 px-3">AP@50:95</th>
+                              <th className="py-1.5 px-3 text-right">GT / Pred</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {Object.entries(evalResult.odDetails.per_class_metrics).map(([cls, m]) => (
+                              <tr key={cls}>
+                                <td className="py-1.5 px-3 font-sans capitalize font-bold text-slate-900">{cls}</td>
+                                <td className="py-1.5 px-3 text-indigo-600">{(m.precision * 100).toFixed(1)}%</td>
+                                <td className="py-1.5 px-3 text-cyan-600">{(m.recall * 100).toFixed(1)}%</td>
+                                <td className="py-1.5 px-3 text-emerald-600 font-bold">{(m.ap50 * 100).toFixed(1)}%</td>
+                                <td className="py-1.5 px-3 text-purple-600">{((m.ap50_95 ?? m.ap5095 ?? 0) * 100).toFixed(1)}%</td>
+                                <td className="py-1.5 px-3 text-right text-slate-500">{m.gt_count ?? m.gtCount ?? 0} / {m.pred_count ?? m.predCount ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">

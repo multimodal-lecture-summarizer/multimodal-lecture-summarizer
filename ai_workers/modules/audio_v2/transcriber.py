@@ -8,12 +8,17 @@ from typing import Any
 from faster_whisper import WhisperModel
 
 from ai_workers.core.config import worker_settings
+from ai_workers.modules.audio_v2.language import whisper_language_arg
 
 
 class AudioTranscriber:
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
-        self.model_size = self.config.get("model_name", "base.en")
+        self.model_size = (
+            self.config.get("model_name")
+            or getattr(worker_settings, "FASTER_WHISPER_MODEL", None)
+            or "small"
+        )
         self.cache_dir = Path(worker_settings.CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -100,7 +105,7 @@ class AudioTranscriber:
         from ai_workers.modules.common.denoise import get_denoised_audio_array
         return get_denoised_audio_array(audio_path)
 
-    def transcribe(self, audio_path: str) -> dict[str, Any]:
+    def transcribe(self, audio_path: str, source_language: str | None = None) -> dict[str, Any]:
         """Run ASR on audio file with word-level timestamps using Faster-Whisper.
 
         Returns:
@@ -122,16 +127,22 @@ class AudioTranscriber:
             download_root=str(self.cache_dir),
         )
 
-        print(f"Transcribing audio file: {audio_path} using Faster-Whisper with VAD...")
-        audio_input = self.reduce_noise(audio_path)
-        
-        segments_gen, info = model.transcribe(
-            audio_input,
-            beam_size=5,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=2000),
-            word_timestamps=True
+        language = whisper_language_arg(source_language)
+        print(
+            f"Transcribing audio file: {audio_path} using Faster-Whisper "
+            f"({self.model_size}, language={language or 'auto'}) with VAD..."
         )
+        audio_input = self.reduce_noise(audio_path)
+
+        transcribe_kwargs: dict[str, Any] = {
+            "beam_size": 5,
+            "vad_filter": True,
+            "vad_parameters": dict(min_silence_duration_ms=2000),
+            "word_timestamps": True,
+        }
+        if language:
+            transcribe_kwargs["language"] = language
+        segments_gen, info = model.transcribe(audio_input, **transcribe_kwargs)
 
         segments = []
         full_text_list = []
@@ -227,11 +238,12 @@ class AudioTranscriber:
         return {
             "text": full_text,
             "segments": segments,
-            "language": info.language
+            "language": info.language,
+            "source_language": language or "auto",
+            "asr_model": self.model_size,
         }
 
-    def process(self, video_path: str) -> dict[str, Any]:
+    def process(self, video_path: str, source_language: str | None = None) -> dict[str, Any]:
         audio_path = video_path.rsplit(".", 1)[0] + ".wav"
         self.extract_audio(video_path, audio_path)
-        result = self.transcribe(audio_path)
-        return result
+        return self.transcribe(audio_path, source_language=source_language)

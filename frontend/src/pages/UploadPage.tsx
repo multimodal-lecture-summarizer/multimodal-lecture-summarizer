@@ -15,21 +15,24 @@ import {
   type ClientVideoMetadata,
   type ClientPreflightData
 } from '../utils/videoValidator';
+import type { SummaryLength } from '../types';
 import { 
   UploadCloud, 
   Link as LinkIcon, 
   ClipboardPaste, 
-  DownloadCloud, 
+  DownloadCloud,
   Film, 
   ArrowRight, 
   Loader2, 
   CheckCircle2, 
   Mic, 
   Image as ImageIcon, 
-  Sparkles, 
   AlertCircle,
   FileCheck2,
-  X
+  X,
+  BookOpen,
+  Layers,
+  GraduationCap
 } from 'lucide-react';
 
 export const UploadPage: React.FC = () => {
@@ -45,6 +48,8 @@ export const UploadPage: React.FC = () => {
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [stagedUrl, setStagedUrl] = useState<string | null>(null);
+  const [selectedSummaryLength, setSelectedSummaryLength] = useState<SummaryLength>('medium');
+  const [sourceLanguage, setSourceLanguage] = useState<'auto' | 'vi' | 'en'>('auto');
 
   // Client-side Video Validation & Standards State
   const [standards, setStandards] = useState<VideoStandardConfig>(() => normalizeVideoStandards(null));
@@ -136,57 +141,80 @@ export const UploadPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const mapStageToStep = (stage: string | null | undefined): number => {
-    if (!stage) return 1;
-    const s = stage.toLowerCase();
-    if (s === 'queued' || s === 'uploading' || s === 'download' || s === 'preflight') {
-      return 1;
-    }
-    if (s === 'audio' || s === 'speaker') {
-      return 2;
-    }
-    if (s === 'visual') {
-      return 3;
-    }
-    if (s === 'semantic') {
-      return 4;
-    }
+  const mapStageToStep = (stage: string | null | undefined, progress?: number): number => {
+    if (!stage && (progress === undefined || progress === null)) return 1;
+    const s = (stage || '').toLowerCase().trim();
+
     if (
-      s === 'timeline' || 
-      s === 'quality' || 
-      s === 'storage' || 
-      s === 'intermediate_ready' || 
-      s === 'summarizing' || 
-      s === 'text' || 
-      s === 'rag' || 
-      s === 'completed'
+      s.includes('timeline') ||
+      s.includes('quality') ||
+      s.includes('storage') ||
+      s.includes('intermediate') ||
+      s.includes('summariz') ||
+      s.includes('text') ||
+      s.includes('rag') ||
+      s.includes('complete') ||
+      (progress !== undefined && progress >= 75)
     ) {
       return 5;
     }
+
+    if (
+      s.includes('semantic') ||
+      s.includes('ocr') ||
+      s.includes('clip') ||
+      s.includes('florence') ||
+      (progress !== undefined && progress >= 58)
+    ) {
+      return 4;
+    }
+
+    if (
+      s.includes('visual') ||
+      s.includes('scene') ||
+      s.includes('slide') ||
+      s.includes('object') ||
+      s.includes('tracking') ||
+      s.includes('yolo') ||
+      (progress !== undefined && progress >= 38)
+    ) {
+      return 3;
+    }
+
+    if (
+      s.includes('audio') ||
+      s.includes('speaker') ||
+      s.includes('whisper') ||
+      s.includes('diariz') ||
+      (progress !== undefined && progress >= 6)
+    ) {
+      return 2;
+    }
+
     return 1;
   };
 
   const getStageText = (stage: string) => {
-    switch (stage) {
-      case 'queued': return 'Đang trong hàng đợi xử lý...';
-      case 'uploading': return 'Đang gửi tệp video lên máy chủ...';
-      case 'download': return 'Đang chuẩn bị tệp video...';
-      case 'preflight': return 'Đang thẩm định thông số kỹ thuật...';
-      case 'audio': return 'Đang trích xuất & nhận dạng âm thanh (WhisperX)...';
-      case 'speaker': return 'Đang phân biệt người nói (Diarization)...';
-      case 'visual': return 'Đang phát hiện phân cảnh & trích xuất slide...';
-      case 'semantic': return 'Đang phân tích thị giác & OCR nội dung...';
-      case 'timeline': return 'Đang đồng bộ trục thời gian bài giảng...';
-      case 'quality': return 'Đang tối ưu hóa chất lượng slide bài giảng...';
-      case 'storage': return 'Đang đồng bộ lưu trữ slide keyframes...';
-      case 'intermediate_ready': return 'Đã sẵn sàng dữ liệu, bắt đầu tóm tắt...';
-      case 'summarizing': return 'Đang sinh tóm tắt đa phương thức với AI...';
-      case 'text': return 'Đang tổng hợp nội dung bài học...';
-      case 'rag': return 'Đang tạo chỉ mục hỏi đáp RAG...';
-      case 'completed': return 'Xử lý bài giảng hoàn tất!';
-      case 'failed': return 'Xử lý thất bại';
-      default: return 'Đang xử lý phân tích bài giảng...';
-    }
+    const s = (stage || '').toLowerCase().trim();
+    if (s.includes('queued')) return 'Đang trong hàng đợi xử lý...';
+    if (s.includes('uploading')) return 'Đang gửi tệp video lên máy chủ...';
+    if (s.includes('download')) return 'Đang chuẩn bị tệp video...';
+    if (s.includes('preflight')) return 'Đang thẩm định thông số kỹ thuật...';
+    if (s.includes('audio') || s.includes('whisper')) return 'Đang trích xuất & nhận dạng âm thanh...';
+    if (s.includes('speaker') || s.includes('diariz')) return 'Đang phân biệt người nói theo thời gian...';
+    if (s.includes('object') || s.includes('tracking') || s.includes('yolo')) return 'Đang phát hiện & theo dõi đối tượng trong cảnh...';
+    if (s.includes('visual') || s.includes('scene')) return 'Đang phát hiện phân cảnh & trích xuất slide...';
+    if (s.includes('semantic') || s.includes('ocr') || s.includes('florence')) return 'Đang phân tích thị giác & OCR nội dung...';
+    if (s.includes('timeline')) return 'Đang đồng bộ trục thời gian bài giảng...';
+    if (s.includes('quality')) return 'Đang tối ưu hóa chất lượng slide bài giảng...';
+    if (s.includes('storage')) return 'Đang đồng bộ lưu trữ slide keyframes...';
+    if (s.includes('intermediate')) return 'Đã sẵn sàng dữ liệu, bắt đầu tóm tắt...';
+    if (s.includes('summariz')) return 'Đang tổng hợp nội dung bài học...';
+    if (s.includes('text')) return 'Đang tổng hợp nội dung bài học...';
+    if (s.includes('rag')) return 'Đang tạo chỉ mục hỏi đáp...';
+    if (s.includes('complete')) return 'Xử lý bài giảng hoàn tất!';
+    if (s.includes('fail')) return 'Xử lý thất bại';
+    return 'Đang phân tích dữ liệu đa phương thức...';
   };
 
   const startPolling = (videoId: string) => {
@@ -211,11 +239,16 @@ export const UploadPage: React.FC = () => {
           });
           if (job) {
             if (job.progress !== undefined && job.progress !== null) {
-              setProgressPercent(job.progress);
+              const p = Math.round(Number(job.progress));
+              setProgressPercent(prev => Math.max(prev, p));
             }
-            if (job.stage) {
-              setCurrentStage(job.stage);
-              setCurrentStep(mapStageToStep(job.stage));
+            if (job.stage || job.progress !== undefined) {
+              const nextStep = mapStageToStep(job.stage, job.progress);
+              if (job.stage) {
+                setCurrentStage(job.stage);
+              }
+              // Monotonic step progression: a running pipeline step never jumps backwards
+              setCurrentStep(prev => Math.max(prev, nextStep));
             }
 
             const jobStatusUpper = (job.status || "").toUpperCase();
@@ -250,7 +283,7 @@ export const UploadPage: React.FC = () => {
     }, 2000);
   };
 
-  const handleStartProcessing = async (file: File | null, url: string | null) => {
+  const handleStartProcessing = async (file: File | null, url: string | null, customLength?: SummaryLength) => {
     if (isUploadingRef.current) return;
     isUploadingRef.current = true;
     setIsProcessing(true);
@@ -259,8 +292,9 @@ export const UploadPage: React.FC = () => {
     setCurrentStage('uploading');
     setErrorMsg('');
     
+    const lengthToUse = customLength || selectedSummaryLength;
     try {
-      const res = await api.uploadVideo(file, url);
+      const res = await api.uploadVideo(file, url, sourceLanguage, lengthToUse);
       if (res.success && res.data) {
         const videoId = res.data.videoId || res.data.video_id;
         toast.info(t('upload.toast_upload_success'), t('upload.toast_uploaded'));
@@ -342,7 +376,7 @@ export const UploadPage: React.FC = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    handleStartProcessing(f, u);
+    handleStartProcessing(f, u, selectedSummaryLength);
   };
 
   const handlePreflightClose = () => {
@@ -421,11 +455,11 @@ export const UploadPage: React.FC = () => {
 
   // Pipeline Steps Configuration matching real AI worker lifecycle
   const pipelineSteps = [
-    { id: 1, icon: DownloadCloud, title: 'Tải & Thẩm định video' },
+    { id: 1, icon: FileCheck2, title: 'Tải lên & Thẩm định video' },
     { id: 2, icon: Mic, title: 'Xử lý Âm thanh & Người nói' },
-    { id: 3, icon: Film, title: 'Phát hiện Phân cảnh & Trích xuất Slide' },
-    { id: 4, icon: ImageIcon, title: 'Phân tích Thị giác & Nhận dạng OCR' },
-    { id: 5, icon: Sparkles, title: 'Tóm tắt Đa phương thức & Tổng hợp AI' },
+    { id: 3, icon: Film, title: 'Phân cảnh & Theo dõi Đối tượng' },
+    { id: 4, icon: ImageIcon, title: 'Phân tích Thị giác & OCR Slide' },
+    { id: 5, icon: BookOpen, title: 'Tổng hợp Bài học & Trục Thời gian' },
   ];
 
   return (
@@ -712,6 +746,131 @@ export const UploadPage: React.FC = () => {
                 </button>
               </form>
             </div>
+
+            <div className="mt-8">
+              <label htmlFor="source-language" className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                {t('upload.source_language')}
+              </label>
+              <select
+                id="source-language"
+                value={sourceLanguage}
+                onChange={(event) => setSourceLanguage(event.target.value as 'auto' | 'vi' | 'en')}
+                disabled={isProcessing}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
+              >
+                <option value="auto">{t('upload.source_language_auto')}</option>
+                <option value="vi">{t('upload.source_language_vi')}</option>
+                <option value="en">{t('upload.source_language_en')}</option>
+              </select>
+            </div>
+
+            {/* Summary Depth Selection Cards */}
+            <div className="mt-8 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Layers size={14} className="text-primary" />
+                  Cấp độ nhận thức & Độ dài tóm tắt mặc định
+                </label>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Có thể chuyển đổi tức thì trên trang Kết quả
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* 1. Short */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSummaryLength('short')}
+                  className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                    selectedSummaryLength === 'short'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-900">
+                        <BookOpen size={13} className={selectedSummaryLength === 'short' ? 'text-primary' : 'text-slate-400'} />
+                        Ngắn gọn (TL;DR)
+                      </span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        Cô đọng
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Nắm bắt nhanh thông điệp & hành động cốt lõi.
+                    </p>
+                  </div>
+                  {selectedSummaryLength === 'short' && (
+                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-primary">
+                      <CheckCircle2 size={12} /> Đã chọn
+                    </div>
+                  )}
+                </button>
+
+                {/* 2. Medium */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSummaryLength('medium')}
+                  className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                    selectedSummaryLength === 'medium'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-900">
+                        <Layers size={13} className={selectedSummaryLength === 'medium' ? 'text-primary' : 'text-slate-400'} />
+                        Tiêu chuẩn (Overview)
+                      </span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                        Phổ biến
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Cân đối giữa lý thuyết và các bước thực hành.
+                    </p>
+                  </div>
+                  {selectedSummaryLength === 'medium' && (
+                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-primary">
+                      <CheckCircle2 size={12} /> Mặc định
+                    </div>
+                  )}
+                </button>
+
+                {/* 3. Detailed */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSummaryLength('detailed')}
+                  className={`p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                    selectedSummaryLength === 'detailed'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-900">
+                        <GraduationCap size={13} className={selectedSummaryLength === 'detailed' ? 'text-primary' : 'text-slate-400'} />
+                        Chuyên sâu (Guide)
+                      </span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        Chi tiết
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Phân tích cặn kẽ từng bước kèm dẫn chứng.
+                    </p>
+                  </div>
+                  {selectedSummaryLength === 'detailed' && (
+                    <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-primary">
+                      <CheckCircle2 size={12} /> Đã chọn
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -725,7 +884,7 @@ export const UploadPage: React.FC = () => {
                 {isProcessing ? (
                   <Loader2 className="text-primary animate-spin" size={24} />
                 ) : (
-                  <Sparkles className="text-primary" size={24} />
+                  <Layers className="text-primary" size={24} />
                 )}
                 {t('upload.pipeline_status')}
               </h2>
@@ -879,6 +1038,8 @@ export const UploadPage: React.FC = () => {
         url={stagedUrl}
         preloadedData={stagedPreflightData}
         standards={standards}
+        summaryLength={selectedSummaryLength}
+        onSummaryLengthChange={setSelectedSummaryLength}
       />
     </div>
   );

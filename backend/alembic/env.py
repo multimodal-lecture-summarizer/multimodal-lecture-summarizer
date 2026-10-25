@@ -17,6 +17,7 @@ import app.models.job    # noqa: F401
 import app.models.summary  # noqa: F401
 import app.models.qa     # noqa: F401
 import app.models.stats  # noqa: F401
+import app.models.evaluation  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

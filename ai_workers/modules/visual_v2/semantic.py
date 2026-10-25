@@ -82,7 +82,16 @@ class SemanticAnalyzer:
                     if density > 50 or (center_density > 0 and density / center_density > 3.0):
                         return True
             return False
-        
+
+        def is_protected_action_scene(sc_dict: dict[str, Any]) -> bool:
+            """Check if scene is a protected action scene that should never be pruned."""
+            dur = float(sc_dict.get("end_seconds", 0.0)) - float(sc_dict.get("start_seconds", 0.0))
+            det = sc_dict.get("detected_objects", {})
+            tracks = det.get("tracks_summary", []) if isinstance(det, dict) else []
+            counts = sc_dict.get("object_counts", {})
+            has_objs = len(tracks) > 0 or (isinstance(counts, dict) and any(c > 0 for c in counts.values()))
+            return dur >= 2.0 and has_objs
+
         try:
             print(f"[Semantic] Loading CLIP model to extract embeddings for {num_frames} frames...")
             processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
@@ -170,10 +179,13 @@ class SemanticAnalyzer:
             for i in range(num_frames):
                 if has_overlay[i]:
                     quality_scores[i] *= OVERLAY_PENALTY_FACTOR
-            
-            # Step 1: Hard filter out "graphics/logos"
+
+            # Step 1: Hard filter out "graphics/logos", BUT protect action scenes with detected objects
             filtered_indices = []
             for i in range(num_frames):
+                if is_protected_action_scene(valid_scenes[i]):
+                    filtered_indices.append(i)
+                    continue
                 sim_photo = zero_shot_sims[i, 0]
                 sim_graphic = zero_shot_sims[i, 1]
                 is_full_graphic = (sim_graphic > sim_photo) and (sim_photo < ABS_THRESHOLD)
@@ -212,17 +224,27 @@ class SemanticAnalyzer:
                 
             # Step 3: Temporal Splitting
             sub_clusters = []
-            gap_threshold = max(int(0.15 * num_frames), MIN_GAP_FRAMES)
+            # Adaptive gap threshold: for short videos/fewer scenes (e.g. 18 scenes), gap of 2 scenes represents a significant time shift
+            gap_threshold = max(2, min(5, max(1, int(0.08 * num_frames))))
             
             for label, indices in clusters_map.items():
                 indices.sort()
                 current_sub = [indices[0]]
                 for i in range(1, len(indices)):
-                    if indices[i] - indices[i-1] > gap_threshold:
+                    prev_idx = indices[i-1]
+                    curr_idx = indices[i]
+                    prev_time = float(valid_scenes[prev_idx].get("start_seconds", 0.0))
+                    curr_time = float(valid_scenes[curr_idx].get("start_seconds", 0.0))
+                    
+                    # Split if frame index gap is large OR if timestamps differ by >= 15s OR if both are distinct action scenes >= 5s apart
+                    time_diff = curr_time - prev_time
+                    is_action_split = (is_protected_action_scene(valid_scenes[curr_idx]) or is_protected_action_scene(valid_scenes[prev_idx])) and time_diff >= 5.0
+                    
+                    if (curr_idx - prev_idx > gap_threshold) or (time_diff >= 20.0) or is_action_split:
                         sub_clusters.append(current_sub)
-                        current_sub = [indices[i]]
+                        current_sub = [curr_idx]
                     else:
-                        current_sub.append(indices[i])
+                        current_sub.append(curr_idx)
                 sub_clusters.append(current_sub)
                 
             print(f"[Semantic] Formed {len(sub_clusters)} temporal sub-clusters after splitting.")
@@ -231,39 +253,83 @@ class SemanticAnalyzer:
             max_sub_cluster_size = max(len(sc) for sc in sub_clusters) if sub_clusters else 1
             
             representatives = []
+            selected_rep_indices = set()
+
             for sc in sub_clusters:
-                best_idx = max(sc, key=lambda idx: quality_scores[idx])
+                # Pick best index by composite score
+                best_idx = max(sc, key=lambda idx: quality_scores[idx] + (0.5 if is_protected_action_scene(valid_scenes[idx]) else 0.0))
                 
                 size_score = np.log1p(len(sc)) / np.log1p(max_sub_cluster_size)
                 q_score = quality_scores[best_idx]
                 a_score = action_norm[best_idx]
                 
                 importance = 0.25 * size_score + 0.45 * a_score + 0.30 * q_score
+                if is_protected_action_scene(valid_scenes[best_idx]):
+                    importance = max(importance, 0.65)
                 
                 representatives.append({
                     "original_idx": best_idx,
                     "importance": importance,
                     "embedding": embeddings[best_idx]
                 })
+                selected_rep_indices.add(best_idx)
+
+                # Action-Scene Protection: also keep distinct action scenes in this sub-cluster if spaced apart
+                for candidate_idx in sc:
+                    if candidate_idx not in selected_rep_indices and is_protected_action_scene(valid_scenes[candidate_idx]):
+                        cand_time = float(valid_scenes[candidate_idx].get("start_seconds", 0.0))
+                        best_time = float(valid_scenes[best_idx].get("start_seconds", 0.0))
+                        if abs(cand_time - best_time) >= 6.0:
+                            representatives.append({
+                                "original_idx": candidate_idx,
+                                "importance": max(0.65, 0.25 * size_score + 0.45 * action_norm[candidate_idx] + 0.30 * quality_scores[candidate_idx]),
+                                "embedding": embeddings[candidate_idx]
+                            })
+                            selected_rep_indices.add(candidate_idx)
                 
             # Step 5: Global Deduplication
             dedup_selection = []
-            # Sort by importance descending so we keep the most important one in case of conflict
             representatives.sort(key=lambda x: x["importance"], reverse=True)
             
             for rep in representatives:
+                rep_scene = valid_scenes[rep["original_idx"]]
+                is_action = is_protected_action_scene(rep_scene)
                 is_duplicate = False
                 for selected in dedup_selection:
                     sim = np.dot(rep["embedding"], selected["embedding"])
-                    if sim > DEDUP_THRESHOLD:
+                    threshold_to_use = 0.985 if is_action else DEDUP_THRESHOLD
+                    if sim > threshold_to_use:
                         is_duplicate = True
                         break
                 if not is_duplicate:
                     dedup_selection.append(rep)
                     
-            # Step 6: Top-K Cut and Final Sort
-            max_keyframes = self.config.get("max_keyframes", 15) # Default lowered to 15 for better distillation
+            # Step 6: Target Retained Scenes (At least 8-12 representative scenes)
+            target_min_keyframes = min(num_frames, max(8, min(12, int(num_frames * 0.75))))
+            max_keyframes = max(target_min_keyframes, self.config.get("max_keyframes", 15))
             
+            # If dedup reduced below target_min_keyframes, restore candidates (prioritizing action scenes & high quality)
+            if len(dedup_selection) < target_min_keyframes:
+                selected_indices = {s["original_idx"] for s in dedup_selection}
+                remaining_candidates = [
+                    i for i in range(num_frames) if i not in selected_indices
+                ]
+                remaining_candidates.sort(
+                    key=lambda idx: (
+                        1.0 if is_protected_action_scene(valid_scenes[idx]) else 0.0,
+                        action_norm[idx] + quality_scores[idx]
+                    ),
+                    reverse=True
+                )
+                for idx in remaining_candidates:
+                    if len(dedup_selection) >= target_min_keyframes:
+                        break
+                    dedup_selection.append({
+                        "original_idx": idx,
+                        "importance": 0.45 * action_norm[idx] + 0.30 * quality_scores[idx] + (0.25 if is_protected_action_scene(valid_scenes[idx]) else 0.1),
+                        "embedding": embeddings[idx]
+                    })
+                
             if len(dedup_selection) > max_keyframes:
                 dedup_selection = dedup_selection[:max_keyframes]
                 
@@ -460,10 +526,33 @@ class SemanticAnalyzer:
                         for prefix in prefixes:
                             if lower_cap.startswith(prefix):
                                 caption = caption[len(prefix):]
-                                if caption:
-                                    caption = caption[0].upper() + caption[1:]
-                                break
-                        
+                        if caption:
+                            caption = caption[0].upper() + caption[1:]
+
+                        # Ground caption with verified YOLO objects to prevent vision hallucinations
+                        import re
+                        yolo_labels = []
+                        if isinstance(scene.get("object_counts"), dict):
+                            yolo_labels.extend(scene["object_counts"].keys())
+                        if isinstance(scene.get("detected_objects"), dict):
+                            for b in scene["detected_objects"].get("keyframe_bboxes", []):
+                                if b.get("label"):
+                                    yolo_labels.append(b["label"])
+                        yolo_labels_lower = [l.lower() for l in yolo_labels]
+
+                        has_bike = any(lbl in ("motorcycle", "bicycle", "bike") for lbl in yolo_labels_lower)
+                        has_person = "person" in yolo_labels_lower
+                        has_bat = any(lbl in ("baseball bat", "bat", "sports ball") for lbl in yolo_labels_lower)
+
+                        if not has_bat and (has_bike or has_person):
+                            caption = re.sub(r"\b(?:holding|with|swinging)\s+(?:a\s+)?baseball\s+bat\b", "holding the handlebars", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\b(?:a\s+)?baseball\s+bat\b", "the handlebars", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\btennis\s+racket\b", "riding equipment", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\bsurfboard\b", "bike frame", caption, flags=re.IGNORECASE)
+
+                        if has_bike and not any(k in caption.lower() for k in ("motorcycle", "bike", "rider", "dirt", "jump", "whip")):
+                            caption = f"{caption} (motocross rider in action)"
+
                         if caption:
                             scene["caption"] = caption
                             

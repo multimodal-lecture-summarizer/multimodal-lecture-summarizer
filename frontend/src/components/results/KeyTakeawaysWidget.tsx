@@ -119,7 +119,13 @@ export const KeyTakeawaysWidget: React.FC<KeyTakeawaysWidgetProps> = ({
 
   const normalizedList = useMemo<NormalizedTakeaway[]>(() => {
     if (!Array.isArray(takeaways)) return [];
-    return takeaways.map((item, idx) => normalizeItem(item, idx));
+    const list = takeaways.map((item, idx) => normalizeItem(item, idx));
+    list.sort((a, b) => {
+      const tsA = typeof a.timestamp === 'number' ? a.timestamp : 0;
+      const tsB = typeof b.timestamp === 'number' ? b.timestamp : 0;
+      return tsA - tsB;
+    });
+    return list.map((item, idx) => ({ ...item, index: idx + 1 }));
   }, [takeaways]);
 
   const handleCopyAll = async () => {
@@ -303,15 +309,24 @@ export const KeyTakeawaysWidget: React.FC<KeyTakeawaysWidgetProps> = ({
           return (
             <article
               key={item.id}
+              role={hasTimestamp ? 'button' : undefined}
+              tabIndex={hasTimestamp ? 0 : undefined}
+              onKeyDown={(e) => {
+                if (hasTimestamp && onSeekTimestamp && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onSeekTimestamp(item.timestamp!);
+                }
+              }}
               onClick={() => {
                 if (hasTimestamp && onSeekTimestamp) {
                   onSeekTimestamp(item.timestamp!);
                 }
               }}
-              className={`group relative flex flex-col justify-between p-3.5 rounded-xl border transition-all duration-200 ${hasTimestamp
-                ? 'bg-white hover:bg-[#FAF5FF]/40 border-slate-200/70 hover:border-primary/50 cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-sm'
+              className={`group relative flex flex-col justify-between p-3.5 rounded-xl border transition-all duration-200 select-none ${hasTimestamp
+                ? 'bg-white hover:bg-[#FAF5FF]/50 border-slate-200/70 hover:border-primary/50 cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
                 : 'bg-white border-slate-200/60'
                 }`}
+              title={hasTimestamp ? `Xem và phát video tại mốc ${item.timeStr || ''}` : undefined}
             >
               {/* Card Header: Index & Timestamp pill */}
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -328,8 +343,8 @@ export const KeyTakeawaysWidget: React.FC<KeyTakeawaysWidgetProps> = ({
                         onSeekTimestamp(item.timestamp!);
                       }
                     }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 hover:bg-primary text-slate-700 hover:text-white transition-colors duration-150 border border-slate-200/60"
-                    title={`Nhảy tới mốc thời gian ${item.timeStr}`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 hover:bg-primary text-slate-700 hover:text-white transition-all duration-150 border border-slate-200/60 active:scale-95 shadow-xs"
+                    title={`Chạy video ngay tại mốc thời gian ${item.timeStr}`}
                   >
                     {/* Play SVG Icon */}
                     <svg
@@ -358,7 +373,12 @@ export const KeyTakeawaysWidget: React.FC<KeyTakeawaysWidgetProps> = ({
               {/* Subtle visual anchor when clickable */}
               {hasTimestamp && (
                 <div className="mt-2.5 pt-2 border-t border-slate-100/80 flex items-center justify-between text-[10px] text-slate-400 group-hover:text-primary transition-colors">
-                  <span className="font-medium">Xem khoảnh khắc này</span>
+                  <span className="font-semibold flex items-center gap-1">
+                    <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    Xem &amp; phát khoảnh khắc này
+                  </span>
                   <svg
                     className="w-3 h-3 transform group-hover:translate-x-0.5 transition-transform"
                     viewBox="0 0 24 24"

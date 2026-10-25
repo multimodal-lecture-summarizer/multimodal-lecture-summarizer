@@ -78,8 +78,7 @@ def reset_chromadb():
             chromadb_service.collection = chromadb_service.client.create_collection(chromadb_service.collection_name)
             print("Successfully recreated ChromaDB collection.")
         else:
-            chromadb_service.mock_store = {}
-            print("Cleared local mock ChromaDB store.")
+            print("ChromaDB is unavailable. No on-disk index was cleared.")
     except Exception as e:
         print(f"Error resetting ChromaDB: {e}")
 

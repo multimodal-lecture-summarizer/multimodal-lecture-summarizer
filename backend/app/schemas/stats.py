@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -70,6 +70,7 @@ class PerformanceSummaryDTO(CamelModel):
     avg_processing_time_sec: float = Field(..., description="Average processing latency in seconds")
     total_processed_hours: float = Field(..., description="Total cumulative video duration in hours")
     total_jobs_evaluated: int = Field(default=0, description="Total completed jobs analyzed")
+    avg_detected_objects: Optional[float] = Field(default=None, description="Average detected objects per lecture video")
 
 
 class ScatterDataPointDTO(CamelModel):
@@ -79,6 +80,8 @@ class ScatterDataPointDTO(CamelModel):
     processing_sec: float = Field(..., description="Actual processing time in seconds")
     rtf: float = Field(..., description="Real-Time Factor (processing_sec / duration_sec)")
     resolution: str = Field(default="1080p", description="Video resolution e.g. 1080p, 720p")
+    detected_objects_count: Optional[int] = Field(default=None, description="Total unique detected objects/tracks count")
+    avg_object_confidence: Optional[float] = Field(default=None, description="Average confidence score of detected objects")
 
 
 class DurationBucketDTO(CamelModel):

@@ -21,12 +21,12 @@ Hệ thống được chia làm hai phần chính hoạt động phối hợp v�
 Chịu trách nhiệm thực thi pipeline trích xuất và phân tích. Pipeline được thực thi bởi Celery (`tasks.process_video`) và bao gồm các chặng sau:
 
 #### Stage 1: Âm thanh & Nhận dạng giọng nói (Audio & ASR)
-- **Công nghệ/Mô hình**: `WhisperX`, `faster-whisper`, `torchaudio`.
-- **Nhiệm vụ**: Trích xuất âm thanh từ file video và nhận dạng giọng nói (Speech-to-Text), tạo các đoạn transcript ban đầu.
+- **Công nghệ/Mô hình**: Faster-Whisper, mặc định `small`. `large-v3` chỉ khi đặt `FASTER_WHISPER_MODEL`. Ngôn ngữ nguồn là `auto`, `vi` hoặc `en`.
+- **Nhiệm vụ**: Trích xuất âm thanh từ file video và nhận dạng giọng nói, kèm mốc thời gian từng từ.
 
 #### Stage 2: Phân biệt người nói (Speaker Diarization)
-- **Công nghệ/Mô hình**: `pyannote.audio`.
-- **Nhiệm vụ**: Phân tích đoạn âm thanh để phân biệt các giọng nói khác nhau, gán nhãn người nói cho từng đoạn hội thoại.
+- **Công nghệ/Mô hình**: `pyannote.audio` `speaker-diarization-3.1`, chỉ khi có `HF_TOKEN`.
+- **Nhiệm vụ**: Gán người nói theo overlap. Không có token thì `diarization_status=skipped` và transcript không bị gán speaker giả.
 
 #### Stage 3: Thị giác máy tính (Visual Processing)
 - **Công nghệ/Mô hình**: `PySceneDetect`, `opencv-python`.

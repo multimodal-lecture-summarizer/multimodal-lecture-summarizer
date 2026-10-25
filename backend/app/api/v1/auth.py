@@ -14,6 +14,7 @@ from app.schemas import (
     Token,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    UserPreferencesUpdate,
 )
 from app.api.deps import (
     get_password_hash,
@@ -111,6 +112,29 @@ def get_me(current_user: User = Depends(get_current_active_user)):
         success=True,
         data=UserDTO.model_validate(current_user),
         message="Profile details retrieved successfully",
+    )
+
+
+@router.put(
+    "/me/preferences",
+    response_model=BaseDTO[UserDTO],
+    summary="Update current user preferences (such as AI output language)",
+    description="Updates user configuration preferences like output_language ('vi', 'en', etc.).",
+)
+def update_preferences(
+    payload: UserPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Updates user preferences like output_language in database."""
+    target_lang = (payload.output_language or "vi").strip().lower()
+    current_user.output_language = target_lang
+    db.commit()
+    db.refresh(current_user)
+    return BaseDTO(
+        success=True,
+        data=UserDTO.model_validate(current_user),
+        message="Cập nhật tùy chọn ngôn ngữ đầu ra thành công",
     )
 
 

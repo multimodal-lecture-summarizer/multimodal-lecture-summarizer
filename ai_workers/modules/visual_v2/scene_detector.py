@@ -52,12 +52,12 @@ class SceneDetector:
         video_path: str,
         scenes: list[dict],
         output_dir: str,
-        strategy: str = "middle",
+        strategy: str = "sharpest",
     ) -> list[str]:
-        """Extract keyframe images for each scene.
+        """Extract optimal keyframe images for each scene based on sharpness and quality.
 
         Args:
-            strategy: "first" | "middle" | "sharpest"
+            strategy: "first" | "middle" | "sharpest" | "smart"
 
         Returns:
             List of keyframe image paths.
@@ -76,30 +76,79 @@ class SceneDetector:
         for scene in scenes:
             start_f = scene["start_frame"]
             end_f = scene["end_frame"]
+            total_scene_frames = max(1, end_f - start_f + 1)
             
-            # Determine target frame to extract
-            if strategy == "first":
-                target_frame = start_f
-            elif strategy == "middle":
-                target_frame = (start_f + end_f) // 2
+            if strategy in ("sharpest", "smart"):
+                # Sample 5 to 7 candidate frames evenly distributed across the scene
+                num_cands = min(7, max(1, total_scene_frames))
+                if num_cands <= 2:
+                    candidates = [(start_f + end_f) // 2]
+                else:
+                    step = (end_f - start_f) / (num_cands + 1)
+                    candidates = [int(start_f + (i + 1) * step) for i in range(num_cands)]
+
+                best_frame = None
+                best_sharpness = -1.0
+                best_target_f = (start_f + end_f) // 2
+
+                for cand_f in candidates:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, cand_f)
+                    ret, frame = cap.read()
+                    if not ret or frame is None:
+                        continue
+
+                    # Sharpness via Laplacian variance
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+                    if sharpness > best_sharpness:
+                        best_sharpness = sharpness
+                        best_frame = frame
+                        best_target_f = cand_f
+
+                if best_frame is not None:
+                    filename = f"keyframe_scene_{scene['scene_index']}.png"
+                    filepath = os.path.join(static_dir, filename)
+                    cv2.imwrite(filepath, best_frame)
+                    keyframes.append(filepath)
+
+                    scene["keyframe_path"] = filepath
+                    scene["keyframe_url"] = f"/static/mock_r2/keyframes/{job_id}/{filename}"
+                    scene["caption"] = f"Keyframe for Scene {scene['scene_index']}"
+                    scene["blur_score"] = round(best_sharpness, 2)
+                    scene["keyframe_frame_idx"] = best_target_f
+                else:
+                    scene["keyframe_path"] = ""
+                    scene["keyframe_url"] = ""
+                    scene["caption"] = ""
+                    scene["blur_score"] = 0.0
             else:
-                target_frame = (start_f + end_f) // 2
-                
-            cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-            ret, frame = cap.read()
-            if ret:
-                filename = f"keyframe_scene_{scene['scene_index']}.png"
-                filepath = os.path.join(static_dir, filename)
-                cv2.imwrite(filepath, frame)
-                keyframes.append(filepath)
-                
-                scene["keyframe_path"] = filepath
-                scene["keyframe_url"] = f"/static/mock_r2/keyframes/{job_id}/{filename}"
-                scene["caption"] = f"Keyframe for Scene {scene['scene_index']}"
-            else:
-                scene["keyframe_path"] = ""
-                scene["keyframe_url"] = ""
-                scene["caption"] = ""
+                if strategy == "first":
+                    target_frame = start_f
+                else:
+                    target_frame = (start_f + end_f) // 2
+                    
+                cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    filename = f"keyframe_scene_{scene['scene_index']}.png"
+                    filepath = os.path.join(static_dir, filename)
+                    cv2.imwrite(filepath, frame)
+                    keyframes.append(filepath)
+
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+                    
+                    scene["keyframe_path"] = filepath
+                    scene["keyframe_url"] = f"/static/mock_r2/keyframes/{job_id}/{filename}"
+                    scene["caption"] = f"Keyframe for Scene {scene['scene_index']}"
+                    scene["blur_score"] = round(sharpness, 2)
+                    scene["keyframe_frame_idx"] = target_frame
+                else:
+                    scene["keyframe_path"] = ""
+                    scene["keyframe_url"] = ""
+                    scene["caption"] = ""
+                    scene["blur_score"] = 0.0
                 
         cap.release()
         return keyframes

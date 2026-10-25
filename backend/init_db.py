@@ -72,7 +72,8 @@ def test_database_crud():
 
         required_tables = {
             "users", "videos", "video_metadata", "video_scenes",
-            "video_standards", "jobs", "summaries", "qa_logs", "system_stats"
+            "video_standards", "jobs", "summaries", "qa_logs", "system_stats",
+            "evaluation_logs"
         }
         missing_tables = required_tables - set(existing_tables)
         if missing_tables:
@@ -134,7 +135,24 @@ def test_database_crud():
             keyframe_path="keyframes/test_1.jpg",
             keyframe_url="https://pub-r2.dev/keyframes/test_1.jpg",
             caption="Professor introducing the lecture topics on whiteboard",
-            script="Welcome everyone to today's machine learning lecture."
+            script="Welcome everyone to today's machine learning lecture.",
+            detected_objects_json={
+                "keyframe_bboxes": [
+                    {"track_id": 1, "label": "person", "confidence": 0.92, "bbox_norm": [0.1, 0.1, 0.4, 0.9]}
+                ],
+                "tracks_summary": [
+                    {
+                        "track_id": 1,
+                        "label": "person",
+                        "avg_confidence": 0.91,
+                        "first_seen_sec": 0.0,
+                        "last_seen_sec": 15.0,
+                        "frames_appeared": 45,
+                        "sample_bbox_norm": [0.1, 0.1, 0.4, 0.9],
+                    }
+                ],
+            },
+            object_counts_json={"person": 1},
         )
         db.add(test_scene)
         db.commit()
@@ -164,6 +182,12 @@ def test_database_crud():
             key_takeaways_json=[
                 {"point": "Key takeaway 1", "timestamp": 12.0}
             ],
+            objects_summary_json={
+                "total_unique_tracks": 1,
+                "label_distribution": {"person": 1},
+                "most_frequent_objects": ["person"],
+                "sample_fps_used": 3,
+            },
             transcript_text='[{"speaker": "SPEAKER_01", "start": 0.0, "end": 15.0, "text": "Welcome"}]',
             model_used="openrouter/qwen-2.5-7b-instruct",
             processing_time=12.4

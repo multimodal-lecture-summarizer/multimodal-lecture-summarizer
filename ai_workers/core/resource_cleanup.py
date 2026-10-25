@@ -127,12 +127,15 @@ def release_worker_resources(label: str) -> None:
 
 
 def ensure_process_memory_available(
-    min_available_mb: int,
+    min_available_mb: int = 1536,
     *,
-    soft_min_available_mb: int,
-    retry_seconds: int,
-    retry_interval_seconds: int,
+    min_mb: int | None = None,
+    soft_min_available_mb: int = 800,
+    retry_seconds: int = 30,
+    retry_interval_seconds: int = 5,
 ) -> int | None:
+    if min_mb is not None:
+        min_available_mb = min_mb
     deadline = time.monotonic() + max(0, retry_seconds)
     attempt = 0
 

@@ -103,7 +103,9 @@ CREATE TABLE IF NOT EXISTS video_scenes (
     keyframe_path VARCHAR(1024) NOT NULL,
     keyframe_url VARCHAR(2048) NOT NULL,
     caption TEXT NOT NULL,
-    script TEXT
+    script TEXT,
+    detected_objects_json JSON,
+    object_counts_json JSON
 );
 
 -- Table: jobs (Background processing pipeline and Celery tasks tracking)
@@ -125,9 +127,30 @@ CREATE TABLE IF NOT EXISTS summaries (
     chapters_json JSON NOT NULL,
     keyframes_json JSON NOT NULL,
     key_takeaways_json JSON,
+    objects_summary_json JSON,
     transcript_text TEXT NOT NULL,
     model_used TEXT NOT NULL,
     processing_time DOUBLE PRECISION NOT NULL
+);
+
+-- Table: evaluation_logs (Ground-truth benchmark logs for WER/CER/ROUGE/OD metrics)
+CREATE TABLE IF NOT EXISTS evaluation_logs (
+    eval_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id UUID REFERENCES videos(video_id) ON DELETE CASCADE,
+    wer DOUBLE PRECISION,
+    cer DOUBLE PRECISION,
+    rouge_1 DOUBLE PRECISION,
+    rouge_2 DOUBLE PRECISION,
+    rouge_l DOUBLE PRECISION,
+    bertscore_f1 DOUBLE PRECISION,
+    od_precision DOUBLE PRECISION,
+    od_recall DOUBLE PRECISION,
+    od_map50 DOUBLE PRECISION,
+    od_map50_95 DOUBLE PRECISION,
+    reference_transcript TEXT,
+    reference_summary TEXT,
+    details_json JSON,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
 );
 
 -- Table: qa_logs (User interactive Q&A questions, answers, and retrieved RAG context)

@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     CHROMADB_TENANT: str = "default_tenant"
     CHROMADB_DATABASE: str = "default_database"
     CHROMADB_COLLECTION_NAME: str = "lecture_transcript_embeddings"
+    # Empty uses <repo>/cache/chroma so the API and worker share one on-disk index.
+    CHROMADB_PERSIST_DIR: str = ""
 
     # Celery & Redis
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"

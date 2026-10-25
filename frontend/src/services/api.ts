@@ -1,4 +1,5 @@
 import { CONFIG } from "../config";
+import type { SummaryLength } from "../types";
 
 const getAuthHeaders = (isMultipart = false) => {
   const token = localStorage.getItem("token");
@@ -63,6 +64,18 @@ export const api = {
     return result; // returns BaseDTO[UserDTO]
   },
 
+  async updatePreferences(preferences: { outputLanguage: string }) {
+    const response = await customFetch(`${CONFIG.API_BASE_URL}/auth/me/preferences`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(preferences),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Cập nhật tùy chọn thất bại");
+    return result; // returns BaseDTO[UserDTO]
+  },
+
   async forgotPassword(email: string) {
     const response = await customFetch(`${CONFIG.API_BASE_URL}/auth/forgot-password`, {
       method: "POST",
@@ -106,12 +119,14 @@ export const api = {
   async uploadVideo(
     file: File | null,
     originalUrl: string | null,
-    language = "en"
+    language = "auto",
+    summaryLength: SummaryLength = "medium"
   ) {
     const formData = new FormData();
     if (file) formData.append("file", file);
     if (originalUrl) formData.append("originalUrl", originalUrl);
     formData.append("language", language);
+    formData.append("summary_length", summaryLength);
 
     const response = await customFetch(`${CONFIG.API_BASE_URL}/videos/upload`, {
       method: "POST",
@@ -138,6 +153,20 @@ export const api = {
     return result; // returns BaseDTO[List[VideoDTO]]
   },
 
+  async reindexVideo(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/videos/${videoId}/reindex`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể dựng lại chỉ mục hỏi đáp");
+    return result;
+  },
+
   async getVideo(videoId: string) {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/videos/${videoId}`,
@@ -151,9 +180,13 @@ export const api = {
     return result; // returns BaseDTO[VideoDTO]
   },
 
-  async getVideoScenes(videoId: string) {
+  async getVideoScenes(videoId: string, objectLabel?: string, minConfidence?: number) {
+    const params = new URLSearchParams();
+    if (objectLabel) params.append("object_label", objectLabel);
+    if (minConfidence !== undefined) params.append("min_confidence", minConfidence.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
     const response = await customFetch(
-      `${CONFIG.API_BASE_URL}/videos/${videoId}/scenes`,
+      `${CONFIG.API_BASE_URL}/videos/${videoId}/scenes${query}`,
       {
         headers: getAuthHeaders(),
       }
@@ -162,6 +195,22 @@ export const api = {
     if (!response.ok)
       throw new Error(result.message || "Không thể lấy danh sách phân đoạn video");
     return result; // returns BaseDTO[List[VideoSceneDTO]]
+  },
+
+  async getVideoObjects(videoId: string, minConfidence?: number) {
+    const params = new URLSearchParams();
+    if (minConfidence !== undefined) params.append("min_confidence", minConfidence.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/videos/${videoId}/objects${query}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể lấy thông tin đối tượng video");
+    return result; // returns BaseDTO[VideoObjectsDetailResponseDTO]
   },
 
   // Jobs endpoints
@@ -189,6 +238,28 @@ export const api = {
     const result = await response.json();
     if (!response.ok)
       throw new Error(result.message || "Không thể lấy tóm tắt video");
+    return result; // returns BaseDTO[SummaryDTO]
+  },
+
+  async resummarizeVideo(
+    videoId: string,
+    targetLength: SummaryLength,
+    forceRegenerate: boolean = false
+  ) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/summaries/video/${videoId}/resummarize`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          target_length: targetLength,
+          force_regenerate: forceRegenerate,
+        }),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.message || "Không thể chuyển đổi hoặc tái tạo bản tóm tắt");
     return result; // returns BaseDTO[SummaryDTO]
   },
 
@@ -450,10 +521,41 @@ export const api = {
     return result; // returns BaseDTO[BenchmarksData]
   },
 
+  async getObjectDetectionBenchmarks() {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/evaluation/object-detection/benchmarks`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(
+        result.message || "Không thể lấy benchmark Object Detection"
+      );
+    return result; // returns BaseDTO[List[ObjectDetectionBenchmarkItem]]
+  },
+
+  async getEvaluationHistory(videoId: string) {
+    const response = await customFetch(
+      `${CONFIG.API_BASE_URL}/evaluation/history/${videoId}`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(
+        result.message || "Không thể lấy lịch sử đánh giá video"
+      );
+    return result;
+  },
+
   async evaluateVideo(payload: {
     videoId: string;
     referenceTranscript?: string;
     referenceSummary?: string;
+    referenceObjects?: any[];
   }) {
     const response = await customFetch(
       `${CONFIG.API_BASE_URL}/evaluation/evaluate-video`,

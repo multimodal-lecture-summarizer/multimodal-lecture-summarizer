@@ -171,8 +171,8 @@ class CheckpointPersistenceTests(unittest.TestCase):
     # -------------------------------------------------------------------------
     # Case 6: Full Integration — Checkpoint Save & Direct Resume Skips ASR/Visual
     # -------------------------------------------------------------------------
-    def test_case_6_resume_from_checkpoint_skips_asr_and_visual(self):
-        """When checkpoint exists, process_video skips ASR, Visual, Fusion, Quality and resumes from Summarization."""
+    def test_case_6_successful_run_deletes_checkpoint(self):
+        """A finished summary deletes its checkpoint, so the next run starts from ASR."""
         from ai_workers import tasks
 
         dummy_audio = {
@@ -207,6 +207,8 @@ class CheckpointPersistenceTests(unittest.TestCase):
         mock_speaker_mod = ModuleType("ai_workers.modules.audio_v2.speaker")
         mock_speaker_class = MagicMock()
         mock_speaker_class.return_value.process.return_value = dummy_diar
+        mock_speaker_class.return_value.status = "skipped"
+        mock_speaker_class.return_value.reason = "HF_TOKEN is not set"
         mock_speaker_mod.SpeakerDiarizer = mock_speaker_class
 
         mock_scene_mod = ModuleType("ai_workers.modules.visual_v2.scene_detector")
@@ -218,6 +220,13 @@ class CheckpointPersistenceTests(unittest.TestCase):
         mock_semantic_class = MagicMock()
         mock_semantic_class.return_value.process.return_value = dummy_visual
         mock_semantic_mod.SemanticAnalyzer = mock_semantic_class
+
+        mock_object_mod = ModuleType("ai_workers.modules.visual_v2.object_tracker")
+        mock_object_mod.ObjectDetectorTracker = MagicMock()
+        mock_object_mod.ObjectDetectorTracker.return_value.track_video_scenes.return_value = (
+            dummy_visual["scenes"],
+            {"total_unique_tracks": 0},
+        )
 
         mock_timeline_mod = ModuleType("ai_workers.modules.fusion.timeline")
         mock_timeline_class = MagicMock()
@@ -243,6 +252,7 @@ class CheckpointPersistenceTests(unittest.TestCase):
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,
+            "ai_workers.modules.visual_v2.object_tracker": mock_object_mod,
             "ai_workers.modules.fusion.timeline": mock_timeline_mod,
             "ai_workers.modules.fusion.summarizer": mock_summarizer_mod,
             "ai_workers.modules.fusion.quality_postprocess": mock_quality_mod,
@@ -262,31 +272,18 @@ class CheckpointPersistenceTests(unittest.TestCase):
             self.assertEqual(result_1["status"], "done")
             self.assertEqual(result_1["stage"], "completed")
 
-            # Verify Checkpoint was created
+            # A successful summary removes the checkpoint.
             ckpt = self.checkpoint_manager.load_checkpoint(job_id)
-            self.assertIsNotNone(ckpt)
-            self.assertEqual(ckpt["stage"], STAGE_QUALITY_COMPLETE)
+            self.assertIsNone(ckpt)
 
-            # Reset call counts
             mock_audio_class.return_value.process.reset_mock()
-            mock_speaker_class.return_value.process.reset_mock()
-            mock_scene_class.return_value.process.reset_mock()
-            mock_timeline_class.return_value.process.reset_mock()
-            mock_quality_mod.apply_quality_postprocess.reset_mock()
+            mock_summarizer_class.return_value.process.reset_mock()
 
-            # --- RUN 2: Re-run / Resume with checkpoint present ---
+            # --- RUN 2: Same job has nothing to resume, so ASR runs again ---
             result_2 = tasks.process_video.run(job_id, "mock_video.mp4", "hybrid")
             self.assertEqual(result_2["status"], "done")
             self.assertEqual(result_2["stage"], "completed")
-
-            # CRITICAL: Verify ASR, Speaker, Scene, Timeline, and Quality were NOT called
-            mock_audio_class.return_value.process.assert_not_called()
-            mock_speaker_class.return_value.process.assert_not_called()
-            mock_scene_class.return_value.process.assert_not_called()
-            mock_timeline_class.return_value.process.assert_not_called()
-            mock_quality_mod.apply_quality_postprocess.assert_not_called()
-
-            # Summarizer WAS called
+            mock_audio_class.return_value.process.assert_called()
             self.assertTrue(mock_summarizer_class.return_value.process.called)
 
     # -------------------------------------------------------------------------
@@ -307,6 +304,8 @@ class CheckpointPersistenceTests(unittest.TestCase):
         mock_speaker_mod = ModuleType("ai_workers.modules.audio_v2.speaker")
         mock_speaker_mod.SpeakerDiarizer = MagicMock()
         mock_speaker_mod.SpeakerDiarizer.return_value.process.return_value = dummy_audio["segments"]
+        mock_speaker_mod.SpeakerDiarizer.return_value.status = "skipped"
+        mock_speaker_mod.SpeakerDiarizer.return_value.reason = "HF_TOKEN is not set"
 
         mock_scene_mod = ModuleType("ai_workers.modules.visual_v2.scene_detector")
         mock_scene_mod.SceneDetector = MagicMock()
@@ -315,6 +314,13 @@ class CheckpointPersistenceTests(unittest.TestCase):
         mock_semantic_mod = ModuleType("ai_workers.modules.visual_v2.semantic")
         mock_semantic_mod.SemanticAnalyzer = MagicMock()
         mock_semantic_mod.SemanticAnalyzer.return_value.filter_scenes_clip.return_value = dummy_visual["scenes"]
+
+        mock_object_mod = ModuleType("ai_workers.modules.visual_v2.object_tracker")
+        mock_object_mod.ObjectDetectorTracker = MagicMock()
+        mock_object_mod.ObjectDetectorTracker.return_value.track_video_scenes.return_value = (
+            dummy_visual["scenes"],
+            {"total_unique_tracks": 0},
+        )
 
         mock_timeline_mod = ModuleType("ai_workers.modules.fusion.timeline")
         mock_timeline_mod.TimelineBuilder = MagicMock()
@@ -332,6 +338,7 @@ class CheckpointPersistenceTests(unittest.TestCase):
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,
+            "ai_workers.modules.visual_v2.object_tracker": mock_object_mod,
             "ai_workers.modules.fusion.timeline": mock_timeline_mod,
             "ai_workers.modules.fusion.summarizer": mock_summarizer_mod,
             "ai_workers.modules.fusion.quality_postprocess": mock_quality_mod,

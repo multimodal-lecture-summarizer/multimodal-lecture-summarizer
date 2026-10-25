@@ -1,7 +1,8 @@
 import uuid
-from typing import List, Any
-from pydantic import Field
+from typing import List, Any, Optional
+from pydantic import Field, model_validator
 from app.schemas.base import CamelModel
+from app.schemas.video import VideoObjectsSummaryDTO
 
 
 class ChapterDTO(CamelModel):
@@ -81,3 +82,44 @@ class SummaryDTO(SummaryBase):
     key_takeaways: List[Any] = Field(
         default=[], description="List of key takeaways or core events"
     )
+    objects_summary_json: Optional[VideoObjectsSummaryDTO] = Field(
+        default=None, description="Global object tracking and detection summary across the video"
+    )
+    summary_length: Optional[str] = Field(
+        default="medium", description="Active summary length tier: short | medium | detailed"
+    )
+    summary_variants_json: Optional[Any] = Field(
+        default=None, description="Multi-variant summary cache keyed by length tier"
+    )
+    word_count: Optional[int] = Field(
+        default=None, description="Calculated word count of active summary"
+    )
+    reading_time_sec: Optional[int] = Field(
+        default=None, description="Estimated reading time in seconds"
+    )
+    video_title: Optional[str] = Field(
+        default=None, description="Current clean/healed title of the video"
+    )
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_objects_summary(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "objects_summary" in data and "objects_summary_json" not in data:
+                data["objects_summary_json"] = data["objects_summary"]
+            elif "video_objects_summary" in data and "objects_summary_json" not in data:
+                data["objects_summary_json"] = data["video_objects_summary"]
+        return data
+
+
+class ResummarizeRequest(CamelModel):
+    target_length: str = Field(
+        default="medium",
+        description="Target cognitive depth / summary length: short | medium | detailed"
+    )
+    force_regenerate: bool = Field(
+        default=False,
+        description="If True, bypass multi-variant cache and regenerate fresh summary"
+    )
+

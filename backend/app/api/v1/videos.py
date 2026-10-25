@@ -1,15 +1,28 @@
+import logging
 import uuid
 import os
 import time
-from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header, Query
 from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db, SessionLocal
-from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException
+from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException, AppException
 from app.core.config import settings
-from app.core.constants import VideoStatus, JobType, JobStatus, UserRole
+from app.core.constants import VideoStatus, JobType, JobStatus, UserRole, RagStatus
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase, VideoMetadataDTO, VideoSceneDTO, create_pagination_metadata
+from app.schemas import (
+    BaseDTO,
+    VideoDTO,
+    VideoStandardDTO,
+    VideoStandardBase,
+    VideoMetadataDTO,
+    VideoSceneDTO,
+    VideoObjectsDetailResponseDTO,
+    VideoObjectLabelDetailDTO,
+    ObjectOccurrenceSceneDTO,
+    VideoObjectsSummaryDTO,
+    create_pagination_metadata,
+)
 from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
 from app.models.video import Video, VideoStandard, VideoMetadata, VideoScene
@@ -260,13 +273,18 @@ def upload_video(
     background_tasks: BackgroundTasks,
     original_url: Optional[str] = Form(None),
     originalUrl: Optional[str] = Form(None),
-    language: str = Form("en"),
+    language: str = Form("auto"),
+    summary_length: Optional[str] = Form("medium"),
+    summaryLength: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Processes upload request, validates standards, stores metadata, runs background AI tasks."""
     url = original_url or originalUrl
+    source_language = (language or "auto").strip().lower()
+    if source_language not in ("vi", "en"):
+        source_language = "auto"
 
     # 1. Fetch current validation standards
     standard = db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
@@ -409,7 +427,7 @@ def upload_video(
         original_url=url,
         file_path=file_path,
         duration=duration,
-        language=language,
+        language=source_language,
         status=VideoStatus.PENDING,
         title="Đang phân tích tên bài giảng...",
     )
@@ -462,10 +480,19 @@ def upload_video(
 
     try:
         from app.core.celery_app import celery_app
+        user_lang = getattr(current_user, "output_language", "vi") or "vi"
+        valid_lengths = {"short", "medium", "detailed"}
+        chosen_len = (summaryLength or summary_length or "medium").strip().lower()
+        norm_summary_length = chosen_len if chosen_len in valid_lengths else "medium"
         celery_app.send_task(
             "ai_workers.process_video",
             args=[str(db_job.job_id), physical_video_path],
-            kwargs={"config_stack": "hybrid"},
+            kwargs={
+                "config_stack": "hybrid",
+                "output_language": user_lang,
+                "summary_length": norm_summary_length,
+                "source_language": source_language,
+            },
             task_id=str(db_job.job_id)
         )
         # Update statuses for active run
@@ -530,6 +557,30 @@ def list_videos(
         if v.status in [VideoStatus.PENDING, VideoStatus.PROCESSING]:
             for job in v.jobs:
                 sync_job_status(job, db)
+
+    # Auto-heal generic titles for completed videos
+    try:
+        from ai_workers.modules.summarization.summarizer import is_generic_title, clean_video_title
+        from app.models.summary import Summary
+        has_title_updates = False
+        for v in videos:
+            if is_generic_title(v.title) or "|" in (v.title or ""):
+                summary = db.query(Summary).filter(Summary.video_id == v.video_id).first()
+                if summary and (summary.chapters_json or summary.summary_text):
+                    better_title = clean_video_title(
+                        raw_title=v.title,
+                        summary_text=summary.summary_text or "",
+                        lang_code=getattr(v, "language", "vi") or "vi",
+                        chapters=summary.chapters_json or [],
+                        takeaways=summary.key_takeaways_json or [],
+                    )
+                    if better_title and not is_generic_title(better_title):
+                        v.title = better_title
+                        has_title_updates = True
+        if has_title_updates:
+            db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to auto-heal titles in list_videos: {e}")
 
     return BaseDTO(
         success=True,
@@ -654,10 +705,82 @@ def get_video(
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
 
+    # Auto-heal generic or missing video title if summary exists
+    try:
+        from ai_workers.modules.summarization.summarizer import is_generic_title, clean_video_title
+        if is_generic_title(video.title) or "|" in (video.title or ""):
+            from app.models.summary import Summary
+            summary = db.query(Summary).filter(Summary.video_id == video.video_id).first()
+            if summary and (summary.chapters_json or summary.summary_text):
+                better_title = clean_video_title(
+                    raw_title=video.title,
+                    summary_text=summary.summary_text or "",
+                    lang_code=getattr(video, "language", "vi") or "vi",
+                    chapters=summary.chapters_json or [],
+                    takeaways=summary.key_takeaways_json or [],
+                )
+                if better_title and not is_generic_title(better_title):
+                    video.title = better_title
+                    db.commit()
+                    db.refresh(video)
+    except Exception as e:
+        logger.warning(f"Failed to auto-heal video title in get_video: {e}")
+
     return BaseDTO(
         success=True,
         data=VideoDTO.model_validate(video),
         message="Video details retrieved successfully",
+    )
+
+
+@router.post(
+    "/{video_id}/reindex",
+    response_model=BaseDTO[VideoDTO],
+    summary="Rebuild the Q&A index from the stored summary",
+    description="Queues ai_workers.reindex_video. Does not rerun transcription or visual analysis.",
+)
+def reindex_video_index(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Replace the Chroma index for one finished video."""
+    video = (
+        db.query(Video)
+        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
+        .first()
+    )
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    summary = db.query(Summary).filter(Summary.video_id == video_id).first()
+    if not summary:
+        raise NotFoundException(message="Chưa có bản tóm tắt để dựng lại chỉ mục hỏi đáp.")
+
+    current = video.rag_status.value if isinstance(video.rag_status, RagStatus) else str(video.rag_status or "")
+    if current == RagStatus.PROCESSING.value:
+        return BaseDTO(
+            success=True,
+            data=VideoDTO.model_validate(video),
+            message="Chỉ mục hỏi đáp đang được dựng.",
+        )
+
+    video.rag_status = RagStatus.PROCESSING
+    db.commit()
+    try:
+        from app.core.celery_app import celery_app
+        celery_app.send_task("ai_workers.reindex_video", args=[str(video.video_id)])
+    except Exception as exc:
+        video.rag_status = RagStatus.FAILED
+        db.commit()
+        logging.getLogger(__name__).error(f"Failed to enqueue reindex for {video_id}: {exc}")
+        raise AppException(message="Không xếp được hàng dựng lại chỉ mục hỏi đáp.", status_code=503)
+
+    db.refresh(video)
+    return BaseDTO(
+        success=True,
+        data=VideoDTO.model_validate(video),
+        message="Đã xếp hàng dựng lại chỉ mục hỏi đáp.",
     )
 
 
@@ -785,20 +908,20 @@ def get_video_metadata(
     "/{video_id}/scenes",
     response_model=BaseDTO[List[VideoSceneDTO]],
     summary="Get video scenes list",
-    description="Retrieves the segmented list of scenes with timestamps, keyframe images, and transcripts.",
+    description="Retrieves the segmented list of scenes with timestamps, keyframe images, transcripts, and detected objects.",
 )
 def get_video_scenes(
     video_id: uuid.UUID,
+    object_label: Optional[str] = Query(None, description="Lọc các phân cảnh có xuất hiện nhãn đối tượng này"),
+    min_confidence: Optional[float] = Query(None, description="Ngưỡng độ tin cậy tối thiểu của đối tượng"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Retrieve video scenes."""
-    # Check that video exists and belongs to current user
-    video = (
-        db.query(Video)
-        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
-        .first()
-    )
+    """Retrieve video scenes with optional object detection filtering."""
+    query = db.query(Video).filter(Video.video_id == video_id)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(Video.user_id == current_user.user_id)
+    video = query.first()
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
 
@@ -809,10 +932,180 @@ def get_video_scenes(
         .all()
     )
 
+    if object_label or min_confidence is not None:
+        target_label = object_label.strip().lower() if object_label else None
+        filtered_scenes = []
+        for s in scenes:
+            det = s.detected_objects_json or {}
+            counts = s.object_counts_json or {}
+            matched = False
+
+            # 1. Check keyframe_bboxes
+            for box in (det.get("keyframe_bboxes") or []):
+                lbl = str(box.get("label", "")).strip().lower()
+                conf = float(box.get("confidence") or 0.0)
+                label_ok = (target_label is None) or (lbl == target_label)
+                conf_ok = (min_confidence is None) or (conf >= min_confidence)
+                if label_ok and conf_ok:
+                    matched = True
+                    break
+
+            # 2. Check tracks_summary
+            if not matched:
+                for trk in (det.get("tracks_summary") or []):
+                    lbl = str(trk.get("label", "")).strip().lower()
+                    conf = float(trk.get("avg_confidence") or 0.0)
+                    label_ok = (target_label is None) or (lbl == target_label)
+                    conf_ok = (min_confidence is None) or (conf >= min_confidence)
+                    if label_ok and conf_ok:
+                        matched = True
+                        break
+
+            # 3. Check object_counts fallback
+            if not matched and min_confidence is None and target_label is not None:
+                for lbl, cnt in counts.items():
+                    if str(lbl).strip().lower() == target_label and cnt > 0:
+                        matched = True
+                        break
+
+            if matched:
+                filtered_scenes.append(s)
+
+        scenes = filtered_scenes
+
     return BaseDTO(
         success=True,
         data=[VideoSceneDTO.model_validate(s) for s in scenes],
         message="Video scenes retrieved successfully",
+    )
+
+
+@router.get(
+    "/{video_id}/objects",
+    response_model=BaseDTO[VideoObjectsDetailResponseDTO],
+    summary="Get video detected objects aggregation and occurrences",
+    description="Aggregates all unique detected object labels with scene indices, timestamps, and confidence scores.",
+)
+def get_video_objects(
+    video_id: uuid.UUID,
+    min_confidence: Optional[float] = Query(None, description="Ngưỡng độ tin cậy tối thiểu để tổng hợp"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retrieve aggregated unique object labels and scene occurrences across the video."""
+    query = db.query(Video).filter(Video.video_id == video_id)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(Video.user_id == current_user.user_id)
+    video = query.first()
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    summary = db.query(Summary).filter(Summary.video_id == video_id).first()
+    objects_summary_raw = getattr(summary, "objects_summary_json", None) if summary else None
+
+    scenes = (
+        db.query(VideoScene)
+        .filter(VideoScene.video_id == video_id)
+        .order_by(VideoScene.scene_index.asc())
+        .all()
+    )
+
+    label_map: Dict[str, Dict[str, Any]] = {}
+
+    for s in scenes:
+        det = s.detected_objects_json or {}
+        counts = s.object_counts_json or {}
+        scene_labels_seen: Dict[str, Dict[str, Any]] = {}
+
+        # Inspect keyframe_bboxes
+        for box in (det.get("keyframe_bboxes") or []):
+            lbl = str(box.get("label", "")).strip().lower()
+            if not lbl:
+                continue
+            conf = float(box.get("confidence") or 0.0)
+            if min_confidence is not None and conf < min_confidence:
+                continue
+            if lbl not in scene_labels_seen:
+                scene_labels_seen[lbl] = {"count": 1, "max_conf": conf}
+            else:
+                scene_labels_seen[lbl]["count"] += 1
+                scene_labels_seen[lbl]["max_conf"] = max(scene_labels_seen[lbl]["max_conf"], conf)
+
+        # Inspect tracks_summary
+        for trk in (det.get("tracks_summary") or []):
+            lbl = str(trk.get("label", "")).strip().lower()
+            if not lbl:
+                continue
+            conf = float(trk.get("avg_confidence") or 0.0)
+            if min_confidence is not None and conf < min_confidence:
+                continue
+            if lbl not in scene_labels_seen:
+                scene_labels_seen[lbl] = {"count": 1, "max_conf": conf}
+            else:
+                scene_labels_seen[lbl]["max_conf"] = max(scene_labels_seen[lbl]["max_conf"], conf)
+
+        # Fallback to counts if no detections parsed yet
+        for lbl_raw, cnt in counts.items():
+            lbl = str(lbl_raw).strip().lower()
+            if not lbl or cnt <= 0:
+                continue
+            if lbl not in scene_labels_seen and min_confidence is None:
+                scene_labels_seen[lbl] = {"count": cnt, "max_conf": 0.0}
+
+        # Merge into global label_map
+        for lbl, scene_info in scene_labels_seen.items():
+            if lbl not in label_map:
+                label_map[lbl] = {
+                    "total_count": 0,
+                    "scenes": [],
+                }
+            label_map[lbl]["total_count"] += scene_info["count"]
+            label_map[lbl]["scenes"].append(
+                ObjectOccurrenceSceneDTO(
+                    scene_index=s.scene_index,
+                    start_seconds=s.start_seconds,
+                    end_seconds=s.end_seconds,
+                    count=scene_info["count"],
+                    max_confidence=round(scene_info["max_conf"], 3),
+                    keyframe_url=s.keyframe_url,
+                )
+            )
+
+    label_details: List[VideoObjectLabelDetailDTO] = []
+    for lbl, data in label_map.items():
+        label_details.append(
+            VideoObjectLabelDetailDTO(
+                label=lbl,
+                total_count=data["total_count"],
+                scenes_count=len(data["scenes"]),
+                scenes=data["scenes"],
+            )
+        )
+
+    # Sort: most scenes first, then highest total count, then alphabetical
+    label_details.sort(key=lambda x: (x.scenes_count, x.total_count), reverse=True)
+
+    summary_dto = (
+        VideoObjectsSummaryDTO.model_validate(objects_summary_raw)
+        if objects_summary_raw and isinstance(objects_summary_raw, dict)
+        else VideoObjectsSummaryDTO(
+            total_unique_tracks=sum(d.total_count for d in label_details),
+            label_distribution={d.label: d.total_count for d in label_details},
+            most_frequent_objects=[d.label for d in label_details[:5]],
+        )
+    )
+
+    response_dto = VideoObjectsDetailResponseDTO(
+        video_id=video_id,
+        total_unique_objects=len(label_details),
+        summary=summary_dto,
+        objects=label_details,
+    )
+
+    return BaseDTO(
+        success=True,
+        data=response_dto,
+        message="Video objects aggregation retrieved successfully",
     )
 
 

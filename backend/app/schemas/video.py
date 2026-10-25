@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from pydantic import Field, HttpUrl, model_validator
 from app.schemas.base import CamelModel
 from app.core.constants import VideoStatus, RagStatus
@@ -24,6 +24,60 @@ class VideoMetadataDTO(VideoMetadataBase):
     )
 
 
+class KeyframeBBoxDTO(CamelModel):
+    track_id: Optional[int] = Field(None, description="Unique tracker ID for this object instance")
+    label: str = Field(..., description="Object label name (e.g. person, laptop)")
+    confidence: float = Field(..., description="Detection confidence score (0.0 - 1.0)")
+    bbox_norm: List[float] = Field(..., description="Normalized bounding box [x1, y1, x2, y2] in range [0.0, 1.0]")
+
+
+class ObjectTrackSummaryDTO(CamelModel):
+    track_id: int = Field(..., description="Unique tracker ID within the scene/video")
+    label: str = Field(..., description="Object label name (e.g. person, laptop)")
+    avg_confidence: float = Field(..., description="Average detection confidence across sampled frames")
+    first_seen_sec: float = Field(..., description="Timestamp in seconds when object was first detected")
+    last_seen_sec: float = Field(..., description="Timestamp in seconds when object was last detected")
+    frames_appeared: int = Field(..., description="Number of sampled frames where this object was tracked")
+    sample_bbox_norm: Optional[List[float]] = Field(None, description="Sample representative bounding box [x1, y1, x2, y2]")
+    in_keyframe: bool = Field(default=False, description="Whether this tracked object is present in the representative keyframe")
+    best_timestamp_sec: Optional[float] = Field(None, description="Timestamp in seconds of clearest detection in the scene")
+
+
+class SceneDetectedObjectsDTO(CamelModel):
+    keyframe_bboxes: List[KeyframeBBoxDTO] = Field(default=[], description="Bounding boxes detected on the keyframe image")
+    tracks_summary: List[ObjectTrackSummaryDTO] = Field(default=[], description="Continuous object tracks throughout the scene")
+
+
+class VideoObjectsSummaryDTO(CamelModel):
+    total_unique_tracks: int = Field(default=0, description="Total unique object tracks across the video")
+    label_distribution: dict[str, int] = Field(default={}, description="Count of unique tracks per object label")
+    most_frequent_objects: List[str] = Field(default=[], description="Ranked list of most frequent object labels")
+    sample_fps_used: Optional[int] = Field(None, description="Sampling FPS used during object tracking")
+
+
+class ObjectOccurrenceSceneDTO(CamelModel):
+    scene_index: int = Field(..., description="1-indexed sequence number of the scene")
+    start_seconds: float = Field(..., description="Start timestamp of the scene in seconds")
+    end_seconds: float = Field(..., description="End timestamp of the scene in seconds")
+    count: int = Field(default=1, description="Number of instances of this object in this scene")
+    max_confidence: float = Field(default=0.0, description="Highest detection confidence in this scene")
+    keyframe_url: Optional[str] = Field(None, description="Keyframe image URL for quick thumbnail preview")
+
+
+class VideoObjectLabelDetailDTO(CamelModel):
+    label: str = Field(..., description="Object label name (e.g. person, laptop)")
+    total_count: int = Field(..., description="Total unique appearances or occurrences in video")
+    scenes_count: int = Field(..., description="Number of scenes where this object appears")
+    scenes: List[ObjectOccurrenceSceneDTO] = Field(default=[], description="List of scenes containing this object")
+
+
+class VideoObjectsDetailResponseDTO(CamelModel):
+    video_id: uuid.UUID = Field(..., description="Video UUID")
+    total_unique_objects: int = Field(..., description="Total number of unique object labels detected")
+    summary: Optional[VideoObjectsSummaryDTO] = Field(None, description="Global object summary metrics")
+    objects: List[VideoObjectLabelDetailDTO] = Field(default=[], description="Per-label breakdown with scene timestamps")
+
+
 class VideoSceneBase(CamelModel):
     scene_index: int = Field(..., description="Sequence number of the scene (1-indexed)")
     start_seconds: float = Field(..., description="Scene start time in seconds")
@@ -36,6 +90,22 @@ class VideoSceneBase(CamelModel):
     keyframe_url: str = Field(..., description="Publicly accessible URL of the keyframe image")
     caption: str = Field(..., description="AI description of the keyframe slide/image")
     script: Optional[str] = Field(None, description="The transcribed script text of this scene")
+    detected_objects_json: Optional[SceneDetectedObjectsDTO] = Field(
+        None, description="Detailed detected objects and tracks in this scene"
+    )
+    object_counts_json: Optional[dict[str, int]] = Field(
+        None, description="Unique object counts per label in this scene"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_scene_objects(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "detected_objects" in data and "detected_objects_json" not in data:
+                data["detected_objects_json"] = data["detected_objects"]
+            if "object_counts" in data and "object_counts_json" not in data:
+                data["object_counts_json"] = data["object_counts"]
+        return data
 
 
 class VideoSceneDTO(VideoSceneBase):

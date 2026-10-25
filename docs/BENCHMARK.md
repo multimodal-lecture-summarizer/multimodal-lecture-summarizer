@@ -343,4 +343,4 @@ Sau khi điền bảng, tổng hợp:
 | `benchmarks/results_template.csv` | Template ghi kết quả |
 | `src/mls/benchmarks/metrics.py` | Dataclass metrics |
 | `docs/STACK_COMPARISON.md` | So sánh stack |
-| `docs/ARCHITECTURE.md` | Kiến trúc pipeline |
+| `docs/current-system-architecture.md` | Kiến trúc pipeline hiện tại |

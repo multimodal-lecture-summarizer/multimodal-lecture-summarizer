@@ -96,7 +96,7 @@ const formatTime = (secs: number) => {
 
 const getSystemLogs = (job: any) => {
   const startStr = job.startedAt ? parseUTCDate(job.startedAt)!.toISOString() : new Date().toISOString();
-  let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...`;
+  let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo Faster-Whisper để nhận dạng giọng nói...`;
   
   const isCompleted = job.status === 'completed' || job.status === 'done' || job.status === 'SUCCESS';
   const isFailed = job.status === 'failed' || job.status === 'FAILED';
@@ -133,7 +133,7 @@ const getSystemLogs = (job: any) => {
       logs += `\n[INFO] Tiến trình RAG: Lưu trữ vector embeddings vào ChromaDB...`;
     }
   } else {
-    logs += `\n[INFO] Đang chạy tác vụ WhisperX và CLIP...`;
+    logs += `\n[INFO] Đang chạy Faster-Whisper và CLIP...`;
   }
   
   return logs;

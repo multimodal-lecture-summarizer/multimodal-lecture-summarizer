@@ -198,7 +198,7 @@ không khớp, cần tải lại Git LFS hoặc khôi phục đúng model checko
 - Không thể cam kết toán học rằng CPU và mọi GPU sẽ luôn sinh cùng từng token. Vì vậy CPU là chuẩn
   đối chiếu đa nền tảng.
 - Các dependency ngoài đường suy luận Florence-2 vẫn có thể có hợp đồng phiên bản riêng cho
-  WhisperX, PaddleOCR hoặc các stage khác.
+  Faster-Whisper, PaddleOCR hoặc các stage khác.
 - Golden test kiểm tra một đầu vào cố định. Nó bảo vệ runtime khỏi drift rõ ràng nhưng không thay
   thế bộ benchmark caption trên tập keyframe thực tế.
 - Sau khi cập nhật package hoặc model asset có chủ đích, cần chạy lại golden test trên cả Windows

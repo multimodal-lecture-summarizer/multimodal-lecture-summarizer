@@ -7,7 +7,8 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Shield, Lock, Video, CheckCircle2, 
-  AlertCircle, KeyRound, Mail, Settings 
+  AlertCircle, KeyRound, Mail, Settings,
+  Globe, Languages, Sparkles, Check, Loader2
 } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
@@ -18,7 +19,10 @@ export const ProfilePage: React.FC = () => {
     role: string;
     userId: string;
     isActive: boolean;
+    outputLanguage?: string;
   } | null>(null);
+  const [outputLanguage, setOutputLanguage] = useState<string>("vi");
+  const [savingLanguage, setSavingLanguage] = useState<boolean>(false);
   const [videoCount, setVideoCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
@@ -31,18 +35,58 @@ export const ProfilePage: React.FC = () => {
     text: string;
   } | null>(null);
 
+  const languageOptions = [
+    {
+      id: "vi",
+      label: t("profile.output_language_vi"),
+      code: "VI",
+      flag: "🇻🇳",
+      desc: t("profile.output_language_vi_desc"),
+    },
+    {
+      id: "en",
+      label: t("profile.output_language_en"),
+      code: "EN",
+      flag: "🇺🇸",
+      desc: t("profile.output_language_en_desc"),
+    },
+  ];
+
+  const handleLanguageChange = async (newLang: string) => {
+    if (newLang === outputLanguage && !savingLanguage) return;
+    setOutputLanguage(newLang);
+    setSavingLanguage(true);
+    try {
+      const res = await api.updatePreferences({ outputLanguage: newLang });
+      if (res.success) {
+        toast.success(t("profile.output_language_saved"), t("common.success"));
+        if (profile) {
+          setProfile({ ...profile, outputLanguage: newLang });
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to update output language preference:", err);
+      toast.error(err.message || t("common.error"), t("common.error"));
+    } finally {
+      setSavingLanguage(false);
+    }
+  };
+
   useEffect(() => {
     // 1. Fetch user profile
     api
       .getMe()
       .then((res) => {
         if (res.success && res.data) {
+          const userLang = res.data.outputLanguage || "vi";
           setProfile({
             email: res.data.email,
             role: res.data.role,
             userId: res.data.userId,
             isActive: res.data.isActive,
+            outputLanguage: userLang,
           });
+          setOutputLanguage(userLang);
         }
       })
       .catch((err) => {
@@ -301,6 +345,112 @@ export const ProfilePage: React.FC = () => {
             </form>
           </motion.div>
         </div>
+
+        {/* Output Language Configuration Box */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="glass-panel rounded-[2rem] p-8 shadow-sm border border-white/60 space-y-6"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-indigo-500/20 text-primary flex items-center justify-center shadow-sm">
+                <Globe size={22} />
+              </div>
+              <div>
+                <h3 className="font-heading text-lg font-bold text-slate-900 flex items-center gap-2">
+                  {t("profile.output_language_title")}
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
+                    <Sparkles size={11} />
+                    AI Config
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t("profile.output_language_desc")}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {savingLanguage ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-primary font-medium bg-primary/5 px-3 py-1.5 rounded-full border border-primary/20">
+                  <Loader2 size={13} className="animate-spin" />
+                  Đang lưu...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/60 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {t("profile.output_language_active")}: {outputLanguage === "vi" ? "Tiếng Việt" : "English"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Dynamic Language Options Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {languageOptions.map((opt) => {
+              const isSelected = outputLanguage === opt.id;
+              return (
+                <motion.button
+                  key={opt.id}
+                  type="button"
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={() => handleLanguageChange(opt.id)}
+                  disabled={savingLanguage}
+                  className={`text-left p-5 rounded-2xl border-2 transition-all duration-200 relative flex flex-col justify-between gap-3 ${
+                    isSelected
+                      ? "border-primary bg-gradient-to-br from-primary/[0.07] via-white to-indigo-50/50 shadow-md shadow-primary/10"
+                      : "border-slate-200/80 bg-white/70 hover:border-slate-300 hover:bg-white shadow-xs"
+                  }`}
+                >
+                  <div className="flex items-start justify-between w-full">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-xl shrink-0">
+                        {opt.flag}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-heading font-black text-slate-900 text-base tracking-tight">
+                            {opt.label}
+                          </span>
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${
+                            isSelected ? "bg-primary text-white border-primary" : "bg-slate-100 text-slate-600 border-slate-200"
+                          }`}>
+                            {opt.code}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          {opt.id === "vi" ? "Mặc định hệ thống" : "Universal format"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 mt-0.5">
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center shadow-xs">
+                          <Check size={14} strokeWidth={3} />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 bg-white/80" />
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
+                    {opt.desc}
+                  </p>
+                </motion.button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 bg-slate-50/80 rounded-xl p-3.5 border border-slate-100 gap-2">
+            <span className="flex items-center gap-2">
+              <Languages size={15} className="text-slate-400 shrink-0" />
+              <span>Cấu hình này tự động đồng bộ hóa vào tài khoản và áp dụng cho tất cả lượt phân tích bài giảng tiếp theo.</span>
+            </span>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

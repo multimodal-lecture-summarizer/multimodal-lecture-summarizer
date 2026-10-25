@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List, Dict, Any, Optional
 import chromadb
 from app.core.config import settings
@@ -31,6 +32,19 @@ def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, ap
     return False
 
 
+def resolve_persist_dir(configured: Optional[str] = None) -> str:
+    """Shared on-disk index used when the Chroma server is not running."""
+    service_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(service_dir, "..", "..", ".."))
+    default_dir = os.path.join(project_root, "cache", "chroma")
+    raw = (configured or "").strip()
+    if not raw or raw.replace("\\", "/") in ("./cache/chroma", "cache/chroma"):
+        return default_dir
+    if os.path.isabs(raw):
+        return raw
+    return os.path.abspath(os.path.join(project_root, raw))
+
+
 class ChromaDBService:
     def __init__(self):
         self.host = settings.CHROMADB_HOST
@@ -40,242 +54,235 @@ class ChromaDBService:
         self.tenant = settings.CHROMADB_TENANT
         self.database = settings.CHROMADB_DATABASE
         self.collection_name = settings.CHROMADB_COLLECTION_NAME
+        self.persist_dir = resolve_persist_dir(getattr(settings, "CHROMADB_PERSIST_DIR", ""))
         self.enabled = False
         self.client = None
         self.collection = None
         self._initialized = False
+        self._embedding_function = None
 
-        # Dict mock vector store to fallback on connection errors
-        self.mock_store: Dict[str, List[Dict[str, Any]]] = {}
+    def _collection_kwargs(self) -> dict:
+        kwargs = {"name": self.collection_name}
+        if self._embedding_function is not None:
+            kwargs["embedding_function"] = self._embedding_function
+        return kwargs
+
+    def _open_remote(self) -> None:
+        if self.api_key:
+            self.client = chromadb.CloudClient(
+                tenant=self.tenant,
+                database=self.database,
+                api_key=self.api_key,
+                cloud_host=self.host or "api.trychroma.com",
+                cloud_port=self.port if self.port else 443,
+                enable_ssl=self.ssl,
+            )
+        else:
+            self.client = chromadb.HttpClient(
+                host=self.host,
+                port=self.port if self.port else 8000,
+                ssl=self.ssl,
+                tenant=self.tenant,
+                database=self.database,
+            )
+        self.collection = self.client.get_or_create_collection(**self._collection_kwargs())
+        self.enabled = True
+
+    def _open_persistent(self) -> None:
+        os.makedirs(self.persist_dir, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=self.persist_dir)
+        self.collection = self.client.get_or_create_collection(**self._collection_kwargs())
+        self.enabled = True
+
+    def _connect_once(self) -> bool:
+        uvicorn_logger = logging.getLogger("uvicorn.error")
+        if is_chromadb_responsive(self.host, self.port, self.ssl, self.api_key, timeout=2.0):
+            try:
+                self._open_remote()
+                uvicorn_logger.info(f"Connected to ChromaDB at {self.host}:{self.port} successfully.")
+                return True
+            except Exception as exc:
+                uvicorn_logger.warning(
+                    f"ChromaDB at {self.host}:{self.port} responded but the client failed: {exc}"
+                )
+
+        try:
+            self._open_persistent()
+            uvicorn_logger.info(f"Using on-disk Chroma index at {self.persist_dir}.")
+            return True
+        except Exception as exc:
+            self.enabled = False
+            self.client = None
+            self.collection = None
+            uvicorn_logger.warning(
+                f"ChromaDB is unavailable at {self.host}:{self.port} and {self.persist_dir}: {exc}. "
+                "Index writes will fail instead of using an in-memory store."
+            )
+            return False
 
     def _ensure_connection(self):
         if self._initialized:
             return
+        self._connect_once()
         self._initialized = True
-        uvicorn_logger = logging.getLogger("uvicorn.error")
-        
-        # Verify database endpoint responsiveness to avoid library hang
-        if not is_chromadb_responsive(self.host, self.port, self.ssl, self.api_key, timeout=2.0):
-            uvicorn_logger.warning(
-                f"ChromaDB endpoint at {self.host}:{self.port} is not responsive. "
-                "Falling back to local in-memory Mock store."
-            )
-            self.enabled = False
-            return
 
-        try:
-            if self.api_key:
-                # Use CloudClient for Chroma Cloud connection
-                self.client = chromadb.CloudClient(
-                    tenant=self.tenant,
-                    database=self.database,
-                    api_key=self.api_key,
-                    cloud_host=self.host or "api.trychroma.com",
-                    cloud_port=self.port if self.port else 443,
-                    enable_ssl=self.ssl
-                )
+    def _clean_metadata(self, video_id: str, metadata: dict) -> dict:
+        clean: Dict[str, Any] = {"video_id": str(video_id)}
+        for key, value in (metadata or {}).items():
+            if key == "video_id":
+                continue
+            if isinstance(value, bool) or isinstance(value, (int, float, str)):
+                clean[key] = value
+            elif value is None:
+                clean[key] = ""
             else:
-                # Use HttpClient for standard connection
-                self.client = chromadb.HttpClient(
-                    host=self.host,
-                    port=self.port if self.port else 8000,
-                    ssl=self.ssl,
-                    tenant=self.tenant,
-                    database=self.database
-                )
-            # Try to get or create collection to verify connection
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name
+                clean[key] = str(value)
+        clean.setdefault("start_seconds", 0.0)
+        clean.setdefault("end_seconds", 0.0)
+        clean.setdefault("timecode", "")
+        clean.setdefault("keyframe_url", "")
+        return clean
+
+    def _chunk_id(self, video_id: str, metadata: dict, seen: Dict[str, int]) -> str:
+        start = metadata.get("start_seconds") or 0.0
+        try:
+            start_ms = int(round(float(start) * 1000))
+        except (TypeError, ValueError):
+            start_ms = 0
+        base = f"{video_id}:{start_ms}"
+        count = seen.get(base, 0)
+        seen[base] = count + 1
+        return base if count == 0 else f"{base}:{count}"
+
+    def replace_transcript_chunks(
+        self, video_id: str, chunks: List[str], metadatas: List[dict]
+    ) -> bool:
+        """Delete this video's chunks, write the new set, and require the stored count to match."""
+        self._ensure_connection()
+        video_id_str = str(video_id)
+        if not self.enabled or self.collection is None:
+            logger.error(f"ChromaDB is unavailable. Refusing to store chunks for video {video_id_str}.")
+            return False
+        if not chunks or len(chunks) != len(metadatas):
+            logger.error(f"Refusing to index video {video_id_str}: chunk and metadata counts differ or are empty.")
+            return False
+
+        clean_metas = [self._clean_metadata(video_id_str, meta) for meta in metadatas]
+        seen: Dict[str, int] = {}
+        ids = [self._chunk_id(video_id_str, meta, seen) for meta in clean_metas]
+        try:
+            self.collection.delete(where={"video_id": video_id_str})
+            self.collection.upsert(ids=ids, documents=list(chunks), metadatas=clean_metas)
+            stored = self.collection.get(where={"video_id": video_id_str}, include=[])
+            stored_count = len((stored or {}).get("ids") or [])
+        except Exception as exc:
+            logger.error(f"Error replacing Chroma chunks for video {video_id_str}: {exc}")
+            return False
+
+        if stored_count != len(chunks):
+            logger.error(
+                f"Chroma count mismatch for video {video_id_str}: stored {stored_count}, expected {len(chunks)}."
             )
-            self.enabled = True
-            uvicorn_logger.info(
-                f"Connected to ChromaDB at {self.host}:{self.port} successfully."
-            )
-        except Exception as e:
-            uvicorn_logger.warning(
-                f"Failed to connect to ChromaDB at {self.host}:{self.port}: {e}. "
-                "Falling back to local in-memory Mock store."
-            )
-            self.enabled = False
+            return False
+        logger.info(f"Replaced {stored_count} Chroma chunks for video {video_id_str}.")
+        return True
 
     def add_transcript_chunks(
         self, video_id: str, chunks: List[str], metadatas: List[dict]
     ) -> bool:
-        """
-        Adds text chunks to the vector database.
-        If ChromaDB is disabled, stores them in the in-memory mock store.
-        """
-        self._ensure_connection()
-        video_id_str = str(video_id)
-        if self.enabled and self.collection:
-            try:
-                ids = [f"{video_id_str}_chunk_{i}" for i in range(len(chunks))]
-                # ChromaDB client will automatically handle default embeddings if not supplied
-                self.collection.add(
-                    documents=chunks,
-                    metadatas=metadatas,
-                    ids=ids,
-                )
-                logger.info(
-                    f"Successfully added {len(chunks)} chunks to ChromaDB for video {video_id_str}"
-                )
-                return True
-            except Exception as e:
-                logger.error(f"Error adding chunks to ChromaDB: {e}")
-                # Fallback to mock store
-                pass
-
-        # In-memory store fallback
-        self.mock_store[video_id_str] = [
-            {"document": chunk, "metadata": meta}
-            for chunk, meta in zip(chunks, metadatas)
-        ]
-        logger.info(
-            f"[Mock ChromaDB] Stored {len(chunks)} chunks in-memory for video {video_id_str}"
-        )
-        return True
+        """Replace the video index. A durable write is the only successful result."""
+        return self.replace_transcript_chunks(video_id, chunks, metadatas)
 
     def query_similar_chunks_with_metadata(
         self, video_id: str, query: str, limit: int = 4
     ) -> List[Dict[str, Any]]:
-        """
-        Queries the vector database for text chunks relevant to query, returning document text and metadata.
-        """
+        """Return stored chunks for this video. A missing index returns an empty list."""
         self._ensure_connection()
         video_id_str = str(video_id)
-        if self.enabled and self.collection:
-            try:
-                results = self.collection.query(
-                    query_texts=[query],
-                    n_results=limit,
-                    where={"video_id": video_id_str},
-                )
-                if results and "documents" in results and results["documents"]:
-                    docs = results["documents"][0]
-                    metas = results.get("metadatas", [[]])[0] if results.get("metadatas") else []
-                    items = []
-                    for doc, meta in zip(docs, metas):
-                        items.append({"document": doc, "metadata": meta or {}})
-                    logger.info(f"Retrieved {len(items)} chunks with metadata from ChromaDB for query: '{query}'")
-                    return items
-            except Exception as e:
-                logger.error(f"Error querying ChromaDB with metadata: {e}")
+        if not self.enabled or self.collection is None:
+            logger.error(f"ChromaDB is unavailable. No chunks returned for video {video_id_str}.")
+            return []
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=limit,
+                where={"video_id": video_id_str},
+            )
+        except Exception as exc:
+            logger.error(f"Error querying ChromaDB with metadata: {exc}")
+            return []
 
-        # In-memory mock retrieval
-        logger.info(f"[Mock ChromaDB] Querying in-memory store for video {video_id_str} with query: '{query}'")
-        chunks = self.mock_store.get(video_id_str, [])
-        if not chunks:
-            return [
-                {
-                    "document": "[00:00] Lời giảng: WhisperX cung cấp timestamp mức từ chính xác bằng mô hình ngữ âm.",
-                    "metadata": {"video_id": video_id_str, "start_seconds": 0.0, "end_seconds": 60.0, "timecode": "00:00", "keyframe_url": ""}
-                },
-                {
-                    "document": "[01:00] Lời giảng: PySceneDetect phân tách video dựa trên sự thay đổi màu sắc và pixel.",
-                    "metadata": {"video_id": video_id_str, "start_seconds": 60.0, "end_seconds": 120.0, "timecode": "01:00", "keyframe_url": ""}
-                },
-                {
-                    "document": "[02:00] Lời giảng: CLIP trích xuất đặc trưng hình ảnh slide và đo độ tương đồng văn bản.",
-                    "metadata": {"video_id": video_id_str, "start_seconds": 120.0, "end_seconds": 180.0, "timecode": "02:00", "keyframe_url": ""}
-                }
-            ]
-
-        query_words = set(query.lower().split())
-        scored_chunks = []
-        for chunk in chunks:
-            doc_lower = chunk["document"].lower()
-            score = sum(1 for word in query_words if word in doc_lower)
-            scored_chunks.append((score, chunk))
-
-        scored_chunks.sort(key=lambda x: x[0], reverse=True)
-        return [chunk for score, chunk in scored_chunks[:limit]]
+        documents = (results or {}).get("documents") or []
+        metadatas = (results or {}).get("metadatas") or []
+        docs = documents[0] if documents else []
+        metas = metadatas[0] if metadatas else []
+        items = []
+        for doc, meta in zip(docs, metas):
+            if not doc:
+                continue
+            items.append({"document": doc, "metadata": meta or {}})
+        logger.info(f"Retrieved {len(items)} chunks for video {video_id_str}.")
+        return items
 
     def query_similar_chunks(self, video_id: str, query: str, limit: int = 3) -> List[str]:
-        """
-        Queries the vector database for text chunks relevant to the user query (plain text).
-        """
+        """Queries the vector database for text chunks relevant to the user query (plain text)."""
         items = self.query_similar_chunks_with_metadata(video_id, query, limit)
         return [item["document"] for item in items]
 
+    def count_transcript_chunks(self, video_id: Any) -> int:
+        """Return the number of chunks stored for a video, or -1 when Chroma cannot be read."""
+        self._ensure_connection()
+        if not self.enabled or self.collection is None:
+            return -1
+        try:
+            stored = self.collection.get(where={"video_id": str(video_id)}, include=[])
+            return len((stored or {}).get("ids") or [])
+        except Exception as exc:
+            logger.error(f"Error counting Chroma chunks for video {video_id}: {exc}")
+            return -1
+
     def delete_transcript_chunks(self, video_id: Any) -> bool:
-        """
-        Deletes all transcript chunks associated with a video_id from ChromaDB or mock store.
-        """
+        """Deletes all transcript chunks associated with a video_id from ChromaDB."""
         self._ensure_connection()
         video_id_str = str(video_id)
-        deleted = False
-        if self.enabled and self.collection:
-            try:
-                self.collection.delete(where={"video_id": video_id_str})
-                logger.info(f"Successfully deleted chunks from ChromaDB for video {video_id_str}")
-                deleted = True
-            except Exception as e:
-                logger.error(f"Error deleting chunks from ChromaDB: {e}")
-
-        if video_id_str in self.mock_store:
-            self.mock_store.pop(video_id_str, None)
-            logger.info(f"[Mock ChromaDB] Deleted chunks in-memory for video {video_id_str}")
-            deleted = True
-
-        return deleted
+        if not self.enabled or self.collection is None:
+            logger.error(f"ChromaDB is unavailable. Could not delete chunks for video {video_id_str}.")
+            return False
+        try:
+            self.collection.delete(where={"video_id": video_id_str})
+            logger.info(f"Successfully deleted chunks from ChromaDB for video {video_id_str}")
+            return True
+        except Exception as exc:
+            logger.error(f"Error deleting chunks from ChromaDB: {exc}")
+            return False
 
     def verify_connection(self, retries: int = 5, delay: float = 2.0):
         """
-        Verifies connection to ChromaDB on startup, with retries.
-        If it fails:
-        - If APP_ENV == "development", falls back to in-memory Mock store (setting enabled=False).
-        - If APP_ENV != "development", raises RuntimeError to prevent startup.
+        Verifies a durable Chroma index on startup.
+        Uses the Chroma server when it responds, otherwise the shared on-disk index.
+        A non-development process stops if neither store can be opened.
         """
         import time
         last_error = None
         uvicorn_logger = logging.getLogger("uvicorn.error")
         for attempt in range(1, retries + 1):
             try:
-                
-                # Verify database endpoint responsiveness to avoid library hang
-                if not is_chromadb_responsive(self.host, self.port, self.ssl, self.api_key, timeout=2.0):
-                    raise RuntimeError(f"ChromaDB endpoint at {self.host}:{self.port} is not responsive.")
+                if self._connect_once():
+                    self._initialized = True
+                    return
+                last_error = RuntimeError("ChromaDB server and on-disk index are both unavailable.")
+            except Exception as exc:
+                last_error = exc
+                uvicorn_logger.warning(f"ChromaDB connection attempt {attempt} failed: {exc}")
+            if attempt < retries:
+                time.sleep(delay)
 
-                # Try to connect
-                if self.api_key:
-                    # Use CloudClient for Chroma Cloud connection
-                    self.client = chromadb.CloudClient(
-                        tenant=self.tenant,
-                        database=self.database,
-                        api_key=self.api_key,
-                        cloud_host=self.host or "api.trychroma.com",
-                        cloud_port=self.port if self.port else 443,
-                        enable_ssl=self.ssl
-                    )
-                else:
-                    # Use HttpClient for standard connection
-                    self.client = chromadb.HttpClient(
-                        host=self.host,
-                        port=self.port if self.port else 8000,
-                        ssl=self.ssl,
-                        tenant=self.tenant,
-                        database=self.database
-                    )
-                self.collection = self.client.get_or_create_collection(
-                    name=self.collection_name
-                )
-                self.enabled = True
-                self._initialized = True
-                uvicorn_logger.info(f"Connected to ChromaDB at {self.host}:{self.port} successfully.")
-                return
-            except Exception as e:
-                last_error = e
-                uvicorn_logger.warning(f"ChromaDB connection attempt {attempt} failed: {e}")
-                if attempt < retries:
-                    time.sleep(delay)
-
-        # Failed after all retries
-        self._initialized = True # Mark as initialized so _ensure_connection won't try again
+        self._initialized = True
         self.enabled = False
         if settings.APP_ENV == "development":
             uvicorn_logger.warning(
-                f"All connection attempts to ChromaDB failed. Falling back to local in-memory Mock store "
-                f"since APP_ENV is '{settings.APP_ENV}'."
+                f"All ChromaDB connection attempts failed. Queries return no chunks and "
+                f"index builds fail since APP_ENV is '{settings.APP_ENV}'."
             )
         else:
             uvicorn_logger.error("ChromaDB connection failed and fallback is disabled in non-development environment.")

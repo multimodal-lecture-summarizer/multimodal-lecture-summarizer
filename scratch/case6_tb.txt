@@ -1,0 +1,10 @@
+test_case_6_successful_run_deletes_checkpoint (ai_workers.tests.test_checkpoint_persistence.CheckpointPersistenceTests.test_case_6_successful_run_deletes_checkpoint)
+A finished summary deletes its checkpoint, so the next run starts from ASR. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 11.000s
+
+OK
+
+FAILS
+ok=True

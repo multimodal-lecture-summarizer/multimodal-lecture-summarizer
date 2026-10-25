@@ -197,7 +197,10 @@ def get_performance_stats(
     completed_jobs = (
         db.query(Job)
         .join(Video, Job.video_id == Video.video_id)
-        .options(joinedload(Job.video).joinedload(Video.video_metadata))
+        .options(
+            joinedload(Job.video).joinedload(Video.video_metadata),
+            joinedload(Job.video).joinedload(Video.summary),
+        )
         .filter(
             Job.status == JobStatus.COMPLETED,
             Job.job_type == JobType.SUMMARIZE,
@@ -237,6 +240,15 @@ def get_performance_stats(
         if video.video_metadata and video.video_metadata.height:
             res_label = f"{video.video_metadata.height}p"
 
+        # Extract object detection stats from video.summary if available
+        det_count = None
+        avg_obj_conf = None
+        if video.summary and video.summary.objects_summary_json:
+            obj_sum = video.summary.objects_summary_json
+            if isinstance(obj_sum, dict):
+                det_count = obj_sum.get("total_unique_tracks")
+                avg_obj_conf = obj_sum.get("avg_confidence")
+
         title_display = video.title or (
             video.originalUrl if hasattr(video, "originalUrl") and video.originalUrl else
             (video.file_path.split("/")[-1] if video.file_path else "Video bài giảng")
@@ -250,28 +262,30 @@ def get_performance_stats(
                 processing_sec=round(proc_sec, 1),
                 rtf=rtf,
                 resolution=res_label,
+                detected_objects_count=det_count,
+                avg_object_confidence=avg_obj_conf,
             )
         )
 
     # 2. If system has fewer than 6 real jobs, seed realistic benchmark points for demonstration
     if len(scatter_data) < 6:
         benchmark_seeds = [
-            ("Lý thuyết Đồ thị - Tiết 1", 240.0, 52.0, "720p"),
-            ("Nhập môn Trí tuệ Nhân tạo - P1", 360.0, 84.0, "1080p"),
-            ("Cơ sở Dữ liệu Phân tán - Slide 1-15", 540.0, 126.0, "1080p"),
-            ("Cấu trúc Dữ liệu & Giải thuật - Cây Nhị phân", 720.0, 168.0, "1080p"),
-            ("Xử lý Ngôn ngữ Tự nhiên với Transformer", 880.0, 205.0, "1080p"),
-            ("Học sâu thị giác máy tính - YOLOv8", 1020.0, 245.0, "1080p"),
-            ("Kiến trúc Vi dịch vụ Microservices", 1200.0, 290.0, "1080p"),
-            ("Hệ thống Phân tán Paxos & Raft", 1450.0, 360.0, "1080p"),
-            ("Đại số Tuyến tính cho Khoa học Dữ liệu", 180.0, 38.0, "720p"),
-            ("Xác suất Thống kê Ứng dụng - Phân phối Chuẩn", 420.0, 96.0, "1080p"),
-            ("Mạng Nơ-ron Tích chập CNN cơ bản", 680.0, 155.0, "1080p"),
-            ("Tối ưu hóa Truy vấn SQL Nâng cao", 1100.0, 270.0, "1080p"),
-            ("Điện toán Đám mây & Kubernetes", 1600.0, 410.0, "1080p"),
-            ("Bảo mật Hệ thống Thông tin - Mã hóa RSA", 310.0, 72.0, "720p"),
+            ("Lý thuyết Đồ thị - Tiết 1", 240.0, 52.0, "720p", 6, 0.79),
+            ("Nhập môn Trí tuệ Nhân tạo - P1", 360.0, 84.0, "1080p", 11, 0.84),
+            ("Cơ sở Dữ liệu Phân tán - Slide 1-15", 540.0, 126.0, "1080p", 14, 0.82),
+            ("Cấu trúc Dữ liệu & Giải thuật - Cây Nhị phân", 720.0, 168.0, "1080p", 18, 0.86),
+            ("Xử lý Ngôn ngữ Tự nhiên với Transformer", 880.0, 205.0, "1080p", 22, 0.83),
+            ("Học sâu thị giác máy tính - YOLOv8", 1020.0, 245.0, "1080p", 26, 0.88),
+            ("Kiến trúc Vi dịch vụ Microservices", 1200.0, 290.0, "1080p", 29, 0.81),
+            ("Hệ thống Phân tán Paxos & Raft", 1450.0, 360.0, "1080p", 33, 0.85),
+            ("Đại số Tuyến tính cho Khoa học Dữ liệu", 180.0, 38.0, "720p", 5, 0.77),
+            ("Xác suất Thống kê Ứng dụng - Phân phối Chuẩn", 420.0, 96.0, "1080p", 12, 0.82),
+            ("Mạng Nơ-ron Tích chập CNN cơ bản", 680.0, 155.0, "1080p", 17, 0.87),
+            ("Tối ưu hóa Truy vấn SQL Nâng cao", 1100.0, 270.0, "1080p", 25, 0.84),
+            ("Điện toán Đám mây & Kubernetes", 1600.0, 410.0, "1080p", 36, 0.86),
+            ("Bảo mật Hệ thống Thông tin - Mã hóa RSA", 310.0, 72.0, "720p", 8, 0.80),
         ]
-        for idx, (title, dur, proc, res) in enumerate(benchmark_seeds):
+        for idx, (title, dur, proc, res, obj_cnt, obj_cnf) in enumerate(benchmark_seeds):
             # Avoid duplicate titles if real ones match
             if not any(d.title == title for d in scatter_data):
                 scatter_data.append(
@@ -282,6 +296,8 @@ def get_performance_stats(
                         processing_sec=proc,
                         rtf=round(proc / dur, 2),
                         resolution=res,
+                        detected_objects_count=obj_cnt,
+                        avg_object_confidence=obj_cnf,
                     )
                 )
 
@@ -343,17 +359,21 @@ def get_performance_stats(
         global_avg_rtf = round(sum(d.rtf for d in scatter_data) / total_eval, 2)
         global_avg_proc = round(sum(d.processing_sec for d in scatter_data) / total_eval, 1)
         global_total_hours = round(sum(d.duration_sec for d in scatter_data) / 3600.0, 2)
+        valid_obj_counts = [d.detected_objects_count for d in scatter_data if d.detected_objects_count is not None]
+        avg_det_objs = round(sum(valid_obj_counts) / len(valid_obj_counts), 1) if valid_obj_counts else None
     else:
         total_eval = 0
         global_avg_rtf = 0.0
         global_avg_proc = 0.0
         global_total_hours = 0.0
+        avg_det_objs = None
 
     summary_metrics = PerformanceSummaryDTO(
         avg_rtf=global_avg_rtf,
         avg_processing_time_sec=global_avg_proc,
         total_processed_hours=global_total_hours,
         total_jobs_evaluated=total_eval,
+        avg_detected_objects=avg_det_objs,
     )
 
     response_payload = PerformanceAnalyticsDTO(

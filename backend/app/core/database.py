@@ -186,7 +186,15 @@ def initialize_database_data():
                     conn.execute(text("ALTER TABLE video_metadata ADD COLUMN bitrate INTEGER;"))
                     conn.commit()
 
-                # Backfill any null standard values
+                # Migration for users: output_language
+                user_columns = [c["name"] for c in inspector.get_columns("users")]
+                if "output_language" not in user_columns:
+                    logger.info("Migrating database: Adding 'output_language' column to 'users' table.")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN output_language VARCHAR(10) NOT NULL DEFAULT 'vi';"))
+                    conn.commit()
+
+                # Backfill any null standard values and user preferences
+                conn.execute(text("UPDATE users SET output_language = 'vi' WHERE output_language IS NULL;"))
                 conn.execute(text("UPDATE video_standards SET allowed_codecs = '[\"h264\", \"hevc\"]' WHERE allowed_codecs IS NULL;"))
                 conn.execute(text("UPDATE video_standards SET min_width = 640 WHERE min_width IS NULL;"))
                 conn.execute(text("UPDATE video_standards SET min_height = 360 WHERE min_height IS NULL;"))

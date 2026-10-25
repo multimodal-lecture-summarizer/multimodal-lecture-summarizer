@@ -39,6 +39,9 @@ class UserDTO(UserBase):
     is_active: bool = Field(
         True, description="Indicates whether the account is currently active"
     )
+    output_language: str = Field(
+        "vi", description="The configured target language code for AI summaries (e.g. 'vi', 'en')"
+    )
 
 
 class Token(CamelModel):
@@ -66,4 +69,10 @@ class ForgotPasswordRequest(CamelModel):
 class ResetPasswordRequest(CamelModel):
     email: EmailStr = Field(..., description="The email address of the account")
     new_password: str = Field(..., min_length=6, description="The new password to set")
+
+
+class UserPreferencesUpdate(CamelModel):
+    output_language: str = Field(
+        ..., min_length=2, max_length=10, description="Target output language for AI summaries (e.g. 'vi', 'en')"
+    )
 

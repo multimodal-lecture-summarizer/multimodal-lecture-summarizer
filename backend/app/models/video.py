@@ -109,6 +109,8 @@ class VideoScene(Base):
     keyframe_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     caption: Mapped[str] = mapped_column(Text, nullable=False)
     script: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    detected_objects_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    object_counts_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     video: Mapped["Video"] = relationship("Video", back_populates="scenes")
