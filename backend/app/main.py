@@ -1,4 +1,12 @@
 import os
+import sys
+from pathlib import Path
+
+# Ensure workspace root is in sys.path for ai_workers and shared modules
+_workspace_root = str(Path(__file__).resolve().parent.parent.parent)
+if _workspace_root not in sys.path:
+    sys.path.insert(0, _workspace_root)
+
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -275,6 +283,33 @@ app.include_router(
             }
         }
     },
+)
+
+# Also mount admin_router at /api so /api/admin/video-standards works directly
+from app.api.router import admin_router
+from app.api.v1 import videos
+app.include_router(admin_router, prefix="/api")
+
+# Public alias for /api/videos/standards matching Task Specification
+app.add_api_route(
+    "/api/videos/standards",
+    videos.get_standards,
+    methods=["GET"],
+    response_model=videos.BaseDTO[videos.VideoStandardDTO],
+    summary="Retrieve active video standards (Public Alias)",
+    tags=["Videos Management"],
+)
+
+# Admin alias for /api/admin/stats/performance matching Task Specification
+from app.api.v1 import stats
+from app.schemas.stats import PerformanceAnalyticsDTO
+app.add_api_route(
+    "/api/admin/stats/performance",
+    stats.get_performance_stats,
+    methods=["GET"],
+    response_model=videos.BaseDTO[PerformanceAnalyticsDTO],
+    summary="Performance RTF Analytics (Admin Alias)",
+    tags=["Admin Reports"],
 )
 
 

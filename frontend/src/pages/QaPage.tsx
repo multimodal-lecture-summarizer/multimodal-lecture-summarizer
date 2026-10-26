@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bot, VideoOff, Trash2, Clock as HistoryIcon, MessageSquare,
-  Send, Sparkles
+  Send, Sparkles, RefreshCw
 } from 'lucide-react';
 
 interface Message {
@@ -41,7 +41,10 @@ export const QaPage: React.FC = () => {
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const ragStatus = String(videoData?.ragStatus || videoData?.rag_status || "pending").toLowerCase();
+  const canAsk = ragStatus === "ready" && Boolean(activeVideoId);
 
   const seekMiniPlayer = (secs: number) => {
     if (videoRef.current) {
@@ -129,12 +132,45 @@ export const QaPage: React.FC = () => {
   }, [activeVideoId]);
 
   useEffect(() => {
+    if (!activeVideoId || (ragStatus !== "pending" && ragStatus !== "processing")) return;
+    const timer = window.setInterval(() => {
+      api.getVideo(activeVideoId)
+        .then((res) => {
+          if (res.success && res.data) setVideoData(res.data);
+        })
+        .catch((err) => console.error("Failed to poll RAG status:", err));
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [activeVideoId, ragStatus]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
 
+  const handleReindex = async () => {
+    if (!activeVideoId || reindexing) return;
+    setReindexing(true);
+    try {
+      const res = await api.reindexVideo(activeVideoId);
+      if (res.success && res.data) {
+        setVideoData(res.data);
+        toast.success(res.message || t('qa.index_queued'), t('qa.header_title'));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t('qa.index_failed'), t('qa.header_title'));
+    } finally {
+      setReindexing(false);
+    }
+  };
+
   const handleSendMessage = async (textToSend = inputText) => {
-    if (!textToSend.trim()) return;
+    if (!textToSend.trim() || !canAsk) {
+      if (!activeVideoId && textToSend.trim()) {
+        toast.error(t('qa.no_video_selected'), t('qa.no_video_alert'));
+      }
+      return;
+    }
 
     const queryText = textToSend;
     const newMsg: Message = {
@@ -147,12 +183,6 @@ export const QaPage: React.FC = () => {
     setMessages(prev => [...prev, newMsg]);
     setInputText('');
     setIsTyping(true);
-
-    if (!activeVideoId) {
-      toast.error(t('qa.no_video_selected'), t('qa.no_video_alert'));
-      setIsTyping(false);
-      return;
-    }
 
     try {
       const res = await api.askQuestion(activeVideoId, queryText);
@@ -371,7 +401,9 @@ export const QaPage: React.FC = () => {
               <div className="p-6 text-center text-slate-400 border-2 border-dashed border-slate-200/60 rounded-2xl">
                 <MessageSquare size={24} className="mx-auto mb-2 text-slate-300" />
                 <p className="text-xs font-semibold text-slate-600">Chưa có lịch sử câu hỏi nào</p>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">Hãy nhập câu hỏi ở ô bên phải để bắt đầu trò chuyện RAG với AI</p>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  {canAsk ? "Hãy nhập câu hỏi ở ô bên phải để bắt đầu trò chuyện RAG với AI" : t('qa.input_locked')}
+                </p>
               </div>
             )}
           </div>
@@ -389,12 +421,9 @@ export const QaPage: React.FC = () => {
             </div>
             <div>
               <h3 className="font-heading text-base font-bold text-slate-900">{t('qa.header_title') || 'AI Assistant'}</h3>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-500 font-bold uppercase tracking-wider">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Online
+              <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${canAsk ? "text-emerald-500" : ragStatus === "failed" ? "text-red-500" : "text-amber-600"}`}>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${canAsk ? "bg-emerald-500" : ragStatus === "failed" ? "bg-red-500" : "bg-amber-500"}`}></span>
+                {canAsk ? t('qa.index_ready') : ragStatus === "failed" ? t('qa.status_failed') : ragStatus === "processing" ? t('qa.status_building') : t('qa.status_pending')}
               </div>
             </div>
           </div>
@@ -461,40 +490,65 @@ export const QaPage: React.FC = () => {
         {/* Chat Input Area */}
         <div className="z-20 p-4 md:p-6 bg-white/80 backdrop-blur-md border-t border-slate-200/50 shrink-0">
           <div className="relative max-w-4xl mx-auto">
-            {/* Suggested Questions */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-              <button 
-                onClick={() => handleSendMessage(t('qa.suggest1_q'))} 
-                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                {t('qa.suggest1')}
-              </button>
-              <button 
-                onClick={() => handleSendMessage(t('qa.suggest2_q'))} 
-                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                {t('qa.suggest2')}
-              </button>
-              <button 
-                onClick={() => handleSendMessage(t('qa.suggest3_q'))} 
-                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                {t('qa.suggest3')}
-              </button>
-              <button 
-                onClick={() => handleSendMessage(t('qa.suggest4_q'))} 
-                className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                {t('qa.suggest4')}
-              </button>
-            </div>
+            {!videoData ? (
+              <p className="mb-4 text-center text-xs text-slate-500">{t('qa.no_video_selected')}</p>
+            ) : canAsk ? (
+              <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+                <button
+                  onClick={() => handleSendMessage(t('qa.suggest1_q'))}
+                  className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {t('qa.suggest1')}
+                </button>
+                <button
+                  onClick={() => handleSendMessage(t('qa.suggest2_q'))}
+                  className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {t('qa.suggest2')}
+                </button>
+                <button
+                  onClick={() => handleSendMessage(t('qa.suggest3_q'))}
+                  className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {t('qa.suggest3')}
+                </button>
+                <button
+                  onClick={() => handleSendMessage(t('qa.suggest4_q'))}
+                  className="px-3.5 py-1.5 bg-slate-100/80 hover:bg-primary/10 hover:text-primary text-slate-700 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {t('qa.suggest4')}
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p>
+                  {ragStatus === "failed"
+                    ? t('qa.index_failed')
+                    : ragStatus === "processing"
+                      ? t('qa.index_processing')
+                      : t('qa.index_pending')}
+                </p>
+                {ragStatus !== "processing" && activeVideoId && (
+                  <button
+                    type="button"
+                    onClick={handleReindex}
+                    disabled={reindexing}
+                    className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    <RefreshCw size={14} className={reindexing ? "animate-spin" : ""} />
+                    {ragStatus === "failed" ? t('qa.index_rebuild') : t('qa.index_build')}
+                  </button>
+                )}
+              </div>
+            )}
 
-            <div className="flex items-end gap-3 bg-white p-2 rounded-3xl border-2 border-slate-200 focus-within:border-primary focus-within:shadow-lg focus-within:shadow-primary/10 transition-all">
+            <div className={`flex items-end gap-3 bg-white p-2 rounded-3xl border-2 border-slate-200 transition-all ${canAsk ? "focus-within:border-primary focus-within:shadow-lg focus-within:shadow-primary/10" : "opacity-70"}`}>
               <textarea 
-                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-4 px-4 resize-none max-h-32 min-h-[52px] placeholder-slate-400 outline-none text-slate-700" 
-                placeholder={t('qa.input_placeholder') || "Ask a question..."}
+                className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-4 px-4 resize-none max-h-32 min-h-[52px] placeholder-slate-400 outline-none text-slate-700 disabled:cursor-not-allowed" 
+                placeholder={canAsk ? (t('qa.input_placeholder') || "Ask a question...") : t('qa.input_locked')}
                 rows={1}
                 value={inputText}
+                disabled={!canAsk}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -505,10 +559,11 @@ export const QaPage: React.FC = () => {
               />
               <div className="flex items-center mr-1 mb-1 shrink-0">
                 <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={canAsk ? { scale: 1.05 } : undefined}
+                  whileTap={canAsk ? { scale: 0.95 } : undefined}
                   onClick={() => handleSendMessage()}
-                  className="bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-primary-hover shadow-md shadow-primary/30 transition-all cursor-pointer"
+                  disabled={!canAsk}
+                  className="bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-primary-hover shadow-md shadow-primary/30 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send size={18} className="ml-0.5" />
                 </motion.button>

@@ -355,5 +355,5 @@ Dừng hoàn toàn Celery Worker rồi khởi động lại. Worker đang chạy
 ## 12. Tài liệu liên quan
 
 - `docs/florence-2-cpu-reproducibility.md`
-- `docs/ARCHITECTURE.md`
+- `docs/current-system-architecture.md`
 - `docs/BENCHMARK.md`

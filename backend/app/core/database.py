@@ -132,7 +132,7 @@ def initialize_database_data():
     
     db = SessionLocal()
     try:
-        # Self-healing migration: check if title column exists in videos table
+        # Self-healing migration: check if title column exists in videos and key_takeaways_json in summaries
         try:
             with db.bind.connect() as conn:
                 inspector = inspect(db.bind)
@@ -141,6 +141,66 @@ def initialize_database_data():
                     logger.info("Migrating database: Adding 'title' column to 'videos' table.")
                     conn.execute(text("ALTER TABLE videos ADD COLUMN title VARCHAR(256);"))
                     conn.commit()
+
+                summary_columns = [c["name"] for c in inspector.get_columns("summaries")]
+                if "key_takeaways_json" not in summary_columns:
+                    logger.info("Migrating database: Adding 'key_takeaways_json' column to 'summaries' table.")
+                    conn.execute(text("ALTER TABLE summaries ADD COLUMN key_takeaways_json JSON;"))
+                    conn.commit()
+
+                # Migration for video_standards
+                std_columns = [c["name"] for c in inspector.get_columns("video_standards")]
+                if "allowed_codecs" not in std_columns:
+                    logger.info("Migrating database: Adding 'allowed_codecs' column to 'video_standards' table.")
+                    conn.execute(text("ALTER TABLE video_standards ADD COLUMN allowed_codecs JSON DEFAULT '[\"h264\", \"hevc\"]';"))
+                    conn.commit()
+                if "min_width" not in std_columns:
+                    logger.info("Migrating database: Adding 'min_width' column to 'video_standards' table.")
+                    conn.execute(text("ALTER TABLE video_standards ADD COLUMN min_width INTEGER NOT NULL DEFAULT 640;"))
+                    conn.commit()
+                if "min_height" not in std_columns:
+                    logger.info("Migrating database: Adding 'min_height' column to 'video_standards' table.")
+                    conn.execute(text("ALTER TABLE video_standards ADD COLUMN min_height INTEGER NOT NULL DEFAULT 360;"))
+                    conn.commit()
+                if "max_width" not in std_columns:
+                    logger.info("Migrating database: Adding 'max_width' column to 'video_standards' table.")
+                    conn.execute(text("ALTER TABLE video_standards ADD COLUMN max_width INTEGER NOT NULL DEFAULT 1920;"))
+                    conn.commit()
+                if "max_height" not in std_columns:
+                    logger.info("Migrating database: Adding 'max_height' column to 'video_standards' table.")
+                    conn.execute(text("ALTER TABLE video_standards ADD COLUMN max_height INTEGER NOT NULL DEFAULT 1080;"))
+                    conn.commit()
+
+                # Migration for video_metadata
+                meta_columns = [c["name"] for c in inspector.get_columns("video_metadata")]
+                if "video_codec" not in meta_columns:
+                    logger.info("Migrating database: Adding 'video_codec' column to 'video_metadata' table.")
+                    conn.execute(text("ALTER TABLE video_metadata ADD COLUMN video_codec VARCHAR(50);"))
+                    conn.commit()
+                if "audio_codec" not in meta_columns:
+                    logger.info("Migrating database: Adding 'audio_codec' column to 'video_metadata' table.")
+                    conn.execute(text("ALTER TABLE video_metadata ADD COLUMN audio_codec VARCHAR(50);"))
+                    conn.commit()
+                if "bitrate" not in meta_columns:
+                    logger.info("Migrating database: Adding 'bitrate' column to 'video_metadata' table.")
+                    conn.execute(text("ALTER TABLE video_metadata ADD COLUMN bitrate INTEGER;"))
+                    conn.commit()
+
+                # Migration for users: output_language
+                user_columns = [c["name"] for c in inspector.get_columns("users")]
+                if "output_language" not in user_columns:
+                    logger.info("Migrating database: Adding 'output_language' column to 'users' table.")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN output_language VARCHAR(10) NOT NULL DEFAULT 'vi';"))
+                    conn.commit()
+
+                # Backfill any null standard values and user preferences
+                conn.execute(text("UPDATE users SET output_language = 'vi' WHERE output_language IS NULL;"))
+                conn.execute(text("UPDATE video_standards SET allowed_codecs = '[\"h264\", \"hevc\"]' WHERE allowed_codecs IS NULL;"))
+                conn.execute(text("UPDATE video_standards SET min_width = 640 WHERE min_width IS NULL;"))
+                conn.execute(text("UPDATE video_standards SET min_height = 360 WHERE min_height IS NULL;"))
+                conn.execute(text("UPDATE video_standards SET max_width = 1920 WHERE max_width IS NULL;"))
+                conn.execute(text("UPDATE video_standards SET max_height = 1080 WHERE max_height IS NULL;"))
+                conn.commit()
         except Exception as e:
             logger.warning(f"Self-healing database migration check failed: {e}")
         # 1. Initialize Default Standard if empty
@@ -150,6 +210,11 @@ def initialize_database_data():
                 max_duration=settings.DEFAULT_MAX_DURATION_SECONDS,
                 allowed_formats=settings.DEFAULT_ALLOWED_FORMATS,
                 max_file_size=settings.DEFAULT_MAX_FILE_SIZE_MB,
+                allowed_codecs=["h264", "hevc"],
+                min_width=640,
+                min_height=360,
+                max_width=1920,
+                max_height=1080,
             )
             db.add(default_std)
             db.commit()

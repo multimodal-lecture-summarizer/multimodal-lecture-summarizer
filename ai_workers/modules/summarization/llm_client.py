@@ -124,6 +124,7 @@ class LLMClient:
         prompt: str,
         system_prompt: Optional[str] = None,
         temperature: float = 0.2,
+        max_tokens: Optional[int] = None,
         response_format: Optional[dict[str, Any]] = None,
         job_id: str = "unknown",
     ) -> str:
@@ -134,6 +135,7 @@ class LLMClient:
             prompt: User prompt.
             system_prompt: Optional system prompt.
             temperature: LLM temperature.
+            max_tokens: Optional token limit.
             response_format: Optional response format (e.g. {"type": "json_object"}).
             job_id: Celery / pipeline job identifier for structured logging.
 
@@ -169,6 +171,8 @@ class LLMClient:
                         "temperature": temperature,
                         "timeout": self.timeout,
                     }
+                    if max_tokens is not None:
+                        kwargs["max_tokens"] = max_tokens
                     if response_format:
                         kwargs["response_format"] = response_format
 

@@ -26,7 +26,11 @@ from ai_workers.core.checkpoint import (
 )
 from ai_workers.modules.summarization.errors import LLMTimeoutError
 from ai_workers.modules.summarization.extractive_fallback import ExtractiveSummarizer
-from ai_workers.modules.summarization.summarizer import Summarizer
+from ai_workers.modules.summarization.summarizer import (
+    Summarizer,
+    clean_video_title,
+    is_title_grounded,
+)
 
 
 class ExtractiveFallbackTests(unittest.TestCase):
@@ -79,7 +83,7 @@ class ExtractiveFallbackTests(unittest.TestCase):
 
         mock_llm_json = {
             "video_title": "Bài giảng Machine Learning",
-            "summary": "Tóm tắt từ LLM OpenRouter thành công.",
+            "summary": "Tóm tắt từ LLM OpenRouter được thực hiện thành công và đầy đủ nội dung bài học.",
             "key_takeaways": ["Ý chính 1", "Ý chính 2"],
             "chapters": [
                 {"title": "Chương 1", "summary": "Tóm tắt chương 1", "startTime": 0.0, "endTime": 45.0},
@@ -98,6 +102,68 @@ class ExtractiveFallbackTests(unittest.TestCase):
         self.assertEqual(result["summary_method"], "llm")
         self.assertIn("OpenRouter", result["model_used"])
         self.assertEqual(result["video_title"], "Bài giảng Machine Learning")
+
+    def test_title_rejects_topic_not_present_in_source(self):
+        source = "OCR: TRÍ TUỆ NHÂN TẠO\n[00:00] Hôm nay chúng ta tìm hiểu Machine Learning."
+
+        self.assertFalse(
+            is_title_grounded(
+                "Kỹ thuật Parkour cơ bản",
+                source,
+                title_evidence="Kỹ thuật Parkour",
+            )
+        )
+        self.assertFalse(is_title_grounded("Machine Learning Parkour", source))
+        title = clean_video_title(
+            "Kỹ thuật Parkour cơ bản",
+            lang_code="vi",
+            source_evidence=source,
+            title_evidence="Kỹ thuật Parkour",
+        )
+
+        self.assertNotIn("Parkour", title)
+        self.assertIn("TRÍ TUỆ NHÂN TẠO", title)
+
+    def test_prompt_requires_verbatim_title_evidence_without_topic_examples(self):
+        summarizer = Summarizer(llm_timeout=10.0, overall_timeout=90.0)
+        summarizer.openrouter_client._client = MagicMock()
+        mock_create = summarizer.openrouter_client._client.chat.completions.create
+        mock_create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps({
+                "video_title": "Trí tuệ Nhân tạo",
+                "title_evidence": "TRÍ TUỆ NHÂN TẠO",
+                "summary": "Nội dung trình bày khái niệm trí tuệ nhân tạo và phương pháp học máy có giám sát.",
+                "key_takeaways": [],
+                "chapters": [
+                    {
+                        "title": "Khái niệm Machine Learning",
+                        "summary": "Giới thiệu nội dung chính.",
+                        "startTime": 0.0,
+                        "endTime": 45.0,
+                    },
+                    {
+                        "title": "Tối ưu hóa",
+                        "summary": "Trình bày phần tiếp theo.",
+                        "startTime": 46.0,
+                        "endTime": 90.0,
+                    },
+                ],
+            })))]
+        )
+
+        result = summarizer.summarize(
+            self.sample_utterances,
+            self.sample_slides,
+            self.sample_chapters,
+            job_id="job-grounded-title",
+        )
+        prompt_content = mock_create.call_args.kwargs["messages"][0]["content"]
+
+        self.assertEqual(result["video_title"], "Trí tuệ Nhân tạo")
+        self.assertIn('"title_evidence"', prompt_content)
+        self.assertIn("<SOURCE_DATA>", prompt_content)
+        self.assertNotIn("Parkour", prompt_content)
+        self.assertNotIn("vá lốp", prompt_content.lower())
 
     # -------------------------------------------------------------------------
     # Case 2: All LLM Candidates Fail -> Extractive Fallback creates non-empty summary
@@ -356,10 +422,12 @@ class ExtractiveFallbackTests(unittest.TestCase):
         }
         mock_summarizer_mod.Summarizer = mock_summarizer_class
 
+        mock_tracker_mod = MagicMock()
         mock_modules = {
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
+            "ai_workers.modules.visual_v2.object_tracker": mock_tracker_mod,
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,
             "ai_workers.modules.fusion.timeline": mock_timeline_mod,
             "ai_workers.modules.fusion.summarizer": mock_summarizer_mod,
@@ -380,6 +448,7 @@ class ExtractiveFallbackTests(unittest.TestCase):
             mock_audio_mod.AudioTranscriber.assert_not_called()
             mock_speaker_mod.SpeakerDiarizer.assert_not_called()
             mock_scene_mod.SceneDetector.assert_not_called()
+            mock_tracker_mod.ObjectDetectorTracker.assert_not_called()
             mock_semantic_mod.SemanticAnalyzer.assert_not_called()
             mock_timeline_mod.TimelineBuilder.assert_not_called()
             mock_quality_mod.apply_quality_postprocess.assert_not_called()
@@ -423,6 +492,7 @@ class ExtractiveFallbackTests(unittest.TestCase):
             "ai_workers.modules.audio_v2.transcriber": MagicMock(),
             "ai_workers.modules.audio_v2.speaker": MagicMock(),
             "ai_workers.modules.visual_v2.scene_detector": MagicMock(),
+            "ai_workers.modules.visual_v2.object_tracker": MagicMock(),
             "ai_workers.modules.visual_v2.semantic": MagicMock(),
             "ai_workers.modules.fusion.timeline": MagicMock(),
             "ai_workers.modules.fusion.summarizer": mock_summarizer_mod,
@@ -463,6 +533,57 @@ class ExtractiveFallbackTests(unittest.TestCase):
         # Secret key MUST NOT be present anywhere in result payload or llm_error
         dumped_json = json.dumps(result)
         self.assertNotIn(secret_key, dumped_json)
+
+    # -------------------------------------------------------------------------
+    # Case 11: Output Language 'en' in Extractive Fallback
+    # -------------------------------------------------------------------------
+    def test_case_11_output_language_en_extractive_fallback(self):
+        extractive = ExtractiveSummarizer()
+        result = extractive.generate_fallback(
+            self.sample_utterances,
+            self.sample_slides,
+            self.sample_chapters,
+            output_language="en",
+            job_id="job-lang-en",
+        )
+
+        self.assertEqual(result["status"], "done")
+        self.assertIn("### Lecture Overview", result["summary"])
+        self.assertIn("Note: This summary was automatically generated", result["summary"])
+
+    # -------------------------------------------------------------------------
+    # Case 12: Dynamic Output Language Prompt Generation
+    # -------------------------------------------------------------------------
+    def test_case_12_dynamic_output_language_prompt(self):
+        summarizer = Summarizer(llm_timeout=5.0, overall_timeout=10.0)
+        summarizer.openrouter_client._client = MagicMock()
+        mock_create = summarizer.openrouter_client._client.chat.completions.create
+
+        mock_llm_json = {
+            "video_title": "Machine Learning Overview",
+            "summary": "This is a comprehensive summary generated by OpenRouter in English for tests.",
+            "key_takeaways": [{"timestamp": 0.0, "time_str": "00:00", "title": "Overview", "description": "Key intro"}],
+            "chapters": [
+                {"title": "Chapter 1", "summary": "Intro to ML", "startTime": 0.0, "endTime": 45.0},
+                {"title": "Chapter 2", "summary": "Optimization", "startTime": 46.0, "endTime": 90.0},
+            ]
+        }
+        mock_create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_llm_json)))]
+        )
+
+        # Call with English output language
+        summarizer.summarize(
+            self.sample_utterances,
+            self.sample_slides,
+            self.sample_chapters,
+            job_id="job-prompt-en",
+            output_language="en"
+        )
+        called_args, called_kwargs = mock_create.call_args
+        messages = called_kwargs.get("messages", [])
+        prompt_content = messages[0]["content"] if messages else ""
+        self.assertIn("English", prompt_content)
 
 
 if __name__ == "__main__":

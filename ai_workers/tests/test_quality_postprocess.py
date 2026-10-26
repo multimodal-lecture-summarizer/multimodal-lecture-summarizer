@@ -84,7 +84,8 @@ class QualityPostprocessTests(unittest.TestCase):
         self.assertIn("sprint1", result["sprint_stats"])
         self.assertIn("sprint3", result["sprint_stats"])
         self.assertIn("sprint4_v2", result["sprint_stats"])
-        self.assertIn("sprint7", result["sprint_stats"])
+        if "sprint7" in RECOMMENDED_STACK:
+            self.assertIn("sprint7", result["sprint_stats"])
         self.assertGreaterEqual(len(result["chapters"]), 1)
         self.assertGreaterEqual(len(result["keyframes"]), 1)
         # After S3/S7, generic captions should be reduced

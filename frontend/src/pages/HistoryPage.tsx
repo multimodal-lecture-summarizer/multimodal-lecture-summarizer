@@ -172,7 +172,67 @@ export const HistoryPage: React.FC = () => {
     return { bgGradient: gradients[index % gradients.length] };
   };
 
-  const filteredItems = historyItems;
+  const isConversationalQuote = (s: string) => {
+    const lower = s.toLowerCase();
+    if (/^(?:it\s+(?:inspires|is|seems|looks|feels|helps|keeps)|i\s+(?:think|like|want|believe|guess|love|feel|have|am|get|know)|we\s+(?:call|have|are|can|want|started|progressed|train)|you\s+(?:can|know|see|want)|they\s+(?:have|are|can)|so\s+|and\s+|well\s+|just\s+|now\s+|basically\s+|actually\s+)/i.test(lower)) {
+      return true;
+    }
+    if (/\b(?:i|me|my|mine|we|us|our|ours|you|your|yours)\b/i.test(lower) && s.split(/\s+/).length <= 9) {
+      return true;
+    }
+    if (/\b(?:as well|kind of|sort of|like this|you know|teeth fit)\b/i.test(lower)) {
+      return true;
+    }
+    return false;
+  };
+
+  const cleanDisplayTitle = (rawTitle?: string): string => {
+    if (!rawTitle) return 'Video bài giảng';
+    let t = rawTitle.trim().replace(/^["'*`#]+|["'*`#]+$/g, '');
+
+    // Handle speaker banner / pipe formats (e.g., "STEVEN ERDMANCZYK | CHARLOTTE PARKOUR" -> "Charlotte Parkour")
+    if (t.includes('|')) {
+      const parts = t.split('|').map(p => p.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        const isSpeakerCredit = (s: string) => {
+          if (/^(?:bởi|tác giả|diễn giả|giảng viên|người hướng dẫn|speaker|presenter|by|dr\.|prof\.)\b/i.test(s)) return true;
+          if (/^[A-Z\s]{4,}$/.test(s) && s.split(/\s+/).length <= 4) return true;
+          return false;
+        };
+        const topicParts = parts.filter(p => !isSpeakerCredit(p));
+        t = topicParts.length > 0 ? topicParts.join(' - ') : parts[parts.length - 1];
+      }
+    }
+
+    // Convert shouting all-caps titles (e.g. "CHARLOTTE PARKOUR") to natural Title Case
+    if (t === t.toUpperCase() && /[A-Z]/.test(t) && t.length > 3) {
+      t = t.toLowerCase().replace(/(?:^|\s|\b)[a-z]/g, c => c.toUpperCase());
+    }
+
+    const narrativePatterns = [
+      /^(?:video\s+(?:này\s+)?(?:bắt\s*đầu|nói\s*về|giới\s*thiệu\s*về|hướng\s*dẫn\s*về|trình\s*bày\s*về|chia\s*sẻ\s*về)\s*(?:bằng\s*cách\s*)?)/i,
+      /^(?:video\s+(?:này\s+)?(?:bắt\s*đầu\s*với|mở\s*đầu\s*bằng|mở\s*đầu\s*với|tập\s*trung\s*vào)\s*)/i,
+      /^(?:video\s+này\s+là\s+)/i,
+      /^(?:đây\s+là\s+video\s+(?:về|nói\s*về|hướng\s*dẫn\s*về|giới\s*thiệu\s*về)\s*)/i,
+      /^(?:the\s+video\s+(?:begins\s+with|starts\s+with|is\s+about|introduces|covers|demonstrates|shows)\s*)/i,
+      /^(?:this\s+video\s+(?:begins\s+with|starts\s+with|is\s+about|introduces|covers|demonstrates|shows)\s*)/i,
+      /^(?:a\s+video\s+(?:about|introducing|showing|demonstrating)\s*)/i,
+    ];
+    for (const pat of narrativePatterns) {
+      t = t.replace(pat, '').trim();
+    }
+    t = t.replace(/[\.,;:…]+$/, '').trim();
+    if (!t || t.length < 3 || isConversationalQuote(t)) return rawTitle;
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
+
+
+
+  const filteredItems = historyItems.filter(item => {
+    if (!searchQuery.trim()) return true;
+    const title = cleanDisplayTitle(item.title);
+    return title.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const queuedCount = historyItems.filter(item => item.status === VideoStatus.PROCESSING).length;
   const processedCount = historyItems.filter(item => item.status === VideoStatus.DONE).length;
@@ -341,8 +401,8 @@ export const HistoryPage: React.FC = () => {
                     {/* Content Area */}
                     <div className="p-6 flex-1 flex flex-col">
                       <div className="mb-4">
-                        <h3 className="font-heading text-lg font-black text-slate-900 mb-2 leading-snug group-hover:text-primary transition-colors line-clamp-2" title={item.title}>
-                          {item.title}
+                        <h3 className="font-heading text-lg font-black text-slate-900 mb-2 leading-snug group-hover:text-primary transition-colors line-clamp-2" title={cleanDisplayTitle(item.title)}>
+                          {cleanDisplayTitle(item.title)}
                         </h3>
                         <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
                           <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-md">

@@ -25,7 +25,18 @@ from ai_workers.core.checkpoint import (
     PIPELINE_VERSION,
     STAGE_QUALITY_COMPLETE,
     STATUS_INTERMEDIATE_READY,
+    build_config_fingerprint,
 )
+from ai_workers.core.config import worker_settings as _worker_settings
+
+
+def _current_fingerprint() -> str:
+    return build_config_fingerprint(
+        asr_model=_worker_settings.FASTER_WHISPER_MODEL,
+        source_language="auto",
+        florence_device=_worker_settings.FLORENCE_DEVICE,
+        sprint_stack=_worker_settings.SPRINT_STACK,
+    )
 from ai_workers.modules.summarization.errors import (
     LLMAuthenticationError,
     LLMBadRequestError,
@@ -120,6 +131,7 @@ class ReliabilityChaosTests(unittest.TestCase):
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
+            "ai_workers.modules.visual_v2.object_tracker": MagicMock(),
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,
             "ai_workers.modules.fusion.timeline": mock_timeline_mod,
             "ai_workers.modules.fusion.summarizer": mock_summarizer_mod,
@@ -315,7 +327,8 @@ class ReliabilityChaosTests(unittest.TestCase):
                 "sprint_stats": {"sprint1": 1},
                 "export_meta": {"version": 2},
                 "video_file_url": "http://video.mp4",
-            }
+            },
+            config_fingerprint=_current_fingerprint(),
         )
 
         mock_modules = self._build_mock_modules({
@@ -339,6 +352,7 @@ class ReliabilityChaosTests(unittest.TestCase):
             mock_modules["ai_workers.modules.audio_v2.transcriber"].AudioTranscriber.assert_not_called()
             mock_modules["ai_workers.modules.audio_v2.speaker"].SpeakerDiarizer.assert_not_called()
             mock_modules["ai_workers.modules.visual_v2.scene_detector"].SceneDetector.assert_not_called()
+            mock_modules["ai_workers.modules.visual_v2.object_tracker"].ObjectDetectorTracker.assert_not_called()
             mock_modules["ai_workers.modules.visual_v2.semantic"].SemanticAnalyzer.assert_not_called()
             mock_modules["ai_workers.modules.fusion.timeline"].TimelineBuilder.assert_not_called()
             mock_modules["ai_workers.modules.fusion.quality_postprocess"].apply_quality_postprocess.assert_not_called()
@@ -356,6 +370,23 @@ class ReliabilityChaosTests(unittest.TestCase):
         from ai_workers.core.config import worker_settings
 
         job_id = "job-state-partial"
+        self.checkpoint_manager.save_checkpoint(
+            job_id=job_id,
+            stage=STAGE_QUALITY_COMPLETE,
+            status=STATUS_INTERMEDIATE_READY,
+            data={
+                "utterances": self.sample_utterances,
+                "audio_result": {"text": "Xin chào...", "segments": self.sample_utterances},
+                "visual_result": {"scenes": self.sample_slides},
+                "timeline_result": {"chapters": self.sample_chapters},
+                "chapters": self.sample_chapters,
+                "keyframes": [],
+                "sprint_stats": {"sprint1": 1},
+                "export_meta": {"version": 2},
+                "video_file_url": "http://video.mp4",
+            },
+            config_fingerprint=_current_fingerprint(),
+        )
         mock_modules = self._build_mock_modules({
             "video_title": "Tóm tắt trích xuất dự phòng",
             "summary": "### Tổng quan bài giảng (Tóm tắt trích xuất)\n\nNội dung trích xuất.",
@@ -405,6 +436,7 @@ class ReliabilityChaosTests(unittest.TestCase):
             stage=STAGE_QUALITY_COMPLETE,
             status=STATUS_INTERMEDIATE_READY,
             data={"utterances": [], "chapters": [], "keyframes": []},
+            config_fingerprint=_current_fingerprint(),
         )
 
         with patch.dict(sys.modules, mock_modules), \
@@ -462,6 +494,7 @@ class ReliabilityChaosTests(unittest.TestCase):
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
             "ai_workers.modules.audio_v2.speaker": MagicMock(),
             "ai_workers.modules.visual_v2.scene_detector": MagicMock(),
+            "ai_workers.modules.visual_v2.object_tracker": MagicMock(),
             "ai_workers.modules.visual_v2.semantic": MagicMock(),
             "ai_workers.modules.fusion.timeline": MagicMock(),
             "ai_workers.modules.fusion.summarizer": MagicMock(),

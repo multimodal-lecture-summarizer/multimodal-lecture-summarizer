@@ -68,7 +68,7 @@ class GroqService:
                 "and LLM orchestration using LangChain. The speaker details the integration of "
                 "these technologies to construct a fully automated, multimodal summarization pipeline.\n\n"
                 "### KEY TAKEAWAYS\n"
-                "- **Audio ASR**: Using WhisperX enables word-level timestamp alignment with less than 10% WER.\n"
+                "- **Audio ASR**: Faster-Whisper provides word-level timestamps. Speaker labels are added only when diarization runs.\n"
                 "- **Visual Keyframes**: PySceneDetect combined with CLIP embeddings clusters keyframes efficiently, "
                 "yielding a semantic coverage score (F-score) higher than 0.45.\n"
                 "- **Multimodal Fusion**: The blending of textual transcriptions and keyframe captions "
@@ -76,10 +76,9 @@ class GroqService:
             )
         elif "question" in prompt_lower or "q&a" in prompt_lower or "?" in prompt_lower:
             return (
-                "Based on the processed video transcript, the speaker explains that **WhisperX** "
-                "is selected over original Whisper because it incorporates a forced alignment "
-                "step using phoneme models. This provides precise word-level timestamps (needed for "
-                "syncing video frames) and speeds up processing by 4x to 8x using the fast-whisper backend."
+                "Based on the processed video transcript, the lecture uses **Faster-Whisper** "
+                "for speech recognition with word-level timestamps. Speaker diarization runs "
+                "only when an HF token is configured; otherwise the transcript stays unlabeled."
             )
         else:
             return (

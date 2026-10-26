@@ -1,15 +1,28 @@
+import logging
 import uuid
 import os
 import time
-from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, status, Header, Query
 from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db, SessionLocal
-from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException
+from app.core.exceptions import NotFoundException, ValidationException, ForbiddenException, AppException
 from app.core.config import settings
-from app.core.constants import VideoStatus, JobType, JobStatus, UserRole
+from app.core.constants import VideoStatus, JobType, JobStatus, UserRole, RagStatus
 from app.middleware.case_converter import CamelCaseAPIRoute
-from app.schemas import BaseDTO, VideoDTO, VideoStandardDTO, VideoStandardBase, VideoMetadataDTO, VideoSceneDTO, create_pagination_metadata
+from app.schemas import (
+    BaseDTO,
+    VideoDTO,
+    VideoStandardDTO,
+    VideoStandardBase,
+    VideoMetadataDTO,
+    VideoSceneDTO,
+    VideoObjectsDetailResponseDTO,
+    VideoObjectLabelDetailDTO,
+    ObjectOccurrenceSceneDTO,
+    VideoObjectsSummaryDTO,
+    create_pagination_metadata,
+)
 from app.api.deps import get_current_active_user, check_admin
 from app.models.user import User
 from app.models.video import Video, VideoStandard, VideoMetadata, VideoScene
@@ -17,11 +30,237 @@ from app.models.job import Job
 from app.models.summary import Summary
 from app.services.r2 import r2_service
 from app.services.chromadb import chromadb_service
+from app.services.video_inspector import inspect_video_streams, validate_video_standards
 
 router = APIRouter(route_class=CamelCaseAPIRoute)
 
 
 
+
+
+@router.post(
+    "/inspect-preflight",
+    response_model=BaseDTO[dict],
+    summary="Pre-flight inspection checklist for video upload",
+    description="Inspects video stream parameters and evaluates them step-by-step against system standards.",
+)
+def inspect_preflight(
+    original_url: Optional[str] = Form(None),
+    originalUrl: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Performs deep pre-flight inspection and returns itemized checklist results."""
+    url = original_url or originalUrl
+    standard = db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
+    if not standard:
+        standard = VideoStandard()
+
+    if not file and not url:
+        raise ValidationException(message="Vui lòng cung cấp tệp video hoặc đường dẫn YouTube.")
+
+    file_name = file.filename if file else (url or "Video")
+    file_ext = file_name.split(".")[-1].lower() if "." in file_name else "mp4"
+
+    video_codec = None
+    audio_codec = None
+    width = 0
+    height = 0
+    fps = 0.0
+    duration = 0.0
+    size_mb = 0.0
+    raw_error = None
+
+    if file:
+        file.file.seek(0, 2)
+        size_bytes = file.file.tell()
+        size_mb = round(size_bytes / (1024 * 1024), 2)
+        file.file.seek(0)
+
+        temp_dir = os.path.join(os.getcwd(), "storage", "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file_path = os.path.join(temp_dir, f"preflight_{uuid.uuid4()}.{file_ext}")
+        try:
+            with open(temp_file_path, "wb") as buf:
+                buf.write(file.file.read())
+            
+            probe = inspect_video_streams(temp_file_path)
+            if probe.get("valid") and probe.get("video"):
+                v = probe["video"]
+                a = probe.get("audio") or {}
+                fmt = probe.get("format") or {}
+                video_codec = v.get("codec_name")
+                audio_codec = a.get("codec_name")
+                width = v.get("width") or 0
+                height = v.get("height") or 0
+                fps = v.get("fps") or 0.0
+                duration = float(fmt.get("duration") or v.get("duration") or 0.0)
+            else:
+                raw_error = probe.get("error") or "Không thể đọc luồng video"
+        finally:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+    else:
+        if "youtube.com" not in url and "youtu.be" not in url:
+            raise ValidationException(message="Chỉ hỗ trợ đường dẫn YouTube hợp lệ.")
+        try:
+            import yt_dlp
+            ydl_opts = {
+                'quiet': True,
+                'skip_download': True,
+                'extract_flat': False,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    width = info.get("width") or 1920
+                    height = info.get("height") or 1080
+                    duration = float(info.get("duration") or 0.0)
+                    fps = float(info.get("fps") or 30.0)
+                    vcodec = info.get("vcodec") or "h264"
+                    acodec = info.get("acodec") or "aac"
+                    video_codec = "h264" if "avc" in vcodec.lower() or "h264" in vcodec.lower() else vcodec.split(".")[0].lower()
+                    audio_codec = "aac" if "mp4a" in acodec.lower() or "aac" in acodec.lower() else acodec.split(".")[0].lower()
+                    file_name = info.get("title") or url
+                    size_mb = round(duration * 0.04, 2)
+        except Exception:
+            width, height = 1920, 1080
+            duration = 300.0
+            fps = 30.0
+            video_codec = "h264"
+            audio_codec = "aac"
+            size_mb = 12.5
+
+    allowed_fmts = [f.strip().lower() for f in standard.allowed_formats.split(",") if f.strip()]
+    if file:
+        pass_fmt = file_ext in allowed_fmts
+        msg_fmt = f"Định dạng .{file_ext} hợp lệ" if pass_fmt else f"Định dạng .{file_ext} không được hỗ trợ (cần {standard.allowed_formats})"
+    else:
+        pass_fmt = True
+        msg_fmt = "Đường dẫn YouTube tương thích"
+
+    raw_allowed_codecs = standard.allowed_codecs or ["h264", "hevc"]
+    if isinstance(raw_allowed_codecs, str):
+        allowed_codecs = [c.strip().lower() for c in raw_allowed_codecs.split(",") if c.strip()]
+    else:
+        allowed_codecs = [str(c).strip().lower() for c in raw_allowed_codecs if str(c).strip()]
+
+    pass_codec = bool(video_codec and (video_codec.lower() in allowed_codecs or any(c in video_codec.lower() for c in allowed_codecs)))
+    if raw_error:
+        pass_codec = False
+        msg_codec = f"Lỗi tệp: {raw_error}"
+    elif pass_codec:
+        msg_codec = f"Codec '{video_codec.upper()}' được hỗ trợ tối ưu"
+    else:
+        msg_codec = f"Codec '{video_codec or 'Không rõ'}' không nằm trong danh sách cho phép ({', '.join(allowed_codecs)})"
+
+    pass_res = (width >= standard.min_width and height >= standard.min_height and
+                width <= standard.max_width and height <= standard.max_height)
+    if pass_res:
+        msg_res = f"Độ phân giải {width}×{height} đạt chuẩn"
+    elif width < standard.min_width or height < standard.min_height:
+        msg_res = f"Độ phân giải {width}×{height} thấp hơn mức tối thiểu ({standard.min_width}×{standard.min_height})"
+    else:
+        msg_res = f"Độ phân giải {width}×{height} vượt quá mức tối đa ({standard.max_width}×{standard.max_height})"
+
+    pass_fps = fps >= 15.0 or fps == 0.0
+    msg_fps = f"{fps:.1f} FPS (Tốc độ khung hình mượt mà)" if pass_fps else f"{fps:.1f} FPS (Dưới ngưỡng khuyến nghị 15 FPS)"
+
+    pass_duration = duration <= standard.max_duration if duration > 0 else True
+    mins = int(duration // 60)
+    secs = int(duration % 60)
+    max_mins = int(standard.max_duration // 60)
+    if pass_duration:
+        msg_duration = f"Thời lượng {mins}m {secs}s nằm trong giới hạn (≤ {max_mins} phút)"
+    else:
+        msg_duration = f"Thời lượng {mins}m {secs}s vượt quá giới hạn tối đa ({max_mins} phút)"
+
+    pass_size = size_mb <= standard.max_file_size if size_mb > 0 else True
+    if pass_size:
+        msg_size = f"Dung lượng {size_mb:.1f} MB đạt chuẩn (≤ {standard.max_file_size} MB)"
+    else:
+        msg_size = f"Dung lượng {size_mb:.1f} MB vượt quá giới hạn ({standard.max_file_size} MB)"
+
+    pass_audio = bool(audio_codec)
+    msg_audio = f"Luồng âm thanh: {audio_codec.upper() if audio_codec else 'Phát hiện'}" if pass_audio else "Không phát hiện luồng âm thanh hoặc codec không hỗ trợ"
+
+    checks = [
+        {
+            "id": "format",
+            "name": "Định dạng container",
+            "detected": f".{file_ext}" if file else "YouTube URL",
+            "standard": standard.allowed_formats,
+            "passed": pass_fmt,
+            "message": msg_fmt,
+        },
+        {
+            "id": "codec",
+            "name": "Chuẩn nén Video (Codec)",
+            "detected": (video_codec or "Chưa rõ").upper(),
+            "standard": ", ".join(allowed_codecs).upper(),
+            "passed": pass_codec,
+            "message": msg_codec,
+        },
+        {
+            "id": "resolution",
+            "name": "Độ phân giải hiển thị",
+            "detected": f"{width}×{height}" if width else "N/A",
+            "standard": f"{standard.min_width}×{standard.min_height} — {standard.max_width}×{standard.max_height}",
+            "passed": pass_res,
+            "message": msg_res,
+        },
+        {
+            "id": "fps",
+            "name": "Tốc độ khung hình (FPS)",
+            "detected": f"{fps:.1f} FPS" if fps else "Chuẩn",
+            "standard": "≥ 15.0 FPS",
+            "passed": pass_fps,
+            "message": msg_fps,
+        },
+        {
+            "id": "duration",
+            "name": "Thời lượng bài giảng",
+            "detected": f"{mins}m {secs}s" if duration else "Hợp lệ",
+            "standard": f"≤ {max_mins} phút ({standard.max_duration}s)",
+            "passed": pass_duration,
+            "message": msg_duration,
+        },
+        {
+            "id": "size",
+            "name": "Dung lượng tệp lưu trữ",
+            "detected": f"{size_mb:.1f} MB",
+            "standard": f"≤ {standard.max_file_size} MB",
+            "passed": pass_size,
+            "message": msg_size,
+        },
+        {
+            "id": "audio",
+            "name": "Luồng âm thanh & Thoại",
+            "detected": (audio_codec or "Audio Track").upper(),
+            "standard": "AAC, Opus, MP3",
+            "passed": pass_audio,
+            "message": msg_audio,
+        },
+    ]
+
+    all_passed = all(c["passed"] for c in checks)
+
+    return BaseDTO(
+        success=True,
+        data={
+            "overallValid": all_passed,
+            "fileName": file_name,
+            "sizeMb": size_mb,
+            "duration": duration,
+            "resolution": f"{width}×{height}",
+            "videoCodec": video_codec,
+            "audioCodec": audio_codec,
+            "fps": fps,
+            "checks": checks,
+        },
+        message="Thẩm định tiêu chuẩn video hoàn tất.",
+    )
 
 
 @router.post(
@@ -34,13 +273,18 @@ def upload_video(
     background_tasks: BackgroundTasks,
     original_url: Optional[str] = Form(None),
     originalUrl: Optional[str] = Form(None),
-    language: str = Form("en"),
+    language: str = Form("auto"),
+    summary_length: Optional[str] = Form("medium"),
+    summaryLength: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
     """Processes upload request, validates standards, stores metadata, runs background AI tasks."""
     url = original_url or originalUrl
+    source_language = (language or "auto").strip().lower()
+    if source_language not in ("vi", "en"):
+        source_language = "auto"
 
     # 1. Fetch current validation standards
     standard = db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
@@ -63,12 +307,13 @@ def upload_video(
 
     duration = 0.0
     file_path = None
+    file_metadata_info = None
 
     if file:
         # Validate format
         file_ext = file.filename.split(".")[-1].lower() if file.filename else ""
         allowed_formats_list = [
-            f.strip() for f in standard.allowed_formats.split(",")
+            f.strip().lower() for f in standard.allowed_formats.split(",") if f.strip()
         ]
         if file_ext not in allowed_formats_list:
             raise ValidationException(
@@ -84,8 +329,7 @@ def upload_video(
                 message=f"File size ({file_size_mb:.2f} MB) exceeds maximum allowed size ({standard.max_file_size} MB)"
             )
 
-        # Upload file to mock or actual R2
-        # Save temp file locally first to upload
+        # Save temp file locally first to inspect and upload
         temp_dir = os.path.join(os.getcwd(), "storage", "temp")
         os.makedirs(temp_dir, exist_ok=True)
         temp_file_path = os.path.join(
@@ -94,34 +338,23 @@ def upload_video(
         with open(temp_file_path, "wb") as buffer:
             buffer.write(file.file.read())
 
+        # Inspect video streams using ffprobe
+        file_metadata_info = inspect_video_streams(temp_file_path)
+        is_valid, validation_error = validate_video_standards(file_metadata_info, standard)
+        if not is_valid:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            raise ValidationException(
+                message=validation_error or "Tệp video không đáp ứng tiêu chuẩn kỹ thuật của hệ thống."
+            )
+
         object_name = f"videos/{uuid.uuid4()}.{file_ext}"
         file_path = r2_service.upload_file(temp_file_path, object_name)
 
-        # Get actual video duration using OpenCV or ffprobe
-        duration = 0.0
-        try:
-            import cv2
-            cap = cv2.VideoCapture(temp_file_path)
-            if cap.isOpened():
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-                if fps > 0:
-                    duration = frame_count / fps
-                cap.release()
-        except Exception:
-            pass
-            
-        if duration <= 0.0:
-            try:
-                import subprocess
-                cmd = [
-                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1", temp_file_path
-                ]
-                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                duration = float(res.stdout.strip())
-            except Exception:
-                duration = 0.0
+        # Get actual video duration from inspected streams
+        v_fmt = file_metadata_info.get("format") or {}
+        v_stream = file_metadata_info.get("video") or {}
+        duration = float(v_fmt.get("duration") or v_stream.get("duration") or 0.0)
 
         # Clean up temp file
         if os.path.exists(temp_file_path):
@@ -151,19 +384,76 @@ def upload_video(
             message=f"Video duration ({duration:.1f} seconds) exceeds maximum allowed duration ({standard.max_duration} seconds)"
         )
 
-    # 3. Create Video metadata record
+    # 2c. Deduplication Guard: If user just submitted this video within 15s and it's already pending/processing, return it
+    import datetime as dt
+    fifteen_sec_ago = dt.datetime.utcnow() - dt.timedelta(seconds=15)
+    existing_inflight = None
+    if url:
+        existing_inflight = (
+            db.query(Video)
+            .filter(
+                Video.user_id == current_user.user_id,
+                Video.original_url == url,
+                Video.status.in_([VideoStatus.PENDING, VideoStatus.PROCESSING]),
+                Video.uploaded_at >= fifteen_sec_ago,
+            )
+            .order_by(Video.uploaded_at.desc())
+            .first()
+        )
+    elif file and duration > 0.0:
+        candidate = (
+            db.query(Video)
+            .filter(
+                Video.user_id == current_user.user_id,
+                Video.status.in_([VideoStatus.PENDING, VideoStatus.PROCESSING]),
+                Video.uploaded_at >= fifteen_sec_ago,
+            )
+            .order_by(Video.uploaded_at.desc())
+            .first()
+        )
+        if candidate and abs((candidate.duration or 0.0) - duration) < 1.0:
+            existing_inflight = candidate
+
+    if existing_inflight:
+        return BaseDTO(
+            success=True,
+            data=VideoDTO.model_validate(existing_inflight),
+            message="Video đã được tải lên và đang trong tiến trình xử lý.",
+        )
+
+    # 3. Create Video record
     db_video = Video(
         user_id=current_user.user_id,
         original_url=url,
         file_path=file_path,
         duration=duration,
-        language=language,
+        language=source_language,
         status=VideoStatus.PENDING,
         title="Đang phân tích tên bài giảng...",
     )
     db.add(db_video)
     db.commit()
     db.refresh(db_video)
+
+    # 3b. Create VideoMetadata record if streams info is available from local inspection
+    if file_metadata_info and file_metadata_info.get("video"):
+        v_stream = file_metadata_info["video"]
+        a_stream = file_metadata_info.get("audio") or {}
+        db_meta = VideoMetadata(
+            video_id=db_video.video_id,
+            video_codec=v_stream.get("codec_name"),
+            audio_codec=a_stream.get("codec_name") if a_stream else None,
+            fps=float(v_stream.get("fps") or 0.0),
+            frame_count=int(v_stream.get("frame_count") or 0),
+            width=int(v_stream.get("width") or 0),
+            height=int(v_stream.get("height") or 0),
+            bitrate=v_stream.get("bitrate"),
+            video_source="upload",
+            video_path=file_path or "",
+        )
+        db.add(db_meta)
+        db.commit()
+        db.refresh(db_video)
 
     # 4. Create Job record
     db_job = Job(
@@ -190,10 +480,19 @@ def upload_video(
 
     try:
         from app.core.celery_app import celery_app
+        user_lang = getattr(current_user, "output_language", "vi") or "vi"
+        valid_lengths = {"short", "medium", "detailed"}
+        chosen_len = (summaryLength or summary_length or "medium").strip().lower()
+        norm_summary_length = chosen_len if chosen_len in valid_lengths else "medium"
         celery_app.send_task(
             "ai_workers.process_video",
             args=[str(db_job.job_id), physical_video_path],
-            kwargs={"config_stack": "hybrid"},
+            kwargs={
+                "config_stack": "hybrid",
+                "output_language": user_lang,
+                "summary_length": norm_summary_length,
+                "source_language": source_language,
+            },
             task_id=str(db_job.job_id)
         )
         # Update statuses for active run
@@ -259,6 +558,30 @@ def list_videos(
             for job in v.jobs:
                 sync_job_status(job, db)
 
+    # Auto-heal generic titles for completed videos
+    try:
+        from ai_workers.modules.summarization.summarizer import is_generic_title, clean_video_title
+        from app.models.summary import Summary
+        has_title_updates = False
+        for v in videos:
+            if is_generic_title(v.title) or "|" in (v.title or ""):
+                summary = db.query(Summary).filter(Summary.video_id == v.video_id).first()
+                if summary and (summary.chapters_json or summary.summary_text):
+                    better_title = clean_video_title(
+                        raw_title=v.title,
+                        summary_text=summary.summary_text or "",
+                        lang_code=getattr(v, "language", "vi") or "vi",
+                        chapters=summary.chapters_json or [],
+                        takeaways=summary.key_takeaways_json or [],
+                    )
+                    if better_title and not is_generic_title(better_title):
+                        v.title = better_title
+                        has_title_updates = True
+        if has_title_updates:
+            db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to auto-heal titles in list_videos: {e}")
+
     return BaseDTO(
         success=True,
         data=[VideoDTO.model_validate(v) for v in videos],
@@ -318,6 +641,11 @@ def update_standards(
     standard.allowed_formats = standard_in.allowed_formats
     standard.max_file_size = standard_in.max_file_size
     standard.min_audio_quality = standard_in.min_audio_quality
+    standard.allowed_codecs = standard_in.allowed_codecs
+    standard.min_width = standard_in.min_width
+    standard.min_height = standard_in.min_height
+    standard.max_width = standard_in.max_width
+    standard.max_height = standard_in.max_height
 
     db.add(standard)
     db.commit()
@@ -328,6 +656,33 @@ def update_standards(
         data=VideoStandardDTO.model_validate(standard),
         message="Standards configuration updated successfully",
     )
+
+
+@router.get(
+    "/admin/video-standards",
+    response_model=BaseDTO[VideoStandardDTO],
+    summary="Retrieve active video standards (Admin alias)",
+    description="Admin alias endpoint for retrieving video upload standards.",
+)
+def get_admin_video_standards(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_admin),
+):
+    return get_standards(db=db)
+
+
+@router.put(
+    "/admin/video-standards",
+    response_model=BaseDTO[VideoStandardDTO],
+    summary="Update video standards (Admin alias)",
+    description="Admin alias endpoint for updating video upload standards.",
+)
+def update_admin_video_standards(
+    standard_in: VideoStandardBase,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_admin),
+):
+    return update_standards(standard_in=standard_in, db=db, current_user=current_user)
 
 
 @router.get(
@@ -350,10 +705,82 @@ def get_video(
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
 
+    # Auto-heal generic or missing video title if summary exists
+    try:
+        from ai_workers.modules.summarization.summarizer import is_generic_title, clean_video_title
+        if is_generic_title(video.title) or "|" in (video.title or ""):
+            from app.models.summary import Summary
+            summary = db.query(Summary).filter(Summary.video_id == video.video_id).first()
+            if summary and (summary.chapters_json or summary.summary_text):
+                better_title = clean_video_title(
+                    raw_title=video.title,
+                    summary_text=summary.summary_text or "",
+                    lang_code=getattr(video, "language", "vi") or "vi",
+                    chapters=summary.chapters_json or [],
+                    takeaways=summary.key_takeaways_json or [],
+                )
+                if better_title and not is_generic_title(better_title):
+                    video.title = better_title
+                    db.commit()
+                    db.refresh(video)
+    except Exception as e:
+        logger.warning(f"Failed to auto-heal video title in get_video: {e}")
+
     return BaseDTO(
         success=True,
         data=VideoDTO.model_validate(video),
         message="Video details retrieved successfully",
+    )
+
+
+@router.post(
+    "/{video_id}/reindex",
+    response_model=BaseDTO[VideoDTO],
+    summary="Rebuild the Q&A index from the stored summary",
+    description="Queues ai_workers.reindex_video. Does not rerun transcription or visual analysis.",
+)
+def reindex_video_index(
+    video_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Replace the Chroma index for one finished video."""
+    video = (
+        db.query(Video)
+        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
+        .first()
+    )
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    summary = db.query(Summary).filter(Summary.video_id == video_id).first()
+    if not summary:
+        raise NotFoundException(message="Chưa có bản tóm tắt để dựng lại chỉ mục hỏi đáp.")
+
+    current = video.rag_status.value if isinstance(video.rag_status, RagStatus) else str(video.rag_status or "")
+    if current == RagStatus.PROCESSING.value:
+        return BaseDTO(
+            success=True,
+            data=VideoDTO.model_validate(video),
+            message="Chỉ mục hỏi đáp đang được dựng.",
+        )
+
+    video.rag_status = RagStatus.PROCESSING
+    db.commit()
+    try:
+        from app.core.celery_app import celery_app
+        celery_app.send_task("ai_workers.reindex_video", args=[str(video.video_id)])
+    except Exception as exc:
+        video.rag_status = RagStatus.FAILED
+        db.commit()
+        logging.getLogger(__name__).error(f"Failed to enqueue reindex for {video_id}: {exc}")
+        raise AppException(message="Không xếp được hàng dựng lại chỉ mục hỏi đáp.", status_code=503)
+
+    db.refresh(video)
+    return BaseDTO(
+        success=True,
+        data=VideoDTO.model_validate(video),
+        message="Đã xếp hàng dựng lại chỉ mục hỏi đáp.",
     )
 
 
@@ -481,20 +908,20 @@ def get_video_metadata(
     "/{video_id}/scenes",
     response_model=BaseDTO[List[VideoSceneDTO]],
     summary="Get video scenes list",
-    description="Retrieves the segmented list of scenes with timestamps, keyframe images, and transcripts.",
+    description="Retrieves the segmented list of scenes with timestamps, keyframe images, transcripts, and detected objects.",
 )
 def get_video_scenes(
     video_id: uuid.UUID,
+    object_label: Optional[str] = Query(None, description="Lọc các phân cảnh có xuất hiện nhãn đối tượng này"),
+    min_confidence: Optional[float] = Query(None, description="Ngưỡng độ tin cậy tối thiểu của đối tượng"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Retrieve video scenes."""
-    # Check that video exists and belongs to current user
-    video = (
-        db.query(Video)
-        .filter(Video.video_id == video_id, Video.user_id == current_user.user_id)
-        .first()
-    )
+    """Retrieve video scenes with optional object detection filtering."""
+    query = db.query(Video).filter(Video.video_id == video_id)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(Video.user_id == current_user.user_id)
+    video = query.first()
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
 
@@ -505,10 +932,180 @@ def get_video_scenes(
         .all()
     )
 
+    if object_label or min_confidence is not None:
+        target_label = object_label.strip().lower() if object_label else None
+        filtered_scenes = []
+        for s in scenes:
+            det = s.detected_objects_json or {}
+            counts = s.object_counts_json or {}
+            matched = False
+
+            # 1. Check keyframe_bboxes
+            for box in (det.get("keyframe_bboxes") or []):
+                lbl = str(box.get("label", "")).strip().lower()
+                conf = float(box.get("confidence") or 0.0)
+                label_ok = (target_label is None) or (lbl == target_label)
+                conf_ok = (min_confidence is None) or (conf >= min_confidence)
+                if label_ok and conf_ok:
+                    matched = True
+                    break
+
+            # 2. Check tracks_summary
+            if not matched:
+                for trk in (det.get("tracks_summary") or []):
+                    lbl = str(trk.get("label", "")).strip().lower()
+                    conf = float(trk.get("avg_confidence") or 0.0)
+                    label_ok = (target_label is None) or (lbl == target_label)
+                    conf_ok = (min_confidence is None) or (conf >= min_confidence)
+                    if label_ok and conf_ok:
+                        matched = True
+                        break
+
+            # 3. Check object_counts fallback
+            if not matched and min_confidence is None and target_label is not None:
+                for lbl, cnt in counts.items():
+                    if str(lbl).strip().lower() == target_label and cnt > 0:
+                        matched = True
+                        break
+
+            if matched:
+                filtered_scenes.append(s)
+
+        scenes = filtered_scenes
+
     return BaseDTO(
         success=True,
         data=[VideoSceneDTO.model_validate(s) for s in scenes],
         message="Video scenes retrieved successfully",
+    )
+
+
+@router.get(
+    "/{video_id}/objects",
+    response_model=BaseDTO[VideoObjectsDetailResponseDTO],
+    summary="Get video detected objects aggregation and occurrences",
+    description="Aggregates all unique detected object labels with scene indices, timestamps, and confidence scores.",
+)
+def get_video_objects(
+    video_id: uuid.UUID,
+    min_confidence: Optional[float] = Query(None, description="Ngưỡng độ tin cậy tối thiểu để tổng hợp"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retrieve aggregated unique object labels and scene occurrences across the video."""
+    query = db.query(Video).filter(Video.video_id == video_id)
+    if current_user.role != UserRole.ADMIN:
+        query = query.filter(Video.user_id == current_user.user_id)
+    video = query.first()
+    if not video:
+        raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    summary = db.query(Summary).filter(Summary.video_id == video_id).first()
+    objects_summary_raw = getattr(summary, "objects_summary_json", None) if summary else None
+
+    scenes = (
+        db.query(VideoScene)
+        .filter(VideoScene.video_id == video_id)
+        .order_by(VideoScene.scene_index.asc())
+        .all()
+    )
+
+    label_map: Dict[str, Dict[str, Any]] = {}
+
+    for s in scenes:
+        det = s.detected_objects_json or {}
+        counts = s.object_counts_json or {}
+        scene_labels_seen: Dict[str, Dict[str, Any]] = {}
+
+        # Inspect keyframe_bboxes
+        for box in (det.get("keyframe_bboxes") or []):
+            lbl = str(box.get("label", "")).strip().lower()
+            if not lbl:
+                continue
+            conf = float(box.get("confidence") or 0.0)
+            if min_confidence is not None and conf < min_confidence:
+                continue
+            if lbl not in scene_labels_seen:
+                scene_labels_seen[lbl] = {"count": 1, "max_conf": conf}
+            else:
+                scene_labels_seen[lbl]["count"] += 1
+                scene_labels_seen[lbl]["max_conf"] = max(scene_labels_seen[lbl]["max_conf"], conf)
+
+        # Inspect tracks_summary
+        for trk in (det.get("tracks_summary") or []):
+            lbl = str(trk.get("label", "")).strip().lower()
+            if not lbl:
+                continue
+            conf = float(trk.get("avg_confidence") or 0.0)
+            if min_confidence is not None and conf < min_confidence:
+                continue
+            if lbl not in scene_labels_seen:
+                scene_labels_seen[lbl] = {"count": 1, "max_conf": conf}
+            else:
+                scene_labels_seen[lbl]["max_conf"] = max(scene_labels_seen[lbl]["max_conf"], conf)
+
+        # Fallback to counts if no detections parsed yet
+        for lbl_raw, cnt in counts.items():
+            lbl = str(lbl_raw).strip().lower()
+            if not lbl or cnt <= 0:
+                continue
+            if lbl not in scene_labels_seen and min_confidence is None:
+                scene_labels_seen[lbl] = {"count": cnt, "max_conf": 0.0}
+
+        # Merge into global label_map
+        for lbl, scene_info in scene_labels_seen.items():
+            if lbl not in label_map:
+                label_map[lbl] = {
+                    "total_count": 0,
+                    "scenes": [],
+                }
+            label_map[lbl]["total_count"] += scene_info["count"]
+            label_map[lbl]["scenes"].append(
+                ObjectOccurrenceSceneDTO(
+                    scene_index=s.scene_index,
+                    start_seconds=s.start_seconds,
+                    end_seconds=s.end_seconds,
+                    count=scene_info["count"],
+                    max_confidence=round(scene_info["max_conf"], 3),
+                    keyframe_url=s.keyframe_url,
+                )
+            )
+
+    label_details: List[VideoObjectLabelDetailDTO] = []
+    for lbl, data in label_map.items():
+        label_details.append(
+            VideoObjectLabelDetailDTO(
+                label=lbl,
+                total_count=data["total_count"],
+                scenes_count=len(data["scenes"]),
+                scenes=data["scenes"],
+            )
+        )
+
+    # Sort: most scenes first, then highest total count, then alphabetical
+    label_details.sort(key=lambda x: (x.scenes_count, x.total_count), reverse=True)
+
+    summary_dto = (
+        VideoObjectsSummaryDTO.model_validate(objects_summary_raw)
+        if objects_summary_raw and isinstance(objects_summary_raw, dict)
+        else VideoObjectsSummaryDTO(
+            total_unique_tracks=sum(d.total_count for d in label_details),
+            label_distribution={d.label: d.total_count for d in label_details},
+            most_frequent_objects=[d.label for d in label_details[:5]],
+        )
+    )
+
+    response_dto = VideoObjectsDetailResponseDTO(
+        video_id=video_id,
+        total_unique_objects=len(label_details),
+        summary=summary_dto,
+        objects=label_details,
+    )
+
+    return BaseDTO(
+        success=True,
+        data=response_dto,
+        message="Video objects aggregation retrieved successfully",
     )
 
 

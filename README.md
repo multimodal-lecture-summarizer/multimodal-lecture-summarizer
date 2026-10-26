@@ -1,5 +1,7 @@
 # Video Summarization System
 
+> 📖 **HƯỚNG DẪN CÀI ĐẶT & CHẠY DỰ ÁN TỪ A-Z:** Xem chi tiết tại [HUONG_DAN_CHAY_DU_AN.md](file:///d:/Document/Code/Exercise/Workspace/multimodal-lecture-summarizer/HUONG_DAN_CHAY_DU_AN.md) để cài đặt các công cụ bắt buộc (Python 3.10/3.11, Git LFS, FFmpeg, Redis) và khởi chạy không lỗi.
+
 Hệ thống tóm tắt video bài giảng đa phương thức sử dụng AI — kiến trúc microservice với Frontend (ReactJS), Backend API (FastAPI), và AI Workers (Celery).
 
 ## 1. Kiến trúc hệ thống
@@ -20,7 +22,7 @@ VIDEO-SUMMARIZATION-SYSTEM/
 │   └── app/services/               # Logic CRUD database, gửi task vào Celery
 ├── ai_workers/                     # 🟨 Celery + AI Models: xử lý bất đồng bộ
 │   ├── core/                       # Cấu hình chung, kết nối Redis/Celery
-│   ├── modules/audio/              # 🧑 NGƯỜI 1: WhisperX, FFmpeg, Noise reduction
+│   ├── modules/audio/              # Faster-Whisper, FFmpeg, noise reduction
 │   ├── modules/visual/             # 🧑 NGƯỜI 2: PySceneDetect, CLIP, BLIP-2
 │   ├── modules/fusion/             # 🧑 NGƯỜI 3: LangChain, LLM Prompts, ChromaDB RAG
 │   └── tasks.py                    # Celery Tasks kết nối 3 modules
@@ -29,9 +31,8 @@ VIDEO-SUMMARIZATION-SYSTEM/
 │   ├── evaluation/                 # Script tính WER, ROUGE-L, BERTScore
 │   └── datasets/                   # CHÚ Ý: .gitignore, chỉ sample data
 ├── docs/                           # Tài liệu dự án
-│   ├── api_contracts/              # JSON schema Frontend ↔ Backend
-│   ├── architecture/               # Biểu đồ luồng dữ liệu, ERD
-│   └── reports/                    # Báo cáo đồ án, file thuyết trình
+│   ├── architecture/               # Biểu đồ luồng dữ liệu, HTML reports
+│   └── current-system-architecture.md # Kiến trúc hệ thống mới nhất
 ├── docker-compose.yml              # Triển khai: Frontend, API, Worker, PostgreSQL, Redis
 ├── .env.example                    # File mẫu biến môi trường
 ├── .gitignore
@@ -42,8 +43,8 @@ VIDEO-SUMMARIZATION-SYSTEM/
 
 | Tầng | Chức năng | Công nghệ |
 |------|-----------|-----------| 
-| Audio | Nhận dạng lời nói + timestamp | WhisperX, AssemblyAI |
-| Speaker | Xác định ai nói | pyannote.audio |
+| Audio | Nhận dạng lời nói + word timestamp | Faster-Whisper `small` (đa ngôn ngữ). `vi`/`en` được truyền từ upload; `auto` để model tự nhận. |
+| Speaker | Gán người nói khi có token | pyannote 3.1 chỉ chạy nếu có `HF_TOKEN`. Không có token thì `diarization_status=skipped`, không gán speaker giả. |
 | Visual | Phát hiện cảnh, trích keyframe | PySceneDetect |
 | Semantic | OCR slide, hiểu nội dung ảnh | PaddleOCR, CLIP, GPT-4o vision |
 | Timeline | Alignment, chia chương, RAG | ChromaDB, cross-modal matching |
@@ -106,12 +107,13 @@ Quá trình thực nghiệm được tiến hành độc lập trên hai tập d
 | [docs/POTENTIAL_RESEARCH_TRENDS.md](docs/POTENTIAL_RESEARCH_TRENDS.md) | Phân tích các hướng phát triển tiên phong (cutting-edge) trong tương lai |
 | [docs/HYBRID_MODEL_GUIDE.md](docs/HYBRID_MODEL_GUIDE.md) | Hướng dẫn thiết kế, cài đặt PyTorch và huấn luyện mô hình Hybrid |
 | [docs/setup-guide.md](docs/setup-guide.md) | Hướng dẫn cài đặt, chạy local và reset DB |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc chi tiết, data flow |
+| [docs/current-system-architecture.md](docs/current-system-architecture.md) | Kiến trúc hệ thống hiện tại mới nhất, quy trình xử lý, checkpoint & fallback |
+| [docs/MODEL_SELECTION_README.md](docs/MODEL_SELECTION_README.md) | Báo cáo lựa chọn mô hình Multi-Model dựa trên số liệu thực nghiệm |
+| [docs/SPRINT_QUALITY_DEPLOYMENT.md](docs/SPRINT_QUALITY_DEPLOYMENT.md) | Báo cáo Quality Gates & Sprint Stack (S1–S10) |
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
 | [docs/DATASET_EDA.md](docs/DATASET_EDA.md) | CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG (Phân tích khám phá dữ liệu TEDLIUM & TVSum) |
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | Khung benchmark trên video thực tế |
 | [docs/florence-2-cpu-reproducibility.md](docs/florence-2-cpu-reproducibility.md) | Nguyên nhân Florence-2 sinh text rác trên CPU và giải pháp tái lập Windows/Linux |
-| [docs/api_contracts/](docs/api_contracts/) | JSON schema Frontend ↔ Backend |
 
 ## 6. Cấu hình Stack
 

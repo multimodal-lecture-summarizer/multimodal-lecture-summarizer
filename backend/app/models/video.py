@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Enum, Text
+from typing import Optional, List, Any
+from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Enum, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
@@ -70,12 +70,15 @@ class VideoMetadata(Base):
         ForeignKey("videos.video_id", ondelete="CASCADE"),
         primary_key=True,
     )
+    video_codec: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    audio_codec: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     fps: Mapped[float] = mapped_column(Float, nullable=False)
-    frame_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    frame_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     width: Mapped[int] = mapped_column(Integer, nullable=False)
     height: Mapped[int] = mapped_column(Integer, nullable=False)
-    video_source: Mapped[str] = mapped_column(String(100), nullable=False)
-    video_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    bitrate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    video_source: Mapped[str] = mapped_column(String(100), nullable=False, default="upload")
+    video_path: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
 
     # Relationships
     video: Mapped["Video"] = relationship("Video", back_populates="video_metadata")
@@ -106,6 +109,8 @@ class VideoScene(Base):
     keyframe_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     caption: Mapped[str] = mapped_column(Text, nullable=False)
     script: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    detected_objects_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    object_counts_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     video: Mapped["Video"] = relationship("Video", back_populates="scenes")
@@ -129,3 +134,18 @@ class VideoStandard(Base):
     min_audio_quality: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.0
     )  # SNR value or similar threshold
+    allowed_codecs: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=lambda: ["h264", "hevc"]
+    )  # accepted video codecs e.g. ["h264", "hevc"]
+    min_width: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=640
+    )
+    min_height: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=360
+    )
+    max_width: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1920
+    )
+    max_height: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1080
+    )
