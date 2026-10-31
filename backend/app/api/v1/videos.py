@@ -484,6 +484,9 @@ def upload_video(
         valid_lengths = {"short", "medium", "detailed"}
         chosen_len = (summaryLength or summary_length or "medium").strip().lower()
         norm_summary_length = chosen_len if chosen_len in valid_lengths else "medium"
+        from app.services.worker_routing import choose_video_queue
+        target_queue = choose_video_queue(celery_app, physical_video_path)
+        logger.info(f"Dispatching job {db_job.job_id} to Celery queue '{target_queue}'.")
         celery_app.send_task(
             "ai_workers.process_video",
             args=[str(db_job.job_id), physical_video_path],
@@ -493,7 +496,8 @@ def upload_video(
                 "summary_length": norm_summary_length,
                 "source_language": source_language,
             },
-            task_id=str(db_job.job_id)
+            task_id=str(db_job.job_id),
+            queue=target_queue,
         )
         # Update statuses for active run
         import datetime as dt

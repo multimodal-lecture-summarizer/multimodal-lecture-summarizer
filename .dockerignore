@@ -1,0 +1,37 @@
+# Build context for backend/Dockerfile and ai_workers/Dockerfile is the repo root.
+# frontend/ builds from its own context (frontend/.dockerignore).
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/.venv-*
+**/node_modules
+.coverage
+
+# Secrets are passed at runtime (env_file / Colab Secrets), never baked into images.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Runtime data and research material
+storage
+cache
+outputs
+uploads
+backend/storage
+backend/local.db
+frontend
+experiments
+benchmarks
+probes
+reports
+scratch
+plans
+docs
+tests
+ai_workers/tests
+backend/tests
+*.mp4
+*.wav
+*.pt

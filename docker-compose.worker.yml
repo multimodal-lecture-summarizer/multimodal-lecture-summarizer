@@ -1,0 +1,32 @@
+# GPU worker alone, on any NVIDIA machine (home PC, cloud VM, RunPod...), joining a website
+# that runs elsewhere. Requires in ./.env: SHARED_REDIS_URL (same Redis as the backend).
+# Requires in backend/.env: R2 credentials, GROQ_API_KEY, and the hosted database/Chroma
+# settings if this worker should also run RAG indexing.
+#
+#   docker compose -f docker-compose.worker.yml up --build
+services:
+  gpu_worker:
+    build:
+      context: .
+      dockerfile: ai_workers/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      CELERY_BROKER_URL: ${SHARED_REDIS_URL:?set SHARED_REDIS_URL in .env}
+      CELERY_RESULT_BACKEND: ${SHARED_REDIS_URL:?set SHARED_REDIS_URL in .env}
+      # Only the GPU queue: RAG indexing ("celery" queue) stays with the machine that owns the database.
+      WORKER_QUEUES: ${WORKER_QUEUES:-gpu}
+      FLORENCE_DEVICE: ${FLORENCE_DEVICE:-cuda}
+      SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
+      PADDLEOCR_USE_GPU: "0"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+    volumes:
+      - ./cache:/app/cache
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

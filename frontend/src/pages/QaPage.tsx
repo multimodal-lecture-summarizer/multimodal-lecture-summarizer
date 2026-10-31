@@ -165,7 +165,7 @@ export const QaPage: React.FC = () => {
   };
 
   const handleSendMessage = async (textToSend = inputText) => {
-    if (!textToSend.trim() || !canAsk) {
+    if (!textToSend.trim() || !canAsk || !activeVideoId) {
       if (!activeVideoId && textToSend.trim()) {
         toast.error(t('qa.no_video_selected'), t('qa.no_video_alert'));
       }

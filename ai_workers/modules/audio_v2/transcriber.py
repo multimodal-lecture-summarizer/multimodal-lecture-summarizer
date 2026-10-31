@@ -44,14 +44,20 @@ class AudioTranscriber:
 
         import torch
 
-        # CTranslate2 on Windows still expects cuDNN 8 symbols; prefer GPU only when present.
-        cudnn8_dll = ctranslate2_dir / "cudnn_ops_infer64_8.dll"
-        if not cudnn8_dll.exists():
-            cudnn8_dll = cudnn_bin / "cudnn_ops_infer64_8.dll"
+        # CTranslate2 on Windows still expects cuDNN 8 DLLs; prefer GPU only when present.
+        # Linux (Docker/Colab) uses ctranslate2>=4.5 with the cuDNN 9 libraries from the
+        # torch wheels, which must be on LD_LIBRARY_PATH before the process starts.
+        if sys.platform == "win32":
+            cudnn8_dll = ctranslate2_dir / "cudnn_ops_infer64_8.dll"
+            if not cudnn8_dll.exists():
+                cudnn8_dll = cudnn_bin / "cudnn_ops_infer64_8.dll"
+            cudnn_missing = not cudnn8_dll.exists()
+        else:
+            cudnn_missing = False
         force_device = str(self.config.get("device") or os.environ.get("FASTER_WHISPER_DEVICE", "")).lower()
 
-        if force_device == "cpu" or (torch.cuda.is_available() and not cudnn8_dll.exists()):
-            if torch.cuda.is_available() and force_device != "cpu" and not cudnn8_dll.exists():
+        if force_device == "cpu" or (torch.cuda.is_available() and cudnn_missing):
+            if torch.cuda.is_available() and force_device != "cpu" and cudnn_missing:
                 print(
                     "[ASR] cuDNN 8 DLL missing for Faster-Whisper; using CPU for ASR "
                     "(Florence/CLIP can still use CUDA)."

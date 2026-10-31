@@ -1,5 +1,11 @@
+# NVIDIA override for docker-compose.yml: the worker gets the GPU and also takes the "gpu" queue.
+# Needs the NVIDIA driver + NVIDIA Container Toolkit (Docker Desktop on Windows: WSL2 backend).
 services:
   ai_worker:
+    environment:
+      WORKER_QUEUES: gpu,celery
+      FLORENCE_DEVICE: ${FLORENCE_DEVICE:-cuda}
+      SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
     deploy:
       resources:
         reservations:

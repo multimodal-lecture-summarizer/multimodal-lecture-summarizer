@@ -107,6 +107,7 @@ Quá trình thực nghiệm được tiến hành độc lập trên hai tập d
 | [docs/POTENTIAL_RESEARCH_TRENDS.md](docs/POTENTIAL_RESEARCH_TRENDS.md) | Phân tích các hướng phát triển tiên phong (cutting-edge) trong tương lai |
 | [docs/HYBRID_MODEL_GUIDE.md](docs/HYBRID_MODEL_GUIDE.md) | Hướng dẫn thiết kế, cài đặt PyTorch và huấn luyện mô hình Hybrid |
 | [docs/setup-guide.md](docs/setup-guide.md) | Hướng dẫn cài đặt, chạy local và reset DB |
+| [docs/colab-gpu-worker-guide.md](docs/colab-gpu-worker-guide.md) | Docker cho mọi máy, worker GPU trên Colab, R2 + Redis public, định tuyến GPU/CPU |
 | [docs/current-system-architecture.md](docs/current-system-architecture.md) | Kiến trúc hệ thống hiện tại mới nhất, quy trình xử lý, checkpoint & fallback |
 | [docs/MODEL_SELECTION_README.md](docs/MODEL_SELECTION_README.md) | Báo cáo lựa chọn mô hình Multi-Model dựa trên số liệu thực nghiệm |
 | [docs/SPRINT_QUALITY_DEPLOYMENT.md](docs/SPRINT_QUALITY_DEPLOYMENT.md) | Báo cáo Quality Gates & Sprint Stack (S1–S10) |

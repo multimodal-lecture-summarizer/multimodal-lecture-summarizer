@@ -8,9 +8,13 @@ pyyaml>=6.0
 # Audio: WhisperX, pyannote
 torch==2.5.1
 torchaudio==2.5.1
-whisperx
+# Windows keeps the cuDNN 8 stack (ctranslate2 4.4). Linux GPU hosts (Docker, Colab)
+# share cuDNN 9 with the torch 2.5.1 wheels, which needs ctranslate2 4.5+.
+# whisperx is not imported by the worker; it stays on Windows only because it pins ctranslate2.
+whisperx; sys_platform == "win32"
 faster-whisper>=1.0.0
-ctranslate2<4.5.0
+ctranslate2<4.5.0; sys_platform == "win32"
+ctranslate2>=4.5.0,<5; sys_platform != "win32"
 pyannote.audio>=3.1
 deepfilternet
 
