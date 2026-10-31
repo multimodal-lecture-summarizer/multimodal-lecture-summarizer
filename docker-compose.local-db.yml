@@ -1,0 +1,11 @@
+# Use Compose's local PostgreSQL without changing hosted credentials in backend/.env.
+# config.py prioritizes a non-localhost POSTGRES_SERVER over DATABASE_URL.
+# Keeping it at the default lets DATABASE_URL from docker-compose.yml take effect.
+# Run: docker compose -f docker-compose.yml -f docker-compose.local-db.yml up -d
+services:
+  backend_api:
+    environment:
+      POSTGRES_SERVER: localhost
+  ai_worker:
+    environment:
+      POSTGRES_SERVER: localhost
