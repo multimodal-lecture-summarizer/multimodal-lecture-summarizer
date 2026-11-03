@@ -82,7 +82,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         raise
 
     _patch_transformers_torch_load_check()
-    from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+    from ai_workers.modules.audio_v2.factory import asr_identifier, build_transcriber
     from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
     from ai_workers.modules.visual_v2.scene_detector import SceneDetector
     from ai_workers.modules.visual_v2.object_tracker import ObjectDetectorTracker
@@ -95,7 +95,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     checkpoint_manager.cleanup_expired()
     source_language = normalize_source_language(source_language)
     config_fingerprint = build_config_fingerprint(
-        asr_model=worker_settings.FASTER_WHISPER_MODEL,
+        asr_model=asr_identifier(source_language),
         source_language=source_language,
         florence_device=worker_settings.FLORENCE_DEVICE,
         sprint_stack=worker_settings.SPRINT_STACK,
@@ -344,10 +344,10 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             check_revoked()
             log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 6)
             log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
-            audio = AudioTranscriber({"model_name": worker_settings.FASTER_WHISPER_MODEL})
+            audio = build_transcriber(source_language)
             audio_result = audio.process(local_video_path, source_language=source_language)
             log_step(
-                f"Nhận dạng giọng nói xong bằng Faster-Whisper {audio_result.get('asr_model', worker_settings.FASTER_WHISPER_MODEL)} "
+                f"Nhận dạng giọng nói xong bằng {audio_result.get('asr_model', worker_settings.FASTER_WHISPER_MODEL)} "
                 f"(ngôn ngữ nguồn: {audio_result.get('source_language', source_language)}).",
                 "audio",
                 20,
@@ -777,7 +777,9 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
     result["logs"] = list(logs)
     result["source_language"] = source_language
-    result["asr_model"] = worker_settings.FASTER_WHISPER_MODEL
+    result["asr_model"] = (
+        audio_result.get("asr_model") if isinstance(audio_result, dict) else None
+    ) or worker_settings.FASTER_WHISPER_MODEL
     if isinstance(audio_result, dict):
         result["detected_language"] = audio_result.get("language")
         result["diarization_status"] = audio_result.get("diarization_status", "skipped")
@@ -806,7 +808,7 @@ def process_audio(job_id: str, video_path: str):
 
     audio = None
     try:
-        audio = AudioTranscriber()
+        audio = AudioTranscriber()  # standalone task has no source_language; keep Whisper
         return audio.process(video_path)
     finally:
         audio = None

@@ -24,6 +24,12 @@ class WorkerSettings(BaseSettings):
     WHISPERX_MODEL: str = "large-v3"
     WHISPERX_BATCH_SIZE: int = 16
     WHISPERX_COMPUTE_TYPE: str = "float16"
+    # "qwen3" (default) or "whisper". qwen3 applies only when source_language == "en";
+    # vi/auto always use Faster-Whisper (the Qwen aligner has no Vietnamese).
+    ASR_ENGLISH_BACKEND: str = "qwen3"
+    QWEN_ASR_MODEL: str = "Qwen/Qwen3-ASR-0.6B"
+    QWEN_ALIGNER_MODEL: str = "Qwen/Qwen3-ForcedAligner-0.6B"
+    QWEN_ASR_MAX_NEW_TOKENS: int = 1024
 
     # Visual module
     SCENE_THRESHOLD: float = 27.0

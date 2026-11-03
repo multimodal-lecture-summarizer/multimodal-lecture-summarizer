@@ -6,6 +6,7 @@ and credential sanitization.
 """
 
 from __future__ import annotations
+from asr_factory_stub import factory_stub, real_asr_identifier
 
 import json
 import os
@@ -32,7 +33,7 @@ from ai_workers.core.config import worker_settings as _worker_settings
 
 def _current_fingerprint() -> str:
     return build_config_fingerprint(
-        asr_model=_worker_settings.FASTER_WHISPER_MODEL,
+        asr_model=real_asr_identifier("auto"),
         source_language="auto",
         florence_device=_worker_settings.FLORENCE_DEVICE,
         sprint_stack=_worker_settings.SPRINT_STACK,
@@ -129,6 +130,7 @@ class ReliabilityChaosTests(unittest.TestCase):
 
         return {
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
+            "ai_workers.modules.audio_v2.factory": factory_stub(mock_audio_mod),
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
             "ai_workers.modules.visual_v2.object_tracker": MagicMock(),
@@ -492,6 +494,7 @@ class ReliabilityChaosTests(unittest.TestCase):
 
         mock_modules = {
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
+            "ai_workers.modules.audio_v2.factory": factory_stub(mock_audio_mod),
             "ai_workers.modules.audio_v2.speaker": MagicMock(),
             "ai_workers.modules.visual_v2.scene_detector": MagicMock(),
             "ai_workers.modules.visual_v2.object_tracker": MagicMock(),

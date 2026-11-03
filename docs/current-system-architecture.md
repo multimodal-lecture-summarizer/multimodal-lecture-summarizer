@@ -158,7 +158,7 @@ flowchart TD
 - **Thẩm định Kỹ thuật**: `inspect_video_streams` phân tích chi tiết luồng video qua FFprobe. Hệ thống truy vấn bảng `video_standards` để kiểm tra độ dài tối đa, định dạng cho phép, codec hợp lệ (ví dụ: `h264`, `hevc`), độ phân giải nằm trong khoảng `[min_width, min_height]` đến `[max_width, max_height]`.
 
 #### 1. Xử lý Âm thanh & Nhận dạng Giọng nói (Stage 1: Audio & ASR)
-- **Mô hình**: Faster-Whisper, mặc định `small`, có mốc thời gian từng từ. Không dùng forced alignment.
+- **Mô hình**: `source_language=en` mặc định dùng Qwen3-ASR 0.6B + Qwen3-ForcedAligner-0.6B (`ASR_ENGLISH_BACKEND=qwen3`, audio cắt đoạn ≤240s tại điểm lặng). Lỗi Qwen thì tự lùi về Faster-Whisper. `auto` nhận diện ngôn ngữ trước bằng Whisper (90 giây đầu, VAD, cần `en` với xác suất ≥ 0,7) rồi mới chọn engine: tiếng Anh sang Qwen, còn lại (hoặc nhận diện lỗi) sang Faster-Whisper. `vi` luôn dùng Faster-Whisper `small` có mốc thời gian từng từ, vì aligner của Qwen không hỗ trợ tiếng Việt. Đặt `ASR_ENGLISH_BACKEND=whisper` để quay lại hành vi cũ. Qwen3-ASR chỉ được benchmark trên TED-LIUM tiếng Anh (WER 3,53% so với Whisper Base 6,43%); chưa đo so với Whisper `small` và chưa xác nhận đơn vị timestamp trên clip thật.
 - **Ngôn ngữ**: `source_language` là `auto`, `vi` hoặc `en`, đi từ form upload tới `transcribe()`. `auto` không ép ngôn ngữ. `output_language` chỉ chọn ngôn ngữ bản tóm tắt.
 - **Cơ chế**: Trích xuất WAV 16kHz mono, chạy VAD và word timestamps của Faster-Whisper.
 - **Dọn dẹp**: WAV được xóa sau stage, kể cả video upload local. Model được giải phóng bằng `release_worker_resources("audio stage")`.

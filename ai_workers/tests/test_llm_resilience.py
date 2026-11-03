@@ -5,6 +5,7 @@ structured logging sanitization, and fallback schemas.
 """
 
 from __future__ import annotations
+from asr_factory_stub import factory_stub
 
 import io
 import json
@@ -481,6 +482,7 @@ class LLMResilienceTests(unittest.TestCase):
 
         mock_modules = {
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
+            "ai_workers.modules.audio_v2.factory": factory_stub(mock_audio_mod),
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,
