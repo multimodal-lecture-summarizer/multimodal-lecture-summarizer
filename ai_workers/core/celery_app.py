@@ -100,6 +100,13 @@ app.conf.update(
     worker_prefetch_multiplier=1,  # 1 task at a time per worker for GPU tasks
     broker_pool_limit=1,
     redis_max_connections=2,
+    # Managed Redis caps concurrent clients; keepalive and health checks let dead sockets
+    # (killed Colab sessions, NAT drops) be detected and released instead of lingering.
+    broker_transport_options={"socket_keepalive": True, "health_check_interval": 30},
+    redis_socket_keepalive=True,
+    redis_backend_health_check_interval=30,
+    redis_retry_on_timeout=True,
+    broker_connection_retry_on_startup=True,
     worker_gossip=False,
     worker_mingle=False,
     worker_send_task_events=False,
@@ -113,6 +120,19 @@ _startup_log(
     f"prefetch={app.conf.worker_prefetch_multiplier}, "
     f"acks_late={app.conf.task_acks_late}, timezone={app.conf.timezone}"
 )
+
+
+@worker_shutdown.connect
+def release_redis_connections(**_kwargs):
+    """Close broker and result-backend sockets on exit so the Redis client slots free immediately."""
+    try:
+        app.close()
+        backend_pool = getattr(getattr(app.backend, "client", None), "connection_pool", None)
+        if backend_pool is not None:
+            backend_pool.disconnect()
+        _startup_log("Worker shutdown: Redis connections released.")
+    except Exception as exc:
+        _startup_log(f"Worker shutdown: releasing Redis connections failed: {exc!r}")
 
 
 @setup_logging.connect
