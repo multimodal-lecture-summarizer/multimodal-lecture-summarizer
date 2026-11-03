@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import gc
 import logging
+import queue
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -54,6 +56,15 @@ def split_audio_chunks(audio: np.ndarray, sr: int = SAMPLE_RATE) -> list[tuple[f
         chunks.append((start / sr, audio[start:end]))
         start = end
     return chunks
+
+
+def pipeline_batch_size(chunk_count: int) -> int:
+    """ASR batch size, capped so there are at least two batches.
+
+    ASR on the first batch can then start while later chunks are still being denoised.
+    """
+    batch = max(1, worker_settings.QWEN_ASR_BATCH_SIZE)
+    return max(1, min(batch, -(-chunk_count // 2)))
 
 
 def build_segments(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -103,15 +114,20 @@ class QwenEnglishTranscriber(AudioTranscriber):
     """Drop-in replacement for AudioTranscriber for English audio."""
 
     def _load_model(self) -> Any:
+        started = time.perf_counter()
         import torch
         from qwen_asr import Qwen3ASRModel
 
+        t_import = time.perf_counter() - started
         device_map = "cuda:0" if self.device == "cuda" else "cpu"
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         print(f"Loading Qwen3-ASR ({worker_settings.QWEN_ASR_MODEL}) on {device_map}...")
         # Serialized with the visual branch's CLIP/Florence loads (see model_load_lock).
+        waiting = time.perf_counter()
         with MODEL_LOAD_LOCK:
-            return Qwen3ASRModel.from_pretrained(
+            t_wait = time.perf_counter() - waiting
+            loading = time.perf_counter()
+            model = Qwen3ASRModel.from_pretrained(
                 worker_settings.QWEN_ASR_MODEL,
                 dtype=dtype,
                 device_map=device_map,
@@ -120,6 +136,12 @@ class QwenEnglishTranscriber(AudioTranscriber):
                 forced_aligner=worker_settings.QWEN_ALIGNER_MODEL,
                 forced_aligner_kwargs=dict(dtype=dtype, device_map=device_map),
             )
+        print(
+            f"[ASR] Qwen3-ASR load: import {t_import:.1f}s, waited for load lock {t_wait:.1f}s, "
+            f"from_pretrained (ASR + aligner) {time.perf_counter() - loading:.1f}s.",
+            flush=True,
+        )
+        return model
 
     def _timed_load_model(self) -> tuple[Any, float]:
         started = time.perf_counter()
@@ -164,57 +186,102 @@ class QwenEnglishTranscriber(AudioTranscriber):
         ]
 
     def _transcribe_qwen(self, audio_path: str) -> dict[str, Any]:
-        t0 = time.perf_counter()
-        # Denoising (CPU) and loading the model (disk/GPU) don't depend on each other, so overlap them.
-        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen-load") as pool:
-            load_future = pool.submit(self._timed_load_model)
-            audio = self.reduce_noise(audio_path)
-            t_denoise = time.perf_counter() - t0
-            model, t_load = load_future.result()
-        print(
-            f"[ASR] Denoise {t_denoise:.1f}s, model load {t_load:.1f}s, "
-            f"both finished after {time.perf_counter() - t0:.1f}s."
-        )
+        started = time.perf_counter()
+        raw = self.load_samples(audio_path)
+        chunks = split_audio_chunks(raw)
+        batch_size = pipeline_batch_size(len(chunks))
+
+        # Three things overlap: the model loads, a worker denoises chunk by chunk (CPU), and this
+        # thread runs ASR on each batch as soon as its chunks are denoised (GPU).
+        ready: queue.Queue = queue.Queue()
+        stop = threading.Event()
+        denoise_seconds = [0.0]
+
+        def denoise_chunks() -> None:
+            began = time.perf_counter()
+            parts: list[np.ndarray] = []
+            try:
+                for offset, chunk in chunks:
+                    if stop.is_set():
+                        return
+                    clean = self.denoise_samples(chunk)
+                    parts.append(clean)
+                    ready.put((offset, clean))
+                denoise_seconds[0] = time.perf_counter() - began
+                if parts:
+                    try:
+                        self.remember_denoised(audio_path, np.concatenate(parts))
+                    except Exception:  # cache is only an optimisation
+                        logger.debug("Could not cache denoised audio", exc_info=True)
+                ready.put(None)
+            except BaseException as exc:  # noqa: BLE001 - re-raised in the consuming thread
+                ready.put(exc)
+
         words: list[dict[str, Any]] = []
         texts: list[str] = []
-        try:
-            chunks = split_audio_chunks(audio)
-            batch_size = max(1, worker_settings.QWEN_ASR_BATCH_SIZE)
-            t0 = time.perf_counter()
-            for i in range(0, len(chunks), batch_size):
-                batch = chunks[i:i + batch_size]
-                results = self._transcribe_batch(model, batch)
-                for (offset, _chunk), result in zip(batch, results):
-                    if result.text.strip():
-                        texts.append(result.text.strip())
-                    for ts in result.time_stamps or []:
-                        word = ts.text.strip()
-                        if word:
-                            # Timestamps are assumed to be seconds (README does not say; verify on a real clip).
-                            words.append({
-                                "word": word,
-                                "start": offset + float(ts.start_time),
-                                "end": offset + float(ts.end_time),
-                            })
+        done = 0
+        asr_started = started
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="qwen-asr") as pool:
+            load_future = pool.submit(self._timed_load_model)
+            pool.submit(denoise_chunks)
+            model = None
+            try:
+                model, t_load = load_future.result()
+                asr_started = time.perf_counter()
                 print(
-                    f"[ASR] Chunks {min(i + batch_size, len(chunks))}/{len(chunks)} done "
-                    f"(batch={len(batch)}) at {time.perf_counter() - t0:.1f}s.",
+                    f"[ASR] Model ready {asr_started - started:.1f}s after start "
+                    f"(load {t_load:.1f}s); {len(chunks)} chunks, batch={batch_size}.",
                     flush=True,
                 )
-            print(
-                f"[ASR] Transcribed {len(audio) / SAMPLE_RATE:.0f}s of audio in "
-                f"{time.perf_counter() - t0:.1f}s (batch_size={batch_size}).",
-                flush=True,
-            )
-        finally:
-            del model
-            gc.collect()
-            if self.device == "cuda":
-                import torch
-                torch.cuda.empty_cache()
+                pending: list[tuple[float, np.ndarray]] = []
+                while True:
+                    item = ready.get()
+                    if isinstance(item, BaseException):
+                        raise item
+                    if item is not None:
+                        pending.append(item)
+                        if len(pending) < batch_size:
+                            continue
+                    if pending:
+                        batch, pending = pending, []
+                        results = self._transcribe_batch(model, batch)
+                        for (offset, _chunk), result in zip(batch, results):
+                            if result.text.strip():
+                                texts.append(result.text.strip())
+                            for ts in result.time_stamps or []:
+                                word = ts.text.strip()
+                                if word:
+                                    # Timestamps are assumed to be seconds (README does not say; verify on a real clip).
+                                    words.append({
+                                        "word": word,
+                                        "start": offset + float(ts.start_time),
+                                        "end": offset + float(ts.end_time),
+                                    })
+                        done += len(batch)
+                        print(
+                            f"[ASR] Chunks {done}/{len(chunks)} done at {time.perf_counter() - started:.1f}s.",
+                            flush=True,
+                        )
+                    if item is None:
+                        break
+            except BaseException:
+                stop.set()  # let the denoise worker end at its next chunk
+                raise
+            finally:
+                model = None
+                gc.collect()
+                if self.device == "cuda":
+                    import torch
+                    torch.cuda.empty_cache()
 
+        print(
+            f"[ASR] {len(raw) / SAMPLE_RATE:.0f}s of audio: denoise {denoise_seconds[0]:.1f}s, "
+            f"ASR {time.perf_counter() - asr_started:.1f}s after model load, "
+            f"all overlapped into {time.perf_counter() - started:.1f}s.",
+            flush=True,
+        )
         full_text = " ".join(texts)
-        validate_words(words, full_text, len(audio) / SAMPLE_RATE)
+        validate_words(words, full_text, len(raw) / SAMPLE_RATE)
         segments = build_segments(words)
         print(f"[OK] Completed Qwen3-ASR transcription. Text length: {len(full_text)} characters.")
         return {

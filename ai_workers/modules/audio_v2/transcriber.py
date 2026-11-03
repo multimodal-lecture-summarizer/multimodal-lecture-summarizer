@@ -108,6 +108,24 @@ class AudioTranscriber:
         print(f"[OK] Extracted audio WAV file: {output_path}")
         return output_path
 
+    def load_samples(self, audio_path: str) -> np.ndarray:
+        """Read the 16 kHz mono WAV that extract_audio produced, without denoising."""
+        import soundfile as sf
+
+        samples, _ = sf.read(audio_path, dtype="float32")
+        return samples.mean(axis=1) if samples.ndim > 1 else samples
+
+    def denoise_samples(self, samples: np.ndarray) -> np.ndarray:
+        from ai_workers.modules.common.denoise import denoise_samples
+
+        return denoise_samples(samples)
+
+    def remember_denoised(self, audio_path: str, denoised: np.ndarray) -> None:
+        """Let a fallback ASR engine reuse the denoised audio instead of denoising again."""
+        from ai_workers.modules.common.denoise import remember_denoised
+
+        remember_denoised(audio_path, denoised)
+
     def reduce_noise(self, audio_path: str) -> np.ndarray:
         started = time.perf_counter()
         # First import pulls in librosa/torchaudio/DeepFilterNet, which is slow on a cold Colab disk.

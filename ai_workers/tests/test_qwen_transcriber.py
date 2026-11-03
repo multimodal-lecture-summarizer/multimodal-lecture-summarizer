@@ -70,7 +70,8 @@ def test_transcribe_offsets_chunk_timestamps():
     audio = np.zeros(int(CHUNK_SECONDS * 1.5 * SAMPLE_RATE), dtype=np.float32)
 
     with patch.object(AudioTranscriber, "__init__", lambda self, config=None: setattr(self, "device", "cpu")), \
-         patch.object(QwenEnglishTranscriber, "reduce_noise", return_value=audio), \
+         patch.object(QwenEnglishTranscriber, "load_samples", return_value=audio), \
+         patch.object(QwenEnglishTranscriber, "denoise_samples", side_effect=lambda s: s), \
          patch.object(QwenEnglishTranscriber, "_load_model", return_value=fake_model):
         out = QwenEnglishTranscriber().transcribe("x.wav", "en")
 
@@ -84,7 +85,8 @@ def test_qwen_failure_falls_back_to_whisper():
     whisper_result = {"text": "ok", "segments": [], "language": "en", "asr_model": "small"}
     with patch.object(AudioTranscriber, "__init__", lambda self, config=None: setattr(self, "device", "cpu")), \
          patch.object(QwenEnglishTranscriber, "_load_model", side_effect=ImportError("qwen_asr missing")), \
-         patch.object(QwenEnglishTranscriber, "reduce_noise", return_value=np.zeros(10, dtype=np.float32)), \
+         patch.object(QwenEnglishTranscriber, "load_samples", return_value=np.zeros(10, dtype=np.float32)), \
+         patch.object(QwenEnglishTranscriber, "denoise_samples", side_effect=lambda s: s), \
          patch.object(AudioTranscriber, "transcribe", return_value=whisper_result) as whisper:
         out = QwenEnglishTranscriber().transcribe("x.wav", "en")
     assert out == whisper_result
@@ -109,7 +111,8 @@ def test_implausible_timestamps_trigger_whisper_fallback():
     fake_model = SimpleNamespace(transcribe=lambda **kw: [bad])
     whisper_result = {"text": "hi", "segments": [], "language": "en", "asr_model": "small"}
     with patch.object(AudioTranscriber, "__init__", lambda self, config=None: setattr(self, "device", "cpu")), \
-         patch.object(QwenEnglishTranscriber, "reduce_noise", return_value=np.zeros(SAMPLE_RATE * 5, dtype=np.float32)), \
+         patch.object(QwenEnglishTranscriber, "load_samples", return_value=np.zeros(SAMPLE_RATE * 5, dtype=np.float32)), \
+         patch.object(QwenEnglishTranscriber, "denoise_samples", side_effect=lambda s: s), \
          patch.object(QwenEnglishTranscriber, "_load_model", return_value=fake_model), \
          patch.object(AudioTranscriber, "transcribe", return_value=whisper_result):
         assert QwenEnglishTranscriber().transcribe("x.wav", "en") == whisper_result

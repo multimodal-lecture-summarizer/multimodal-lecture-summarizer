@@ -60,6 +60,65 @@ class DenoiseManager:
             data = librosa.resample(data, orig_sr=sr, target_sr=16000)
         return data.astype(np.float32)
 
+    def _run_df(self, audio):
+        """Run DeepFilterNet on a [channels, samples] tensor at the model's sample rate."""
+        if self.device == "cuda":
+            # cuDNN rejects DeepFilterNet's layers on some torch/GPU combos (NOT_SUPPORTED);
+            # native CUDA kernels still beat the 2-vCPU Colab CPU.
+            with torch.backends.cudnn.flags(enabled=False):
+                return enhance(self.model, self.df_state, audio.contiguous()).cpu()
+        return enhance(self.model, self.df_state, audio).cpu()
+
+    def _switch_to_cpu(self, err: Exception) -> None:
+        """After a CUDA failure keep the rest of the process on CPU instead of retrying."""
+        global _gpu_failed
+        _gpu_failed = True
+        print(f"[Denoise] CUDA run failed ({err}); retrying on cpu.")
+        self.model = self.model.to("cpu")
+        self.device = "cpu"
+        torch.cuda.empty_cache()
+
+    @staticmethod
+    def _cache_key(audio_path: str):
+        try:
+            stat = os.stat(audio_path)
+            return (audio_path, stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            return None
+
+    def store_cache(self, audio_path: str, denoised: np.ndarray) -> None:
+        """Remember the denoised version of a file so another ASR engine can reuse it."""
+        key = self._cache_key(audio_path)
+        if key is not None:
+            self._cache = (key, denoised)
+
+    def _enhance_samples(self, samples: np.ndarray) -> np.ndarray:
+        x = torch.from_numpy(np.ascontiguousarray(samples, dtype=np.float32)).unsqueeze(0)
+        sr = self.df_state.sr()
+        if sr != 16000:
+            x = torchaudio.functional.resample(x, 16000, sr)
+        enhanced = self._run_df(x)
+        if sr != 16000:
+            enhanced = torchaudio.functional.resample(enhanced, sr, 16000)
+        return enhanced.squeeze().numpy().astype(np.float32)
+
+    def enhance_array(self, samples: np.ndarray) -> np.ndarray:
+        """Denoise a 16 kHz mono chunk; returns the chunk unchanged if denoising is impossible."""
+        if not DF_AVAILABLE:
+            return samples
+        try:
+            self.initialize()
+            try:
+                return self._enhance_samples(samples)
+            except Exception as gpu_err:
+                if self.device != "cuda":
+                    raise
+                self._switch_to_cpu(gpu_err)
+                return self._enhance_samples(samples)
+        except Exception as e:
+            print(f"[Warning] DeepFilterNet failed on a chunk ({e}); using it un-denoised.")
+            return samples
+
     def _enhance(self, audio_path: str) -> np.ndarray:
         started = time.perf_counter()
         print(f"[Denoise] Processing {os.path.basename(audio_path)} on {self.device}...")
@@ -69,13 +128,7 @@ class DenoiseManager:
         if hasattr(audio, "to"):
             audio = audio.to("cpu")
 
-        if self.device == "cuda":
-            # cuDNN rejects DeepFilterNet's layers on some torch/GPU combos (NOT_SUPPORTED);
-            # native CUDA kernels still beat the 2-vCPU Colab CPU.
-            with torch.backends.cudnn.flags(enabled=False):
-                enhanced = enhance(self.model, self.df_state, audio.contiguous()).cpu()
-        else:
-            enhanced = enhance(self.model, self.df_state, audio).cpu()
+        enhanced = self._run_df(audio)
 
         # Whisper requires 16kHz 1D array. We resample the enhanced audio.
         target_sr = 16000
@@ -98,11 +151,7 @@ class DenoiseManager:
             return self._read_raw_audio(audio_path)
 
         # A failed ASR engine retries with another one on the same file; don't denoise it twice.
-        try:
-            stat = os.stat(audio_path)
-            cache_key = (audio_path, stat.st_size, stat.st_mtime_ns)
-        except OSError:
-            cache_key = None
+        cache_key = self._cache_key(audio_path)
         if cache_key is not None and self._cache is not None and self._cache[0] == cache_key:
             print(f"[Denoise] Reusing denoised audio for {os.path.basename(audio_path)}.")
             return self._cache[1]
@@ -116,12 +165,7 @@ class DenoiseManager:
                     raise
                 # e.g. cuDNN "not supported" on some torch/GPU combos: redo on CPU rather than
                 # silently transcribing un-denoised audio.
-                global _gpu_failed
-                _gpu_failed = True
-                print(f"[Denoise] CUDA run failed ({gpu_err}); retrying on cpu.")
-                self.model = self.model.to("cpu")
-                self.device = "cpu"
-                torch.cuda.empty_cache()
+                self._switch_to_cpu(gpu_err)
                 result = self._enhance(audio_path)
             if cache_key is not None:
                 self._cache = (cache_key, result)
@@ -138,3 +182,12 @@ denoiser = DenoiseManager()
 def get_denoised_audio_array(audio_path: str) -> np.ndarray:
     """Convenience function to denoise and return 16kHz numpy array."""
     return denoiser.enhance_audio(audio_path)
+
+
+def denoise_samples(samples: np.ndarray) -> np.ndarray:
+    """Denoise a 16 kHz mono chunk (used to overlap denoising with ASR)."""
+    return denoiser.enhance_array(samples)
+
+
+def remember_denoised(audio_path: str, denoised: np.ndarray) -> None:
+    denoiser.store_cache(audio_path, denoised)
