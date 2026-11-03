@@ -58,6 +58,27 @@ def test_cuda_failure_retries_on_cpu_instead_of_raw_audio():
     assert np.allclose(out, 0.5)
 
 
+def test_same_file_is_denoised_once(tmp_path):
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"x" * 16)
+    calls = []
+
+    def fake_enhance(model, _state, audio):
+        calls.append(1)
+        return audio * 0.5
+
+    manager = _manager("cpu")
+    with patch.object(denoise, "DF_AVAILABLE", True), \
+         patch.object(denoise, "enhance", fake_enhance, create=True), \
+         patch.object(denoise, "load_audio", lambda *_a, **_k: (torch.ones(1, 8), 16000), create=True), \
+         patch.object(manager, "initialize"):
+        first = manager.enhance_audio(str(wav))
+        second = manager.enhance_audio(str(wav))
+
+    assert len(calls) == 1
+    assert first is second
+
+
 def test_gpu_failure_flag_forces_cpu_device():
     with patch.object(denoise, "_gpu_failed", True):
         assert denoise._denoise_device() == "cpu"

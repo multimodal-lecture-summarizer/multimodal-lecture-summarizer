@@ -8,6 +8,8 @@ import torch
 from typing import Any
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModelForCausalLM
+
+from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
 from sklearn.metrics.pairwise import cosine_similarity
 from ai_workers.core.config import worker_settings
 from ai_workers.modules.visual_v2.florence_runtime import (
@@ -94,8 +96,9 @@ class SemanticAnalyzer:
 
         try:
             print(f"[Semantic] Loading CLIP model to extract embeddings for {num_frames} frames...")
-            processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-            model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
+            with MODEL_LOAD_LOCK:
+                processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
             
             # Prompts for zero-shot filtering and action scoring
             text_prompts = [
@@ -425,19 +428,20 @@ class SemanticAnalyzer:
                 print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
 
             print("[Semantic] Loading Florence-2 processor...", flush=True)
-            processor = AutoProcessor.from_pretrained(
-                model_dir,
-                trust_remote_code=True,
-                use_fast=True,
-            )
-            print("[Semantic] Florence-2 processor loaded.", flush=True)
-            print("[Semantic] Loading Florence-2 model weights...", flush=True)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_dir,
-                dtype=runtime.dtype,
-                trust_remote_code=True,
-                attn_implementation=runtime.attention_implementation,
-            ).to(runtime.device)
+            with MODEL_LOAD_LOCK:
+                processor = AutoProcessor.from_pretrained(
+                    model_dir,
+                    trust_remote_code=True,
+                    use_fast=True,
+                )
+                print("[Semantic] Florence-2 processor loaded.", flush=True)
+                print("[Semantic] Loading Florence-2 model weights...", flush=True)
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_dir,
+                    dtype=runtime.dtype,
+                    trust_remote_code=True,
+                    attn_implementation=runtime.attention_implementation,
+                ).to(runtime.device)
             model.eval()
             print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
             

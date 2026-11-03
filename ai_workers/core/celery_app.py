@@ -253,6 +253,18 @@ def validate_florence_runtime_on_startup(**_kwargs):
     )
 
 
+@worker_init.connect
+def start_model_prefetch(**_kwargs):
+    """Warm the model caches in the background; never blocks or fails worker start-up."""
+    try:
+        from ai_workers.core.model_prefetch import start_prefetch_thread
+
+        if start_prefetch_thread(_startup_log) is not None:
+            _startup_log("Model prefetch started in the background.")
+    except Exception as exc:
+        _startup_log(f"Model prefetch not started: {exc!r}")
+
+
 @worker_ready.connect
 def log_worker_ready(sender=None, **_kwargs):
     hostname = getattr(sender, "hostname", "<unknown-hostname>")

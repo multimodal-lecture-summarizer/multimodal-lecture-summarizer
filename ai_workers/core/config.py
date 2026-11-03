@@ -35,6 +35,8 @@ class WorkerSettings(BaseSettings):
     QWEN_ASR_MODEL: str = "Qwen/Qwen3-ASR-0.6B"
     QWEN_ALIGNER_MODEL: str = "Qwen/Qwen3-ForcedAligner-0.6B"
     QWEN_ASR_MAX_NEW_TOKENS: int = 1024
+    # Download model weights in the background at worker start: "auto" (only on Colab), "true", "false".
+    PREFETCH_MODELS: str = "auto"
     # Audio chunks transcribed per forward pass. 1 = one chunk at a time (original behavior);
     # raise on GPUs with spare VRAM (Colab T4: 4) since decoding is memory-bound.
     QWEN_ASR_BATCH_SIZE: int = 1

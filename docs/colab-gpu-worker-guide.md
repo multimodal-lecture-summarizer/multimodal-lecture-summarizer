@@ -79,7 +79,7 @@ Colab không chạy được Docker, nên notebook cài cùng các file requirem
 4. Chạy lần lượt các cell. Cell cài đặt chạy song song apt/clone/tạo venv rồi LFS/`uv pip install`. Cell cuối chạy worker và in log; khi thấy `colab@... ready.` là website bắt đầu gửi job sang Colab.
 5. Dừng cell cuối (hoặc runtime hết hạn) → job mới tự quay về worker CPU.
 
-Song song trong một job: notebook đặt `ENABLE_PARALLEL_BRANCHES=true`, nên nhánh audio (ASR + diarization) và nhánh visual (scene → semantic) chạy đồng thời, upload keyframe R2 dùng 8 thread. Nhánh nào hết VRAM/RAM sẽ tự chạy lại tuần tự; đặt `false` để quay về chạy tuần tự hoàn toàn. Mặc định ngoài Colab là `false`.
+Song song trong một job: notebook đặt `ENABLE_PARALLEL_BRANCHES=true`, nên nhánh audio (ASR + diarization) và nhánh visual (scene → semantic) chạy đồng thời, upload keyframe R2 dùng 8 thread. Nhánh nào hết VRAM/RAM sẽ tự chạy lại tuần tự; đặt `false` để quay về chạy tuần tự hoàn toàn. Mặc định ngoài Colab là `false`. Khi khởi động, worker tự tải sẵn model (Whisper, Qwen3-ASR, CLIP, PaddleOCR, LED) ở luồng nền (`PREFETCH_MODELS=auto`, bật trên Colab); trong nhánh audio, khử nhiễu và nạp Qwen3-ASR chạy cùng lúc. Log có dòng `[Prefetch] <model> ready in …s`.
 
 Cấu hình trên Colab: `FLORENCE_DEVICE=cuda` (caption nhanh hơn, nhưng token không giống hệt bản CPU, xem `docs/florence-2-cpu-reproducibility.md`), `SEMANTIC_CLIP_DEVICE=cuda`, Faster-Whisper float16 trên GPU. PaddleOCR vẫn chạy CPU vì gói `paddlepaddle` GPU cần cuDNN 8, xung đột với torch; OCR chỉ chạy trên vài keyframe nên ảnh hưởng nhỏ.
 

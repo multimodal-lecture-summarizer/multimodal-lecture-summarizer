@@ -39,6 +39,7 @@ class DenoiseManager:
         self.model = None
         self.df_state = None
         self.device = "cpu"
+        self._cache = None  # ((path, size, mtime_ns), denoised array) of the last file
 
     def initialize(self):
         if not DF_AVAILABLE:
@@ -68,7 +69,13 @@ class DenoiseManager:
         if hasattr(audio, "to"):
             audio = audio.to("cpu")
 
-        enhanced = enhance(self.model, self.df_state, audio).cpu()
+        if self.device == "cuda":
+            # cuDNN rejects DeepFilterNet's layers on some torch/GPU combos (NOT_SUPPORTED);
+            # native CUDA kernels still beat the 2-vCPU Colab CPU.
+            with torch.backends.cudnn.flags(enabled=False):
+                enhanced = enhance(self.model, self.df_state, audio.contiguous()).cpu()
+        else:
+            enhanced = enhance(self.model, self.df_state, audio).cpu()
 
         # Whisper requires 16kHz 1D array. We resample the enhanced audio.
         target_sr = 16000
@@ -90,10 +97,20 @@ class DenoiseManager:
             print(f"[Denoise] Skipping DeepFilterNet enhancement. Loading raw audio: {os.path.basename(audio_path)}...")
             return self._read_raw_audio(audio_path)
 
+        # A failed ASR engine retries with another one on the same file; don't denoise it twice.
+        try:
+            stat = os.stat(audio_path)
+            cache_key = (audio_path, stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            cache_key = None
+        if cache_key is not None and self._cache is not None and self._cache[0] == cache_key:
+            print(f"[Denoise] Reusing denoised audio for {os.path.basename(audio_path)}.")
+            return self._cache[1]
+
         try:
             self.initialize()
             try:
-                return self._enhance(audio_path)
+                result = self._enhance(audio_path)
             except Exception as gpu_err:
                 if self.device != "cuda":
                     raise
@@ -105,7 +122,10 @@ class DenoiseManager:
                 self.model = self.model.to("cpu")
                 self.device = "cpu"
                 torch.cuda.empty_cache()
-                return self._enhance(audio_path)
+                result = self._enhance(audio_path)
+            if cache_key is not None:
+                self._cache = (cache_key, result)
+            return result
         except Exception as e:
             print(f"[Warning] DeepFilterNet processing failed ({e}). Clearing CUDA cache and falling back to raw audio...")
             if torch.cuda.is_available():

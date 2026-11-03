@@ -10,11 +10,13 @@ from __future__ import annotations
 import gc
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
 
 from ai_workers.core.config import worker_settings
+from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
 
 logger = logging.getLogger("ai_workers.modules.audio_v2.qwen_transcriber")
@@ -107,15 +109,22 @@ class QwenEnglishTranscriber(AudioTranscriber):
         device_map = "cuda:0" if self.device == "cuda" else "cpu"
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         print(f"Loading Qwen3-ASR ({worker_settings.QWEN_ASR_MODEL}) on {device_map}...")
-        return Qwen3ASRModel.from_pretrained(
-            worker_settings.QWEN_ASR_MODEL,
-            dtype=dtype,
-            device_map=device_map,
-            max_inference_batch_size=max(1, worker_settings.QWEN_ASR_BATCH_SIZE),
-            max_new_tokens=worker_settings.QWEN_ASR_MAX_NEW_TOKENS,
-            forced_aligner=worker_settings.QWEN_ALIGNER_MODEL,
-            forced_aligner_kwargs=dict(dtype=dtype, device_map=device_map),
-        )
+        # Serialized with the visual branch's CLIP/Florence loads (see model_load_lock).
+        with MODEL_LOAD_LOCK:
+            return Qwen3ASRModel.from_pretrained(
+                worker_settings.QWEN_ASR_MODEL,
+                dtype=dtype,
+                device_map=device_map,
+                max_inference_batch_size=max(1, worker_settings.QWEN_ASR_BATCH_SIZE),
+                max_new_tokens=worker_settings.QWEN_ASR_MAX_NEW_TOKENS,
+                forced_aligner=worker_settings.QWEN_ALIGNER_MODEL,
+                forced_aligner_kwargs=dict(dtype=dtype, device_map=device_map),
+            )
+
+    def _timed_load_model(self) -> tuple[Any, float]:
+        started = time.perf_counter()
+        model = self._load_model()
+        return model, time.perf_counter() - started
 
     def transcribe(self, audio_path: str, source_language: str | None = None) -> dict[str, Any]:
         if source_language not in (None, "en"):
@@ -156,11 +165,16 @@ class QwenEnglishTranscriber(AudioTranscriber):
 
     def _transcribe_qwen(self, audio_path: str) -> dict[str, Any]:
         t0 = time.perf_counter()
-        audio = self.reduce_noise(audio_path)
-        t_denoise = time.perf_counter() - t0
-        t0 = time.perf_counter()
-        model = self._load_model()
-        print(f"[ASR] Denoise {t_denoise:.1f}s, model load {time.perf_counter() - t0:.1f}s.")
+        # Denoising (CPU) and loading the model (disk/GPU) don't depend on each other, so overlap them.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen-load") as pool:
+            load_future = pool.submit(self._timed_load_model)
+            audio = self.reduce_noise(audio_path)
+            t_denoise = time.perf_counter() - t0
+            model, t_load = load_future.result()
+        print(
+            f"[ASR] Denoise {t_denoise:.1f}s, model load {t_load:.1f}s, "
+            f"both finished after {time.perf_counter() - t0:.1f}s."
+        )
         words: list[dict[str, Any]] = []
         texts: list[str] = []
         try:
