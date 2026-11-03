@@ -33,6 +33,11 @@ MAX_DEPTH = 8
 WORD_CAPS = {"short": 120, "medium": 240, "detailed": 350}
 
 
+def _say(message: str) -> None:
+    """Worker console line; the Celery log setup does not surface this module's logger output."""
+    print(f"[LED] {message}", flush=True)
+
+
 class LedError(RuntimeError):
     """LED could not produce a usable summary."""
 
@@ -184,27 +189,35 @@ def build_led_result(
 ) -> dict[str, Any] | None:
     """Full summary result with an LED summary, or None to let the caller use the LLM path."""
     if not led_enabled(output_language):
+        _say(
+            f"Bỏ qua LED (backend={worker_settings.SUMMARIZER_ENGLISH_BACKEND}, "
+            f"output_language={output_language!r}); chỉ dùng khi backend=led và output_language=en."
+        )
         return None
     transcript = " ".join(
         (u.get("text") or "").strip() for u in utterances if (u.get("text") or "").strip()
     )
     if not transcript:
+        _say("Bỏ qua LED: transcript rỗng.")
         return None
 
     try:
         import torch
 
         if not torch.cuda.is_available():
-            logger.info("LED needs a CUDA GPU; using the LLM path for job %s", job_id)
+            _say("Bỏ qua LED: không có GPU CUDA, chuyển sang LLM.")
             return None
+        _say(f"Đang tải {worker_settings.LED_MODEL} để tóm tắt (job {job_id}).")
         led = LedModel()
-    except Exception:
+    except Exception as err:
+        _say(f"LED không khả dụng, chuyển sang LLM: {err!r}")
         logger.warning("LED unavailable for job %s; using the LLM path", job_id, exc_info=True)
         return None
 
     try:
         raw = led_map_reduce(led.encode(transcript), led.encode, led.generate)
-    except Exception:
+    except Exception as err:
+        _say(f"LED tóm tắt thất bại, chuyển sang LLM: {err!r}")
         logger.warning("LED summarization failed for job %s; using the LLM path", job_id, exc_info=True)
         return None
     finally:
@@ -216,7 +229,9 @@ def build_led_result(
 
     summary = sentence_prefix(raw, WORD_CAPS.get(length_key, WORD_CAPS["medium"]))
     if not summary:
+        _say("LED trả về bản tóm tắt rỗng, chuyển sang LLM.")
         return None
+    _say(f"LED hoàn tất: {len(summary.split())} từ (mức {length_key}).")
 
     from ai_workers.modules.summarization.extractive_fallback import ExtractiveSummarizer
 
