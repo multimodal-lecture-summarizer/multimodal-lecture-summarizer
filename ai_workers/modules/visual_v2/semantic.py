@@ -594,12 +594,12 @@ class SemanticAnalyzer:
             try:
                 ocr = PaddleOCR(
                     use_angle_cls=True,
-                    lang='vi',
+                    lang=worker_settings.PADDLEOCR_LANG,
                     use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
                 )
             except Exception as init_err:
                 print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
-                ocr = PaddleOCR(lang='vi')
+                ocr = PaddleOCR(lang=worker_settings.PADDLEOCR_LANG)
             
             for scene in scenes:
                 path = scene.get("keyframe_path")

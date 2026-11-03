@@ -773,6 +773,15 @@ class Summarizer:
         if length_key not in ("short", "medium", "detailed"):
             length_key = "medium"
 
+        # English output: LED is the primary summarizer; None means "use the LLM path below".
+        from ai_workers.modules.summarization.led_summarizer import build_led_result
+
+        led_result = build_led_result(
+            utterances, slides, chapters, job_id=job_id, output_language=output_language, length_key=length_key
+        )
+        if led_result is not None:
+            return led_result
+
         transcript_lines = []
         for u in utterances:
             start_ts = format_time(u.get("start", 0))

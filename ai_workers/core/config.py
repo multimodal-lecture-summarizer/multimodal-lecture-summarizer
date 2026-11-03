@@ -43,13 +43,23 @@ class WorkerSettings(BaseSettings):
     FLORENCE_CUDA_NUM_BEAMS: int = 1
     SEMANTIC_CLIP_DEVICE: str = "auto"
     PADDLEOCR_USE_GPU: bool = False
+    # Slide text language; English by default for the English-lecture scope ("vi" for Vietnamese slides).
+    PADDLEOCR_LANG: str = "en"
 
-    # Object Detection & Tracking module
+    # Object Detection & Tracking module. Off by default: the target content (single speaker,
+    # text slides) does not need it. Set ENABLE_OBJECT_TRACKING=true to restore the stage.
+    ENABLE_OBJECT_TRACKING: bool = False
     YOLO_MODEL: str = "yolov8n.pt"
     YOLO_CONF_THRESHOLD: float = 0.40
     YOLO_IOU_THRESHOLD: float = 0.5
     OBJECT_TRACKING_SAMPLE_FPS: int = 3
     OBJECT_TRACKING_DEVICE: str = "auto"
+
+    # English summaries: "led" (default) runs the benchmarked LED map-reduce summarizer when
+    # output_language == "en" and a CUDA GPU exists; "llm" keeps the Groq/OpenRouter path only.
+    SUMMARIZER_ENGLISH_BACKEND: str = "led"
+    LED_MODEL: str = "allenai/led-large-16384-arxiv"
+    LED_MODEL_REVISION: str = "0f8b26971c44af9d4e21edd17ccb5e000f22dac1"
 
     # Fusion module
     LLM_PROVIDER: str = "openai"

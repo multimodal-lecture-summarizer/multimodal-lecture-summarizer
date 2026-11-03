@@ -391,49 +391,59 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
             # Stage 3.5: Object Detection & Tracking (OD&T)
             check_revoked()
-            log_step("Bắt đầu phát hiện và theo dõi đối tượng (YOLO + ByteTrack)...", "object_tracking", 56)
-            try:
-                ensure_process_memory_available(
-                    1536,
-                    soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
-                    retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
-                    retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
-                )
-            except Exception as mem_err:
-                print(f"[OD&T] Memory check warning before object tracking: {mem_err}")
-
-            tracker = None
-            try:
-                tracker = ObjectDetectorTracker()
-                updated_scenes, video_objects_summary = tracker.track_video_scenes(
-                    video_path=local_video_path,
-                    scenes=visual_result.get("scenes", []),
-                    sample_fps=getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
-                    revoke_check_fn=check_revoked,
-                )
-                visual_result["scenes"] = updated_scenes
-                log_step(
-                    f"Hoàn thành theo dõi đối tượng. Tìm thấy {video_objects_summary.get('total_unique_tracks', 0)} đối tượng duy nhất.",
-                    "object_tracking",
-                    57,
-                )
-            except Exception as tracker_err:
-                print(f"[OD&T] Warning: Object tracking failed: {tracker_err}")
+            if not worker_settings.ENABLE_OBJECT_TRACKING:
+                # Out of scope for single-speaker slide lectures; keep the summary shape downstream expects.
+                log_step("Bỏ qua theo dõi đối tượng (ENABLE_OBJECT_TRACKING=false).", "object_tracking", 57)
                 video_objects_summary = {
                     "total_unique_tracks": 0,
                     "label_distribution": {},
                     "most_frequent_objects": [],
                     "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
                 }
-            finally:
-                if tracker is not None:
-                    del tracker
-                import gc
-                gc.collect()
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                release_worker_resources("object detection & tracking stage")
+            else:
+                log_step("Bắt đầu phát hiện và theo dõi đối tượng (YOLO + ByteTrack)...", "object_tracking", 56)
+                try:
+                    ensure_process_memory_available(
+                        1536,
+                        soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
+                        retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
+                        retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
+                    )
+                except Exception as mem_err:
+                    print(f"[OD&T] Memory check warning before object tracking: {mem_err}")
+
+                tracker = None
+                try:
+                    tracker = ObjectDetectorTracker()
+                    updated_scenes, video_objects_summary = tracker.track_video_scenes(
+                        video_path=local_video_path,
+                        scenes=visual_result.get("scenes", []),
+                        sample_fps=getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                        revoke_check_fn=check_revoked,
+                    )
+                    visual_result["scenes"] = updated_scenes
+                    log_step(
+                        f"Hoàn thành theo dõi đối tượng. Tìm thấy {video_objects_summary.get('total_unique_tracks', 0)} đối tượng duy nhất.",
+                        "object_tracking",
+                        57,
+                    )
+                except Exception as tracker_err:
+                    print(f"[OD&T] Warning: Object tracking failed: {tracker_err}")
+                    video_objects_summary = {
+                        "total_unique_tracks": 0,
+                        "label_distribution": {},
+                        "most_frequent_objects": [],
+                        "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                    }
+                finally:
+                    if tracker is not None:
+                        del tracker
+                    import gc
+                    gc.collect()
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    release_worker_resources("object detection & tracking stage")
 
             # Stage 4: Semantic
             check_revoked()
@@ -649,7 +659,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     try:
         # Stage 6: Summarization
         check_revoked()
-        log_step("Đang yêu cầu mô hình AI (Groq/OpenRouter) sinh bản tóm tắt chi tiết...", STATUS_SUMMARIZING, 89)
+        log_step("Đang sinh bản tóm tắt chi tiết (LED cho đầu ra tiếng Anh, Groq/OpenRouter cho phần còn lại)...", STATUS_SUMMARIZING, 89)
         summarizer = Summarizer()
         try:
             text_result = summarizer.process(

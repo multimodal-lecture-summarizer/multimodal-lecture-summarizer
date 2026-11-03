@@ -136,7 +136,7 @@ flowchart TD
     Stage6 --> UploadR2["Tải Keyframes & Video lên Cloudflare R2\n(hoặc Mock Storage cục bộ)"]
     UploadR2 --> CheckpointSave["Lưu Checkpoint Dữ liệu Trích xuất\nSTAGE_QUALITY_COMPLETE -> Disk (outputs/job_id)"]
     
-    CheckpointSave --> Stage7["Stage 7: LLM Summarization\nGroq / OpenRouter sinh Title, Chapters, Summary, Key Takeaways"]
+    CheckpointSave --> Stage7["Stage 7: Summarization\nEN+GPU: LED; còn lại Groq / OpenRouter sinh Title, Chapters, Summary, Key Takeaways"]
     Stage7 -.->|API LLM Thất bại| Fallback["Kích hoạt Extractive Fallback Summarizer\n(Trích xuất câu đại diện dựa trên TF-IDF & OCR)"]
     
     Stage7 --> TaskDone["Hoàn tất Celery Task (Status: COMPLETED / COMPLETED_PARTIAL)"]
@@ -174,7 +174,8 @@ flowchart TD
 
 #### 4. Phân tích Ngữ nghĩa Khung hình (Stage 4: Semantic Analysis)
 - **Lọc trùng lặp**: Trích xuất vector đặc trưng hình ảnh bằng CLIP ViT-B/32, phân cụm bằng K-Means để loại bỏ các slide trùng hoặc chỉ chuyển động nhẹ của người thuyết trình.
-- **Nhận dạng chữ (OCR)**: Chạy `PaddleOCR` trên các slide đại diện để trích xuất toàn bộ văn bản bài giảng, công thức, đề mục hiển thị trên slide.
+- **Nhận dạng chữ (OCR)**: Chạy `PaddleOCR` (ngôn ngữ theo `PADDLEOCR_LANG`, mặc định `en`) trên các slide đại diện để trích xuất toàn bộ văn bản bài giảng, công thức, đề mục hiển thị trên slide.
+- **Phát hiện và theo dõi vật thể (YOLO + ByteTrack)**: tắt mặc định (`ENABLE_OBJECT_TRACKING=false`) vì nội dung mục tiêu là một diễn giả với slide chữ; bật lại bằng biến này.
 - **Sinh mô tả ảnh (Captioning)**: Sử dụng mô hình `Florence-2-base` (chạy trên chế độ CPU/FP32/eager nhằm đảm bảo tính tái lập 100% giữa Windows và Linux, tránh hiện tượng sinh token rác). Tự động bỏ qua captioning nếu RAM hệ thống khả dụng nhỏ hơn 6144 MB.
 
 #### 5. Đồng bộ Trục thời gian (Stage 5: Timeline Alignment)
@@ -194,7 +195,7 @@ flowchart TD
 - Nếu LLM lỗi sau khi checkpoint đã lưu và file nguồn chưa đổi, worker có thể tiếp tục từ stage `quality_complete`.
 
 #### 8. Tóm tắt Đa phương thức & Extractive Fallback (Stage 7: Summarization)
-- **Mô hình chính**: Gọi LLM tốc độ cao qua Groq (`llama-3.1-8b-instant`) hoặc OpenRouter (`Summarizer` / `LLMClient`).
+- **Mô hình chính**: Khi `output_language=en` và có GPU CUDA, bản tóm tắt do LED (`allenai/led-large-16384-arxiv`, map-reduce theo cửa sổ 4096 token, beam 4, `no_repeat_ngram_size=3`, giới hạn 120/240/350 từ theo mức ngắn/vừa/chi tiết) sinh ra từ transcript thuần (`SUMMARIZER_ENGLISH_BACKEND=led`). Tiêu đề, ý chính và tóm tắt từng chương vẫn trích xuất; LED không dùng OCR. Lỗi LED, không có GPU hoặc đầu ra `vi` thì chạy LLM qua Groq (`llama-3.1-8b-instant`) hoặc OpenRouter (`Summarizer` / `LLMClient`) như trước. LED chọn theo quyết định sản phẩm, không phải kết quả đo: ROUGE-L thấp hơn LLM của app và kém trung thực hơn BART theo MiniCheck (post-hoc).
 - **Nội dung sinh ra**:
   1. Tiêu đề video chuẩn hóa (`video_title`).
   2. Bản tóm tắt tổng thể có cấu trúc Markdown phân cấp rõ ràng theo chương mục.
