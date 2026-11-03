@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import torch
 import torchaudio
@@ -9,7 +10,7 @@ try:
     import importlib
 
     _df_enhance = importlib.import_module("df.enhance")
-    _df_enhance.get_device = lambda: torch.device("cpu")
+    _df_enhance.get_device = lambda: torch.device(_denoise_device())
     enhance = _df_enhance.enhance
     init_df = _df_enhance.init_df
     load_audio = _df_enhance.load_audio
@@ -19,19 +20,30 @@ except Exception as _df_err:
     print(f"[Warning] DeepFilterNet (df) import skipped ({_df_err}). Denoising will fall back to raw audio.")
 
 
+def _denoise_device() -> str:
+    """Resolve DENOISE_DEVICE; cuda silently degrades to cpu when no GPU is present."""
+    from ai_workers.core.config import worker_settings
+
+    wanted = (worker_settings.DENOISE_DEVICE or "cpu").strip().lower()
+    return "cuda" if wanted == "cuda" and torch.cuda.is_available() else "cpu"
+
+
 class DenoiseManager:
     def __init__(self):
         self.model = None
         self.df_state = None
+        self.device = "cpu"
 
     def initialize(self):
         if not DF_AVAILABLE:
             return
         if self.model is None:
-            print("[Denoise] Initializing DeepFilterNet model on CPU to conserve GPU VRAM...")
+            device = _denoise_device()
+            print(f"[Denoise] Initializing DeepFilterNet model on {device}...")
             self.model, self.df_state, _ = init_df()
+            self.device = device
             if hasattr(self.model, "to"):
-                self.model = self.model.to("cpu")
+                self.model = self.model.to(device)
 
     def _read_raw_audio(self, audio_path: str) -> np.ndarray:
         data, sr = sf.read(audio_path)
@@ -52,14 +64,14 @@ class DenoiseManager:
 
         try:
             self.initialize()
-            print(f"[Denoise] Processing {os.path.basename(audio_path)} on CPU...")
+            started = time.perf_counter()
+            print(f"[Denoise] Processing {os.path.basename(audio_path)} on {self.device}...")
             
             # Load audio (automatically resampled to DeepFilterNet's required SR, usually 48kHz)
             audio, _ = load_audio(audio_path, sr=self.df_state.sr())
             if hasattr(audio, "to"):
                 audio = audio.to("cpu")
             
-            # Apply DeepFilterNet enhancement on CPU
             enhanced = enhance(self.model, self.df_state, audio)
             
             # Whisper requires 16kHz 1D array. We resample the enhanced audio.
@@ -71,7 +83,7 @@ class DenoiseManager:
             # Squeeze to 1D and convert to numpy
             enhanced_np = enhanced.squeeze().cpu().numpy()
             
-            print("[Denoise] Processing complete.")
+            print(f"[Denoise] Processing complete in {time.perf_counter() - started:.1f}s.")
             return enhanced_np.astype(np.float32)
         except Exception as e:
             print(f"[Warning] DeepFilterNet processing failed ({e}). Clearing CUDA cache and falling back to raw audio...")

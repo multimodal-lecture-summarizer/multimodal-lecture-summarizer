@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import time
 from typing import Any
 
 import numpy as np
@@ -110,7 +111,7 @@ class QwenEnglishTranscriber(AudioTranscriber):
             worker_settings.QWEN_ASR_MODEL,
             dtype=dtype,
             device_map=device_map,
-            max_inference_batch_size=1,
+            max_inference_batch_size=max(1, worker_settings.QWEN_ASR_BATCH_SIZE),
             max_new_tokens=worker_settings.QWEN_ASR_MAX_NEW_TOKENS,
             forced_aligner=worker_settings.QWEN_ALIGNER_MODEL,
             forced_aligner_kwargs=dict(dtype=dtype, device_map=device_map),
@@ -129,29 +130,68 @@ class QwenEnglishTranscriber(AudioTranscriber):
         fallback = AudioTranscriber({"model_name": worker_settings.FASTER_WHISPER_MODEL})
         return fallback.transcribe(audio_path, source_language="en")
 
+    @staticmethod
+    def _transcribe_batch(model: Any, batch: list[tuple[float, np.ndarray]]) -> list[Any]:
+        """One forward pass for the batch; if batching is rejected, redo the chunks one by one."""
+        if len(batch) > 1:
+            try:
+                results = model.transcribe(
+                    audio=[(chunk, SAMPLE_RATE) for _offset, chunk in batch],
+                    language=["English"] * len(batch),
+                    return_time_stamps=True,
+                )
+                if len(results) == len(batch):
+                    return list(results)
+                logger.warning("Qwen3-ASR batch returned %d results for %d chunks", len(results), len(batch))
+            except Exception:
+                logger.warning("Qwen3-ASR batched call failed; retrying chunk by chunk", exc_info=True)
+        return [
+            model.transcribe(
+                audio=(chunk, SAMPLE_RATE),
+                language="English",
+                return_time_stamps=True,
+            )[0]
+            for _offset, chunk in batch
+        ]
+
     def _transcribe_qwen(self, audio_path: str) -> dict[str, Any]:
+        t0 = time.perf_counter()
         audio = self.reduce_noise(audio_path)
+        t_denoise = time.perf_counter() - t0
+        t0 = time.perf_counter()
         model = self._load_model()
+        print(f"[ASR] Denoise {t_denoise:.1f}s, model load {time.perf_counter() - t0:.1f}s.")
         words: list[dict[str, Any]] = []
         texts: list[str] = []
         try:
-            for offset, chunk in split_audio_chunks(audio):
-                result = model.transcribe(
-                    audio=(chunk, SAMPLE_RATE),
-                    language="English",
-                    return_time_stamps=True,
-                )[0]
-                if result.text.strip():
-                    texts.append(result.text.strip())
-                for ts in result.time_stamps or []:
-                    word = ts.text.strip()
-                    if word:
-                        # Timestamps are assumed to be seconds (README does not say; verify on a real clip).
-                        words.append({
-                            "word": word,
-                            "start": offset + float(ts.start_time),
-                            "end": offset + float(ts.end_time),
-                        })
+            chunks = split_audio_chunks(audio)
+            batch_size = max(1, worker_settings.QWEN_ASR_BATCH_SIZE)
+            t0 = time.perf_counter()
+            for i in range(0, len(chunks), batch_size):
+                batch = chunks[i:i + batch_size]
+                results = self._transcribe_batch(model, batch)
+                for (offset, _chunk), result in zip(batch, results):
+                    if result.text.strip():
+                        texts.append(result.text.strip())
+                    for ts in result.time_stamps or []:
+                        word = ts.text.strip()
+                        if word:
+                            # Timestamps are assumed to be seconds (README does not say; verify on a real clip).
+                            words.append({
+                                "word": word,
+                                "start": offset + float(ts.start_time),
+                                "end": offset + float(ts.end_time),
+                            })
+                print(
+                    f"[ASR] Chunks {min(i + batch_size, len(chunks))}/{len(chunks)} done "
+                    f"(batch={len(batch)}) at {time.perf_counter() - t0:.1f}s.",
+                    flush=True,
+                )
+            print(
+                f"[ASR] Transcribed {len(audio) / SAMPLE_RATE:.0f}s of audio in "
+                f"{time.perf_counter() - t0:.1f}s (batch_size={batch_size}).",
+                flush=True,
+            )
         finally:
             del model
             gc.collect()

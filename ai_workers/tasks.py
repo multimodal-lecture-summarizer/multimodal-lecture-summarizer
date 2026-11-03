@@ -131,6 +131,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     # at 2 connections) and the floor keeps the reported progress from moving backwards.
     state_lock = threading.RLock()
     progress_floor = [0]
+    stage_spans = {}  # stage -> [first_log_time, last_log_time] for the timing summary
     # self.request is thread-local in Celery; branch threads would see id=None, so capture it here.
     task_id = self.request.id if getattr(self, "request", None) else None
     abort_event = threading.Event()
@@ -140,11 +141,15 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         with state_lock:
             progress = max(progress, progress_floor[0])
             progress_floor[0] = progress
+            now = time.time()
+            span = stage_spans.setdefault(stage, [now, now])
+            span[1] = now
+            elapsed = now - start_time
             timestamp = datetime.utcnow().strftime("%H:%M:%S")
             log_line = f"[{timestamp}] {message}"
             logs.append(log_line)
             del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
-            print(f"[{stage.upper()}] {message}", flush=True)
+            print(f"[{stage.upper()} +{elapsed:.1f}s] {message}", flush=True)
             self.update_state(
                 task_id=task_id,
                 state="PROGRESS",
@@ -827,6 +832,11 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     else:
         log_step("Hoàn tất xử lý video và lưu kết quả.", "completed", 100)
 
+    with state_lock:
+        span_text = ", ".join(f"{name}={last - first:.1f}s" for name, (first, last) in stage_spans.items())
+    video_seconds = result.get("duration") or 0.0
+    realtime_factor = f", realtime_factor={elapsed_time / video_seconds:.2f}x" if video_seconds else ""
+    print(f"[TIMING] total={elapsed_time:.1f}s, video={video_seconds:.1f}s{realtime_factor} | stage spans: {span_text}", flush=True)
     result["logs"] = list(logs)
     result["source_language"] = source_language
     result["asr_model"] = (

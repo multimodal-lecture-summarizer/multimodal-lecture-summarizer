@@ -196,3 +196,35 @@ def test_factory_selects_engine(backend, lang, expect_qwen):
          patch.object(AudioTranscriber, "__init__", lambda self, config=None: setattr(self, "device", "cpu")):
         engine = factory.build_transcriber(lang)
     assert isinstance(engine, QwenEnglishTranscriber) is expect_qwen
+
+def test_transcribe_batch_returns_one_result_per_chunk_in_order():
+    from ai_workers.modules.audio_v2.qwen_transcriber import QwenEnglishTranscriber
+
+    calls = []
+
+    class Model:
+        def transcribe(self, audio, language, return_time_stamps):
+            calls.append((len(audio) if isinstance(audio, list) else 1, language))
+            items = audio if isinstance(audio, list) else [audio]
+            return [SimpleNamespace(text=f"c{int(a[0][0])}", time_stamps=[]) for a in items]
+
+    batch = [(0.0, np.full(4, 0.0)), (240.0, np.full(4, 1.0))]
+    results = QwenEnglishTranscriber._transcribe_batch(Model(), batch)
+
+    assert [r.text for r in results] == ["c0", "c1"]
+    assert calls == [(2, ["English", "English"])]
+
+
+def test_transcribe_batch_falls_back_to_single_chunks_when_batching_fails():
+    from ai_workers.modules.audio_v2.qwen_transcriber import QwenEnglishTranscriber
+
+    class Model:
+        def transcribe(self, audio, language, return_time_stamps):
+            if isinstance(audio, list):
+                raise TypeError("batching unsupported")
+            return [SimpleNamespace(text=f"c{int(audio[0][0])}", time_stamps=[])]
+
+    batch = [(0.0, np.full(4, 0.0)), (240.0, np.full(4, 1.0))]
+    results = QwenEnglishTranscriber._transcribe_batch(Model(), batch)
+
+    assert [r.text for r in results] == ["c0", "c1"]
