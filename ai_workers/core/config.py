@@ -19,6 +19,11 @@ class WorkerSettings(BaseSettings):
     PROCESS_MEMORY_RETRY_SECONDS: int = 30
     PROCESS_MEMORY_RETRY_INTERVAL_SECONDS: int = 5
 
+    # Run the audio branch (ASR + diarization) and visual branch (scenes + semantic) of one job
+    # concurrently. Needs enough VRAM/RAM for both model sets; on OOM the failed branch re-runs
+    # sequentially. Off by default; the Colab notebook turns it on.
+    ENABLE_PARALLEL_BRANCHES: bool = False
+
     # Audio module. ASR is Faster-Whisper. WHISPERX_* is unused and kept so old env files still load.
     FASTER_WHISPER_MODEL: str = "small"
     WHISPERX_MODEL: str = "large-v3"

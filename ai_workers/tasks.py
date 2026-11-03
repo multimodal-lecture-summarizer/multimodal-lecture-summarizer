@@ -14,9 +14,12 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import warnings
 warnings.filterwarnings("ignore")
 
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from ai_workers.core.celery_app import app
+from ai_workers.core.parallel_branches import run_branches
 from ai_workers.core.checkpoint import (
     CheckpointManager,
     STAGE_QUALITY_COMPLETE,
@@ -124,28 +127,43 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     output_dir = f"./outputs/{job_id}"
 
     logs = []
+    # Parallel branches share these: one lock serializes Redis access (the broker pool is capped
+    # at 2 connections) and the floor keeps the reported progress from moving backwards.
+    state_lock = threading.RLock()
+    progress_floor = [0]
+    # self.request is thread-local in Celery; branch threads would see id=None, so capture it here.
+    task_id = self.request.id if getattr(self, "request", None) else None
+    abort_event = threading.Event()
+
     def log_step(message, stage, progress):
         from datetime import datetime
-        timestamp = datetime.utcnow().strftime("%H:%M:%S")
-        log_line = f"[{timestamp}] {message}"
-        logs.append(log_line)
-        del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
-        print(f"[{stage.upper()}] {message}", flush=True)
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "stage": stage,
-                "progress": progress,
-                "logs": logs
-            }
-        )
+        with state_lock:
+            progress = max(progress, progress_floor[0])
+            progress_floor[0] = progress
+            timestamp = datetime.utcnow().strftime("%H:%M:%S")
+            log_line = f"[{timestamp}] {message}"
+            logs.append(log_line)
+            del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
+            print(f"[{stage.upper()}] {message}", flush=True)
+            self.update_state(
+                task_id=task_id,
+                state="PROGRESS",
+                meta={
+                    "stage": stage,
+                    "progress": progress,
+                    "logs": logs
+                }
+            )
 
     def check_revoked():
-        if not hasattr(self, "request") or not self.request or not self.request.id:
+        if abort_event.is_set():
+            raise Exception("Tác vụ bị hủy vì nhánh song song khác đã lỗi.")
+        if not task_id:
             return
         from celery.result import AsyncResult
         try:
-            state = AsyncResult(self.request.id, app=app).state
+            with state_lock:
+                state = AsyncResult(task_id, app=app).state
             if state == 'REVOKED':
                 raise Exception("Tác vụ bị hủy bởi người dùng.")
         except Exception as e:
@@ -340,127 +358,146 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             log_step("Tệp video cục bộ không tồn tại trên ổ đĩa để trích xuất metadata luồng, tiếp tục pipeline.", "preflight", 5)
 
         try:
-            # Stage 1: Audio
-            check_revoked()
-            log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 6)
-            log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
-            audio = build_transcriber(source_language)
-            audio_result = audio.process(local_video_path, source_language=source_language)
-            log_step(
-                f"Nhận dạng giọng nói xong bằng {audio_result.get('asr_model', worker_settings.FASTER_WHISPER_MODEL)} "
-                f"(ngôn ngữ nguồn: {audio_result.get('source_language', source_language)}).",
-                "audio",
-                20,
-            )
+            # Stages 1-4 are two independent branches that only meet at the timeline stage:
+            # audio (ASR + diarization) and visual (scenes + object tracking + semantic).
+            def run_audio_branch():
+                # Stage 1: Audio
+                check_revoked()
+                log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 6)
+                log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
+                audio = build_transcriber(source_language)
+                branch_audio_result = audio.process(local_video_path, source_language=source_language)
+                log_step(
+                    f"Nhận dạng giọng nói xong bằng {branch_audio_result.get('asr_model', worker_settings.FASTER_WHISPER_MODEL)} "
+                    f"(ngôn ngữ nguồn: {branch_audio_result.get('source_language', source_language)}).",
+                    "audio",
+                    20,
+                )
 
-            # Stage-level VRAM cleanup
-            del audio
-            release_worker_resources("audio stage")
+                # Stage-level VRAM cleanup
+                del audio
+                release_worker_resources("audio stage")
 
-            # Stage 2: Speaker diarization
-            check_revoked()
-            log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
-            speaker = SpeakerDiarizer()
-            utterances = speaker.process(
-                local_video_path.rsplit(".", 1)[0] + ".wav",
-                audio_result.get("segments", []),
-            )
-            if isinstance(audio_result, dict):
-                audio_result["diarization_status"] = str(speaker.status or "skipped")
-                audio_result["diarization_reason"] = str(speaker.reason or "")
-            if speaker.status == "completed":
-                speaker_message = f"Đã gán người nói cho {len(utterances)} phân đoạn."
-            elif speaker.status == "skipped":
-                speaker_message = "Bỏ qua phân biệt người nói vì không có HF_TOKEN."
-            else:
-                speaker_message = f"Phân biệt người nói thất bại, giữ transcript không gán speaker giả: {speaker.reason}"
-            log_step(speaker_message, "speaker", 35)
+                # Stage 2: Speaker diarization
+                check_revoked()
+                log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
+                speaker = SpeakerDiarizer()
+                branch_utterances = speaker.process(
+                    local_video_path.rsplit(".", 1)[0] + ".wav",
+                    branch_audio_result.get("segments", []),
+                )
+                if isinstance(branch_audio_result, dict):
+                    branch_audio_result["diarization_status"] = str(speaker.status or "skipped")
+                    branch_audio_result["diarization_reason"] = str(speaker.reason or "")
+                if speaker.status == "completed":
+                    speaker_message = f"Đã gán người nói cho {len(branch_utterances)} phân đoạn."
+                elif speaker.status == "skipped":
+                    speaker_message = "Bỏ qua phân biệt người nói vì không có HF_TOKEN."
+                else:
+                    speaker_message = f"Phân biệt người nói thất bại, giữ transcript không gán speaker giả: {speaker.reason}"
+                log_step(speaker_message, "speaker", 35)
 
-            del speaker
-            release_worker_resources("speaker stage")
+                del speaker
+                release_worker_resources("speaker stage")
+                return branch_audio_result, branch_utterances
 
-            # Stage 3: Visual
-            check_revoked()
-            log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
-            visual = SceneDetector()
-            visual_result = visual.process(local_video_path, output_dir)
-            log_step(f"Đã trích xuất xong {len(visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
+            def run_visual_branch():
+                # Stage 3: Visual
+                check_revoked()
+                log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
+                visual = SceneDetector()
+                branch_visual_result = visual.process(local_video_path, output_dir)
+                log_step(f"Đã trích xuất xong {len(branch_visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
 
-            del visual
-            release_worker_resources("visual stage")
+                del visual
+                release_worker_resources("visual stage")
 
-            # Stage 3.5: Object Detection & Tracking (OD&T)
-            check_revoked()
-            if not worker_settings.ENABLE_OBJECT_TRACKING:
-                # Out of scope for single-speaker slide lectures; keep the summary shape downstream expects.
-                log_step("Bỏ qua theo dõi đối tượng (ENABLE_OBJECT_TRACKING=false).", "object_tracking", 57)
-                video_objects_summary = {
-                    "total_unique_tracks": 0,
-                    "label_distribution": {},
-                    "most_frequent_objects": [],
-                    "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
-                }
-            else:
-                log_step("Bắt đầu phát hiện và theo dõi đối tượng (YOLO + ByteTrack)...", "object_tracking", 56)
-                try:
-                    ensure_process_memory_available(
-                        1536,
-                        soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
-                        retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
-                        retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
-                    )
-                except Exception as mem_err:
-                    print(f"[OD&T] Memory check warning before object tracking: {mem_err}")
-
-                tracker = None
-                try:
-                    tracker = ObjectDetectorTracker()
-                    updated_scenes, video_objects_summary = tracker.track_video_scenes(
-                        video_path=local_video_path,
-                        scenes=visual_result.get("scenes", []),
-                        sample_fps=getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
-                        revoke_check_fn=check_revoked,
-                    )
-                    visual_result["scenes"] = updated_scenes
-                    log_step(
-                        f"Hoàn thành theo dõi đối tượng. Tìm thấy {video_objects_summary.get('total_unique_tracks', 0)} đối tượng duy nhất.",
-                        "object_tracking",
-                        57,
-                    )
-                except Exception as tracker_err:
-                    print(f"[OD&T] Warning: Object tracking failed: {tracker_err}")
-                    video_objects_summary = {
+                # Stage 3.5: Object Detection & Tracking (OD&T)
+                check_revoked()
+                if not worker_settings.ENABLE_OBJECT_TRACKING:
+                    # Out of scope for single-speaker slide lectures; keep the summary shape downstream expects.
+                    log_step("Bỏ qua theo dõi đối tượng (ENABLE_OBJECT_TRACKING=false).", "object_tracking", 57)
+                    branch_objects_summary = {
                         "total_unique_tracks": 0,
                         "label_distribution": {},
                         "most_frequent_objects": [],
                         "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
                     }
-                finally:
-                    if tracker is not None:
-                        del tracker
-                    import gc
-                    gc.collect()
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    release_worker_resources("object detection & tracking stage")
+                else:
+                    log_step("Bắt đầu phát hiện và theo dõi đối tượng (YOLO + ByteTrack)...", "object_tracking", 56)
+                    try:
+                        ensure_process_memory_available(
+                            1536,
+                            soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
+                            retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
+                            retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
+                        )
+                    except Exception as mem_err:
+                        print(f"[OD&T] Memory check warning before object tracking: {mem_err}")
 
-            # Stage 4: Semantic
-            check_revoked()
-            log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
-            semantic = SemanticAnalyzer()
-            log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
-            filtered_scenes = semantic.filter_scenes_clip(visual_result.get("scenes", []))
-            log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
-            semantic.caption_scenes_florence2(filtered_scenes)
-            log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
-            semantic.extract_ocr_paddleocr(filtered_scenes)
-            visual_result["scenes"] = filtered_scenes
-            slides = filtered_scenes
-            log_step(f"Đã hoàn thành phân tích nội dung slide. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
+                    tracker = None
+                    try:
+                        tracker = ObjectDetectorTracker()
+                        updated_scenes, branch_objects_summary = tracker.track_video_scenes(
+                            video_path=local_video_path,
+                            scenes=branch_visual_result.get("scenes", []),
+                            sample_fps=getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                            revoke_check_fn=check_revoked,
+                        )
+                        branch_visual_result["scenes"] = updated_scenes
+                        log_step(
+                            f"Hoàn thành theo dõi đối tượng. Tìm thấy {branch_objects_summary.get('total_unique_tracks', 0)} đối tượng duy nhất.",
+                            "object_tracking",
+                            57,
+                        )
+                    except Exception as tracker_err:
+                        print(f"[OD&T] Warning: Object tracking failed: {tracker_err}")
+                        branch_objects_summary = {
+                            "total_unique_tracks": 0,
+                            "label_distribution": {},
+                            "most_frequent_objects": [],
+                            "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                        }
+                    finally:
+                        if tracker is not None:
+                            del tracker
+                        import gc
+                        gc.collect()
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        release_worker_resources("object detection & tracking stage")
 
-            del semantic
-            release_worker_resources("semantic stage")
+                # Stage 4: Semantic
+                check_revoked()
+                log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
+                semantic = SemanticAnalyzer()
+                log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
+                filtered_scenes = semantic.filter_scenes_clip(branch_visual_result.get("scenes", []))
+                log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
+                semantic.caption_scenes_florence2(filtered_scenes)
+                log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
+                semantic.extract_ocr_paddleocr(filtered_scenes)
+                branch_visual_result["scenes"] = filtered_scenes
+                log_step(f"Đã hoàn thành phân tích nội dung slide. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
+
+                del semantic
+                release_worker_resources("semantic stage")
+                return branch_visual_result, branch_objects_summary, filtered_scenes
+
+            if worker_settings.ENABLE_PARALLEL_BRANCHES:
+                log_step("Chạy song song nhánh audio và nhánh visual.", "audio", 6)
+            branch_results = run_branches(
+                [("audio", run_audio_branch), ("visual", run_visual_branch)],
+                parallel=worker_settings.ENABLE_PARALLEL_BRANCHES,
+                abort=abort_event,
+                on_fallback=lambda name, exc: log_step(
+                    f"Nhánh {name} thiếu tài nguyên khi chạy song song ({exc}); chạy lại tuần tự.", name, 0
+                ),
+                cleanup=release_worker_resources,
+            )
+            audio_result, utterances = branch_results["audio"]
+            visual_result, video_objects_summary, slides = branch_results["visual"]
 
             # Stage 5: Timeline
             check_revoked()
@@ -576,18 +613,23 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     )
                     bucket_name = worker_settings.CF_R2_BUCKET_NAME
 
-                    for kf in keyframes:
+                    public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
+
+                    def upload_keyframe(kf):
                         local_path = kf.get("local_path")
-                        if local_path and os.path.exists(local_path):
-                            filename = os.path.basename(local_path)
-                            object_key = f"keyframes/{job_id}/{filename}"
-                            try:
-                                s3_client.upload_file(local_path, bucket_name, object_key, ExtraArgs={"ContentType": "image/png"})
-                                public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
-                                kf["imageUrl"] = f"{public_base}/{object_key}"
-                                kf["keyframe_url"] = kf["imageUrl"]
-                            except Exception as upload_err:
-                                print(f"R2 upload error: {upload_err}")
+                        if not (local_path and os.path.exists(local_path)):
+                            return
+                        object_key = f"keyframes/{job_id}/{os.path.basename(local_path)}"
+                        try:
+                            s3_client.upload_file(local_path, bucket_name, object_key, ExtraArgs={"ContentType": "image/png"})
+                            kf["imageUrl"] = f"{public_base}/{object_key}"
+                            kf["keyframe_url"] = kf["imageUrl"]
+                        except Exception as upload_err:
+                            print(f"R2 upload error: {upload_err}")
+
+                    # boto3 clients are thread-safe; each task only mutates its own keyframe dict.
+                    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="r2-upload") as upload_pool:
+                        list(upload_pool.map(upload_keyframe, keyframes))
 
                     r2_duration = time.time() - r2_start
                     log_step(f"Đã tải xong {len(keyframes)} keyframes lên R2 trong {r2_duration:.2f}s.", "storage", 88)
