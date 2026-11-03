@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +109,10 @@ class AudioTranscriber:
         return output_path
 
     def reduce_noise(self, audio_path: str) -> np.ndarray:
+        started = time.perf_counter()
+        # First import pulls in librosa/torchaudio/DeepFilterNet, which is slow on a cold Colab disk.
         from ai_workers.modules.common.denoise import get_denoised_audio_array
+        print(f"[Denoise] Module import took {time.perf_counter() - started:.1f}s.", flush=True)
         return get_denoised_audio_array(audio_path)
 
     def transcribe(self, audio_path: str, source_language: str | None = None) -> dict[str, Any]:
@@ -251,5 +255,7 @@ class AudioTranscriber:
 
     def process(self, video_path: str, source_language: str | None = None) -> dict[str, Any]:
         audio_path = video_path.rsplit(".", 1)[0] + ".wav"
+        started = time.perf_counter()
         self.extract_audio(video_path, audio_path)
+        print(f"[ASR] FFmpeg audio extraction took {time.perf_counter() - started:.1f}s.", flush=True)
         return self.transcribe(audio_path, source_language=source_language)
