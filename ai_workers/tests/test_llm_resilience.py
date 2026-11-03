@@ -367,6 +367,24 @@ class LLMResilienceTests(unittest.TestCase):
         self.assertIn("llm_error", result)
         self.assertEqual(result["llm_error"]["error_code"], "LLM_TIMEOUT")
 
+    def test_summarizer_skips_llm_providers_when_disabled(self):
+        """ENABLE_LLM_SUMMARIZER=false never calls OpenRouter/Groq and still returns a summary."""
+        summarizer = Summarizer(custom_wait=wait_none())
+        summarizer.openrouter_client._client = MagicMock()
+        summarizer.groq_client._client = MagicMock()
+
+        utterances = [{"start": 0.0, "end": 60.0, "text": "Hello world"}]
+        slides = [{"start_seconds": 0.0, "end_seconds": 60.0, "caption": "Intro slide", "ocr_text": "AI"}]
+        chapters = [{"title": "Introduction", "startTime": 0.0, "endTime": 60.0, "summary": "Intro"}]
+
+        with patch("ai_workers.core.config.worker_settings.ENABLE_LLM_SUMMARIZER", False):
+            result = summarizer.summarize(utterances, slides, chapters, job_id="job-no-llm", output_language="vi")
+
+        summarizer.openrouter_client._client.chat.completions.create.assert_not_called()
+        summarizer.groq_client._client.chat.completions.create.assert_not_called()
+        self.assertTrue(result["summary"])
+        self.assertIn("chapters", result)
+
     def test_summarizer_success_with_chapters(self):
         """When LLM returns valid schema, summarizer parses and formats chapters correctly."""
         summarizer = Summarizer(custom_wait=wait_none())

@@ -1127,13 +1127,18 @@ class Summarizer:
 
         # Build candidate client & model target list
         targets: list[tuple[str, str, LLMClient]] = []
-        if self.openrouter_client.is_configured:
-            for m in self.openrouter_models:
-                targets.append(("OpenRouter", m, self.openrouter_client))
+        from ai_workers.core.config import worker_settings
 
-        if self.groq_client.is_configured:
-            for m in self.groq_models:
-                targets.append(("Groq", m, self.groq_client))
+        if not worker_settings.ENABLE_LLM_SUMMARIZER:
+            print("[Summarizer] ENABLE_LLM_SUMMARIZER=false: bỏ qua OpenRouter/Groq, dùng tóm tắt trích xuất.")
+        else:
+            if self.openrouter_client.is_configured:
+                for m in self.openrouter_models:
+                    targets.append(("OpenRouter", m, self.openrouter_client))
+
+            if self.groq_client.is_configured:
+                for m in self.groq_models:
+                    targets.append(("Groq", m, self.groq_client))
 
         last_error: Optional[LLMBaseError] = None
         import time

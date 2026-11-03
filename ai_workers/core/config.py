@@ -68,6 +68,8 @@ class WorkerSettings(BaseSettings):
     # English summaries: "led" (default) runs the benchmarked LED map-reduce summarizer when
     # output_language == "en" and a CUDA GPU exists; "llm" keeps the Groq/OpenRouter path only.
     SUMMARIZER_ENGLISH_BACKEND: str = "led"
+    # Set false to never call OpenRouter/Groq; non-English output then uses the extractive summary.
+    ENABLE_LLM_SUMMARIZER: bool = True
     LED_MODEL: str = "allenai/led-large-16384-arxiv"
     LED_MODEL_REVISION: str = "0f8b26971c44af9d4e21edd17ccb5e000f22dac1"
 
