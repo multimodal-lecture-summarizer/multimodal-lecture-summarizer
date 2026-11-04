@@ -42,6 +42,8 @@ class WorkerSettings(BaseSettings):
     QWEN_KEEP_RESIDENT: str = "auto"
     # Same for the visual models (CLIP, Florence-2, PaddleOCR): "auto" (only on Colab), "true", "false".
     VISUAL_KEEP_RESIDENT: str = "auto"
+    # Same for the LED summarizer (~1 GB of VRAM in fp16): "auto" (only on Colab), "true", "false".
+    LED_KEEP_RESIDENT: str = "auto"
     # Audio chunks transcribed per forward pass. 1 = one chunk at a time (original behavior);
     # raise on GPUs with spare VRAM (Colab T4: 4) since decoding is memory-bound.
     QWEN_ASR_BATCH_SIZE: int = 1

@@ -77,6 +77,10 @@ def _prefetch_led() -> None:
         revision=worker_settings.LED_MODEL_REVISION or None,
         ignore_patterns=_SKIP_PATTERNS,
     )
+    # With the weights local, load LED onto the GPU now so no job pays for it.
+    from ai_workers.modules.summarization.led_summarizer import preload_led_model
+
+    preload_led_model()
 
 
 def _prefetch_paddleocr() -> None:

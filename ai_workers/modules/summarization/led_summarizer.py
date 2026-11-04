@@ -14,9 +14,12 @@ import gc
 import logging
 import math
 import re
+import time
 from typing import Any, Callable
 
-from ai_workers.core.config import worker_settings
+from ai_workers.core.config import flag_enabled, worker_settings
+from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
+from ai_workers.core.resident_slot import ResidentSlot
 
 logger = logging.getLogger("ai_workers.modules.summarization.led_summarizer")
 
@@ -131,14 +134,16 @@ class LedModel:
         name = worker_settings.LED_MODEL
         revision = worker_settings.LED_MODEL_REVISION or None
         logger.info("Loading LED %s on cuda (fp16)", name)
-        self.tokenizer = AutoTokenizer.from_pretrained(name, revision=revision)
-        self.model = (
-            LEDForConditionalGeneration.from_pretrained(
-                name, revision=revision, dtype=torch.float16, attn_implementation="eager"
+        # Serialized with the other Transformers model loads (start-up preload runs several at once).
+        with MODEL_LOAD_LOCK:
+            self.tokenizer = AutoTokenizer.from_pretrained(name, revision=revision)
+            self.model = (
+                LEDForConditionalGeneration.from_pretrained(
+                    name, revision=revision, dtype=torch.float16, attn_implementation="eager"
+                )
+                .to("cuda")
+                .eval()
             )
-            .to("cuda")
-            .eval()
-        )
 
     def encode(self, text: str) -> list[int]:
         return self.tokenizer.encode(text, add_special_tokens=False)
@@ -170,6 +175,28 @@ class LedModel:
         gc.collect()
         if self._torch.cuda.is_available():
             self._torch.cuda.empty_cache()
+
+
+LED_SLOT = ResidentSlot("LED")
+
+
+def led_resident_enabled() -> bool:
+    return flag_enabled(worker_settings.LED_KEEP_RESIDENT)
+
+
+def load_led() -> LedModel:
+    """The LED model; kept on the GPU between jobs when residency is on."""
+    return LED_SLOT.get_or_load(LedModel) if led_resident_enabled() else LedModel()
+
+
+def preload_led_model() -> None:
+    """Load LED ahead of the first job. No-op unless residency is on and a CUDA GPU exists."""
+    if not led_resident_enabled() or worker_settings.SUMMARIZER_ENGLISH_BACKEND != "led":
+        return
+    import torch
+
+    if torch.cuda.is_available():
+        load_led()
 
 
 def led_enabled(output_language: str | None) -> bool:
@@ -207,25 +234,43 @@ def build_led_result(
         if not torch.cuda.is_available():
             _say("Bỏ qua LED: không có GPU CUDA, chuyển sang LLM.")
             return None
-        _say(f"Đang tải {worker_settings.LED_MODEL} để tóm tắt (job {job_id}).")
-        led = LedModel()
+        _say(f"Đang chuẩn bị {worker_settings.LED_MODEL} để tóm tắt (job {job_id}).")
+        load_started = time.perf_counter()
+        led = load_led()
+        load_seconds = time.perf_counter() - load_started
     except Exception as err:
         _say(f"LED không khả dụng, chuyển sang LLM: {err!r}")
         logger.warning("LED unavailable for job %s; using the LLM path", job_id, exc_info=True)
         return None
 
+    generate_calls = [0]
+
+    def counted_generate(ids: list[int], max_new_tokens: int) -> str:
+        generate_calls[0] += 1
+        return led.generate(ids, max_new_tokens)
+
+    failed = False
+    generate_started = time.perf_counter()
     try:
-        raw = led_map_reduce(led.encode(transcript), led.encode, led.generate)
+        raw = led_map_reduce(led.encode(transcript), led.encode, counted_generate)
     except Exception as err:
+        failed = True
         _say(f"LED tóm tắt thất bại, chuyển sang LLM: {err!r}")
         logger.warning("LED summarization failed for job %s; using the LLM path", job_id, exc_info=True)
         return None
     finally:
-        try:
-            led.close()
-        except Exception:  # a CUDA error after OOM must not block the LLM fallback
-            logger.warning("Closing LED failed for job %s", job_id, exc_info=True)
+        # A kept model survives a good run; after a failure it is dropped and reloaded next time.
+        if failed or not led_resident_enabled():
+            LED_SLOT.clear()
+            try:
+                led.close()
+            except Exception:  # a CUDA error after OOM must not block the LLM fallback
+                logger.warning("Closing LED failed for job %s", job_id, exc_info=True)
         del led
+    generate_seconds = time.perf_counter() - generate_started
+    _say(
+        f"LED: model sẵn sàng sau {load_seconds:.1f}s, sinh {generate_calls[0]} lần trong {generate_seconds:.1f}s."
+    )
 
     summary = sentence_prefix(raw, WORD_CAPS.get(length_key, WORD_CAPS["medium"]))
     if not summary:
