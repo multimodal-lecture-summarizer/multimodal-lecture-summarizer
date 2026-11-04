@@ -21,7 +21,7 @@ export const ProfilePage: React.FC = () => {
     isActive: boolean;
     outputLanguage?: string;
   } | null>(null);
-  const [outputLanguage, setOutputLanguage] = useState<string>("vi");
+  const [outputLanguage, setOutputLanguage] = useState<string>("en");
   const [savingLanguage, setSavingLanguage] = useState<boolean>(false);
   const [videoCount, setVideoCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -37,18 +37,18 @@ export const ProfilePage: React.FC = () => {
 
   const languageOptions = [
     {
-      id: "vi",
-      label: t("profile.output_language_vi"),
-      code: "VI",
-      flag: "🇻🇳",
-      desc: t("profile.output_language_vi_desc"),
-    },
-    {
       id: "en",
       label: t("profile.output_language_en"),
       code: "EN",
       flag: "🇺🇸",
       desc: t("profile.output_language_en_desc"),
+    },
+    {
+      id: "vi",
+      label: t("profile.output_language_vi"),
+      code: "VI",
+      flag: "🇻🇳",
+      desc: t("profile.output_language_vi_desc"),
     },
   ];
 
@@ -78,7 +78,7 @@ export const ProfilePage: React.FC = () => {
       .getMe()
       .then((res) => {
         if (res.success && res.data) {
-          const userLang = res.data.outputLanguage || "vi";
+          const userLang = res.data.outputLanguage || "en";
           setProfile({
             email: res.data.email,
             role: res.data.role,
@@ -420,7 +420,7 @@ export const ProfilePage: React.FC = () => {
                           </span>
                         </div>
                         <span className="text-[11px] font-semibold text-slate-400">
-                          {opt.id === "vi" ? "Mặc định hệ thống" : "Universal format"}
+                          {opt.id === "en" ? "Mặc định hệ thống" : "Vietnamese format"}
                         </span>
                       </div>
                     </div>

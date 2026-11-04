@@ -34,7 +34,7 @@ class User(Base):
         Boolean, default=True, nullable=False
     )
     output_language: Mapped[str] = mapped_column(
-        String(10), default="vi", nullable=False
+        String(10), default="en", nullable=False
     )
 
     # Relationships

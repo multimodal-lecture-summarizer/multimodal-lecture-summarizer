@@ -119,7 +119,7 @@ def get_me(current_user: User = Depends(get_current_active_user)):
     "/me/preferences",
     response_model=BaseDTO[UserDTO],
     summary="Update current user preferences (such as AI output language)",
-    description="Updates user configuration preferences like output_language ('vi', 'en', etc.).",
+    description="Updates user configuration preferences like output_language ('en', 'vi', etc.).",
 )
 def update_preferences(
     payload: UserPreferencesUpdate,
@@ -127,7 +127,7 @@ def update_preferences(
     current_user: User = Depends(get_current_active_user),
 ):
     """Updates user preferences like output_language in database."""
-    target_lang = (payload.output_language or "vi").strip().lower()
+    target_lang = (payload.output_language or "en").strip().lower()
     current_user.output_language = target_lang
     db.commit()
     db.refresh(current_user)

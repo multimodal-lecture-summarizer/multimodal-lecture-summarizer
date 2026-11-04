@@ -480,7 +480,7 @@ def upload_video(
 
     try:
         from app.core.celery_app import celery_app
-        user_lang = getattr(current_user, "output_language", "vi") or "vi"
+        user_lang = getattr(current_user, "output_language", "en") or "en"
         valid_lengths = {"short", "medium", "detailed"}
         chosen_len = (summaryLength or summary_length or "medium").strip().lower()
         norm_summary_length = chosen_len if chosen_len in valid_lengths else "medium"

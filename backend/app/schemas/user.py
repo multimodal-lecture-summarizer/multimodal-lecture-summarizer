@@ -40,7 +40,7 @@ class UserDTO(UserBase):
         True, description="Indicates whether the account is currently active"
     )
     output_language: str = Field(
-        "vi", description="The configured target language code for AI summaries (e.g. 'vi', 'en')"
+        "en", description="The configured target language code for AI summaries (e.g. 'en', 'vi')"
     )
 
 

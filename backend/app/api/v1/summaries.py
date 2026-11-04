@@ -311,7 +311,7 @@ def resummarize_video(
         utterances = ckpt_data.get("utterances", [])
         keyframes = ckpt_data.get("keyframes", [])
         chapters = ckpt_data.get("chapters", summary.chapters_json or [])
-        output_language = ckpt_data.get("output_language", getattr(current_user, "output_language", "vi") or "vi")
+        output_language = ckpt_data.get("output_language", getattr(current_user, "output_language", "en") or "en")
     else:
         # Reconstruct from DB
         raw_transcript = summary.transcript_text or ""
@@ -354,7 +354,7 @@ def resummarize_video(
                 "object_counts": sc.object_counts_json or {},
             })
         chapters = summary.chapters_json or []
-        output_language = getattr(current_user, "output_language", "vi") or "vi"
+        output_language = getattr(current_user, "output_language", "en") or "en"
 
     # Invoke Summarizer with target length
     summarizer = Summarizer()
