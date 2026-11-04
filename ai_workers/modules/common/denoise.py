@@ -32,6 +32,8 @@ def _denoise_device() -> str:
 
 # Set after a CUDA run fails so the rest of the process stays on CPU instead of retrying.
 _gpu_failed = False
+# GPU denoising slower than this share of the audio length loses to the CPU, so it is dropped.
+GPU_MAX_REAL_TIME_RATIO = 0.1
 
 
 class DenoiseManager:
@@ -62,18 +64,15 @@ class DenoiseManager:
 
     def _run_df(self, audio):
         """Run DeepFilterNet on a [channels, samples] tensor at the model's sample rate."""
-        if self.device == "cuda":
-            # cuDNN rejects DeepFilterNet's layers on some torch/GPU combos (NOT_SUPPORTED);
-            # native CUDA kernels still beat the 2-vCPU Colab CPU.
-            with torch.backends.cudnn.flags(enabled=False):
-                return enhance(self.model, self.df_state, audio.contiguous()).cpu()
-        return enhance(self.model, self.df_state, audio).cpu()
+        # cuDNN must stay on: its GRU kernels are what make the GPU fast. Disabling it "fixed" a
+        # cuDNN error once but ran about 2x slower than the 2-vCPU CPU.
+        return enhance(self.model, self.df_state, audio.contiguous()).cpu()
 
-    def _switch_to_cpu(self, err: Exception) -> None:
-        """After a CUDA failure keep the rest of the process on CPU instead of retrying."""
+    def _switch_to_cpu(self, reason: str) -> None:
+        """Keep the rest of the process on CPU instead of retrying CUDA."""
         global _gpu_failed
         _gpu_failed = True
-        print(f"[Denoise] CUDA run failed ({err}); retrying on cpu.")
+        print(f"[Denoise] {reason}; using cpu from now on.")
         self.model = self.model.to("cpu")
         self.device = "cpu"
         torch.cuda.empty_cache()
@@ -108,13 +107,26 @@ class DenoiseManager:
             return samples
         try:
             self.initialize()
+            started = time.perf_counter()
             try:
-                return self._enhance_samples(samples)
+                result = self._enhance_samples(samples)
             except Exception as gpu_err:
                 if self.device != "cuda":
                     raise
-                self._switch_to_cpu(gpu_err)
-                return self._enhance_samples(samples)
+                self._switch_to_cpu(f"CUDA run failed ({gpu_err})")
+                started = time.perf_counter()
+                result = self._enhance_samples(samples)
+            elapsed = time.perf_counter() - started
+            audio_seconds = max(len(samples) / 16000, 1e-6)
+            print(
+                f"[Denoise] {audio_seconds:.0f}s chunk on {self.device} in {elapsed:.1f}s "
+                f"(x{elapsed / audio_seconds:.2f} of real time).",
+                flush=True,
+            )
+            if self.device == "cuda" and elapsed > GPU_MAX_REAL_TIME_RATIO * audio_seconds:
+                # The 2-vCPU CPU manages roughly 0.1-0.2x; a slower GPU is not worth keeping.
+                self._switch_to_cpu(f"CUDA is slower than expected (x{elapsed / audio_seconds:.2f})")
+            return result
         except Exception as e:
             print(f"[Warning] DeepFilterNet failed on a chunk ({e}); using it un-denoised.")
             return samples
@@ -165,7 +177,7 @@ class DenoiseManager:
                     raise
                 # e.g. cuDNN "not supported" on some torch/GPU combos: redo on CPU rather than
                 # silently transcribing un-denoised audio.
-                self._switch_to_cpu(gpu_err)
+                self._switch_to_cpu(f"CUDA run failed ({gpu_err})")
                 result = self._enhance(audio_path)
             if cache_key is not None:
                 self._cache = (cache_key, result)

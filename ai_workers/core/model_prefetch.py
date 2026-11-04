@@ -29,10 +29,17 @@ def prefetch_enabled() -> bool:
     return setting in ("1", "true", "yes", "on")
 
 
+# huggingface_hub creates tqdm bars per download; started from several threads at once, the
+# first bars race on tqdm's class lock ("type object 'tqdm' has no attribute '_lock'").
+# Hub downloads therefore run one at a time; PaddleOCR (a different downloader) overlaps with them.
+_HUB_DOWNLOAD_LOCK = threading.Lock()
+
+
 def _snapshot(repo_id: str, **kwargs) -> None:
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo_id, **kwargs)
+    with _HUB_DOWNLOAD_LOCK:
+        snapshot_download(repo_id, **kwargs)
 
 
 def _prefetch_whisper() -> None:
@@ -43,7 +50,8 @@ def _prefetch_whisper() -> None:
     if (cache_dir / f"faster-whisper-{size}" / "model.bin").exists():
         return  # AudioTranscriber already prefers this local copy
     cache_dir.mkdir(parents=True, exist_ok=True)
-    download_model(size, cache_dir=str(cache_dir))
+    with _HUB_DOWNLOAD_LOCK:
+        download_model(size, cache_dir=str(cache_dir))
 
 
 def _prefetch_qwen() -> None:

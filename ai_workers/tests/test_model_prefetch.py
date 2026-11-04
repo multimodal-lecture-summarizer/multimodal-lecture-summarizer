@@ -45,6 +45,28 @@ def test_failed_prefetch_task_does_not_stop_the_others():
     assert any("bad skipped" in line for line in logs)
 
 
+def test_hub_downloads_never_overlap():
+    import time
+
+    active, overlaps = [], []
+
+    def fake_snapshot_download(repo_id, **kwargs):
+        active.append(repo_id)
+        if len(active) > 1:
+            overlaps.append(repo_id)
+        time.sleep(0.03)
+        active.remove(repo_id)
+
+    threads = [threading.Thread(target=model_prefetch._snapshot, args=(f"repo/{i}",)) for i in range(4)]
+    with patch("huggingface_hub.snapshot_download", fake_snapshot_download):
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert overlaps == []
+
+
 def test_task_list_follows_backend_settings(monkeypatch):
     monkeypatch.setattr(model_prefetch.worker_settings, "ASR_ENGLISH_BACKEND", "whisper")
     monkeypatch.setattr(model_prefetch.worker_settings, "SUMMARIZER_ENGLISH_BACKEND", "llm")

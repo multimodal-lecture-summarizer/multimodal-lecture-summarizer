@@ -79,6 +79,28 @@ def test_same_file_is_denoised_once(tmp_path):
     assert first is second
 
 
+def _timed_chunk(manager, seconds_elapsed):
+    samples = np.zeros(16000 * 10, dtype=np.float32)  # a 10 s chunk
+    with patch.object(denoise, "DF_AVAILABLE", True), patch.object(denoise, "_gpu_failed", False), \
+         patch.object(manager, "initialize"), \
+         patch.object(manager, "_enhance_samples", return_value=samples), \
+         patch.object(denoise.time, "perf_counter", side_effect=[0.0, seconds_elapsed]), \
+         patch("torch.cuda.empty_cache"):
+        manager.enhance_array(samples)
+
+
+def test_gpu_that_is_slower_than_cpu_is_dropped():
+    manager = _manager("cuda")
+    _timed_chunk(manager, 5.0)  # 0.5x real time
+    assert manager.device == "cpu"
+
+
+def test_fast_gpu_is_kept():
+    manager = _manager("cuda")
+    _timed_chunk(manager, 0.3)  # 0.03x real time
+    assert manager.device == "cuda"
+
+
 def test_gpu_failure_flag_forces_cpu_device():
     with patch.object(denoise, "_gpu_failed", True):
         assert denoise._denoise_device() == "cpu"
