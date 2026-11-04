@@ -419,7 +419,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                         "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
                     }
                 else:
-                    log_step("Bắt đầu phát hiện và theo dõi đối tượng (YOLO + ByteTrack)...", "object_tracking", 56)
+                    log_step("Bắt đầu phát hiện và theo dõi đối tượng (RT-DETR + BoT-SORT)...", "object_tracking", 56)
                     try:
                         ensure_process_memory_available(
                             1536,

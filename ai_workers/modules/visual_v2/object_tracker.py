@@ -8,6 +8,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import cv2
 import torch
 from ai_workers.core.config import worker_settings
+from ai_workers.modules.visual_v2.resident_models import DETECTOR_SLOT, visual_resident_enabled
+from ai_workers.modules.visual_v2.rtdetr_detector import RtDetrDetector, build_detector, warm_up
 
 logger = logging.getLogger("ai_workers.modules.visual_v2.object_tracker")
 
@@ -46,8 +48,66 @@ def compute_center_dist(box1: List[float], box2: List[float]) -> float:
     return math.sqrt((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2)
 
 
+# BoT-SORT settings the benchmark scored (published defaults of `trackers==2.6.1`, no ReID). The
+# tracker is fed the sampled frames, so `frame_rate` is the sampling rate, not the video rate.
+BOTSORT_PARAMS: Dict[str, Any] = {
+    "lost_track_buffer": 30,
+    "track_activation_threshold": 0.7,
+    "minimum_consecutive_frames": 2,
+    "minimum_iou_threshold_first_assoc": 0.2,
+    "minimum_iou_threshold_second_assoc": 0.5,
+    "minimum_iou_threshold_unconfirmed_assoc": 0.3,
+    "high_conf_det_threshold": 0.6,
+    "enable_cmc": True,
+    "cmc_method": "sparseOptFlow",
+    "cmc_downscale": 2,
+    "instant_first_frame_activation": True,
+}
+
+
+def build_botsort(frame_rate: float) -> Any:
+    """A fresh BoT-SORT tracker (one per scene: a cut ends every track)."""
+    from trackers import BoTSORTTracker
+
+    return BoTSORTTracker(**{**BOTSORT_PARAMS, "frame_rate": float(max(1.0, frame_rate))})
+
+
+def resolve_tracking_device(requested_device: Optional[str] = None) -> str:
+    dev = requested_device or getattr(worker_settings, "OBJECT_TRACKING_DEVICE", "auto")
+    dev = str(dev).strip().lower()
+    if dev in ("cuda", "gpu", "auto"):
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    return "cpu"
+
+
+def load_detector(model_name: str, device: str) -> RtDetrDetector:
+    """The RT-DETR detector; kept loaded between jobs when visual residency is on."""
+    if visual_resident_enabled():
+        return DETECTOR_SLOT.get_or_load(lambda: build_detector(model_name, device))
+    return build_detector(model_name, device)
+
+
+def preload_detector_model() -> None:
+    """Fetch and load the detector ahead of the first job.
+
+    No-op unless object tracking is enabled. Without residency the model is only built once to
+    download the weights, then dropped. With residency a tiny warm-up pass initialises the CUDA
+    kernels so the first job's first frame is not slower than the rest.
+    """
+    if not worker_settings.ENABLE_OBJECT_TRACKING:
+        return
+    model_name = worker_settings.OBJECT_DETECTOR_MODEL
+    if not visual_resident_enabled():
+        build_detector(model_name, "cpu")
+        return
+    detector = load_detector(model_name, resolve_tracking_device())
+    err = warm_up(detector, worker_settings.OBJECT_DETECTOR_MIN_SCORE)
+    if err is not None:
+        logger.warning(f"[OD&T] Warm-up pass skipped: {err}")
+
+
 class ObjectDetectorTracker:
-    """Object detection and ByteTrack tracking for lecture video scenes."""
+    """RT-DETR-R18vd detection and BoT-SORT tracking for lecture video scenes."""
 
     HIGH_CONF_CLASSES = HIGH_CONF_CLASSES
 
@@ -55,57 +115,38 @@ class ObjectDetectorTracker:
         self,
         model_name: Optional[str] = None,
         conf_threshold: Optional[float] = None,
-        iou_threshold: Optional[float] = None,
         device: Optional[str] = None,
     ):
-        self.model_name = model_name or getattr(worker_settings, "YOLO_MODEL", "yolov8n.pt")
+        self.model_name = model_name or worker_settings.OBJECT_DETECTOR_MODEL
         self.conf_threshold = (
-            conf_threshold
-            if conf_threshold is not None
-            else getattr(worker_settings, "YOLO_CONF_THRESHOLD", 0.40)
+            conf_threshold if conf_threshold is not None else worker_settings.OBJECT_CONF_THRESHOLD
         )
-        self.iou_threshold = (
-            iou_threshold
-            if iou_threshold is not None
-            else getattr(worker_settings, "YOLO_IOU_THRESHOLD", 0.5)
-        )
-        self.device = self._resolve_device(device)
+        self.min_score = min(worker_settings.OBJECT_DETECTOR_MIN_SCORE, self.conf_threshold)
+        self.device = resolve_tracking_device(device)
         self.model = self._load_model()
+        self.device = self.model.device
 
-    def _resolve_device(self, requested_device: Optional[str]) -> str:
-        dev = requested_device or getattr(worker_settings, "OBJECT_TRACKING_DEVICE", "auto")
-        dev = str(dev).strip().lower()
-        if dev == "cpu":
-            return "cpu"
-        if dev in ("cuda", "gpu", "auto"):
-            return "cuda" if torch.cuda.is_available() else "cpu"
-        return "cpu"
-
-    def _load_model(self) -> Any:
-        from ultralytics import YOLO
-
-        logger.info(f"[OD&T] Loading model '{self.model_name}' on device '{self.device}'...")
+    def _load_model(self) -> RtDetrDetector:
         try:
-            model = YOLO(self.model_name)
-            if self.device == "cuda":
-                try:
-                    model.to("cuda")
-                except Exception as cuda_err:
-                    logger.warning(
-                        f"[OD&T] Failed to load model on CUDA: {cuda_err}. Falling back to CPU."
-                    )
-                    self.device = "cpu"
-                    model.to("cpu")
-            return model
+            return load_detector(self.model_name, self.device)
         except Exception as e:
             logger.warning(
-                f"[OD&T] Failed to initialize model '{self.model_name}': {e}. "
+                f"[OD&T] Failed to initialize detector '{self.model_name}': {e}. "
                 "Attempting CPU fallback initialization..."
             )
+            return build_detector(self.model_name, "cpu")
+
+    def _detect(self, bgr: Any) -> Tuple[Any, Any, Any]:
+        """(xyxy, score, class_id) for one frame; a CUDA failure moves the detector to CPU for good."""
+        try:
+            return self.model.detect(bgr, self.min_score)
+        except Exception as err:  # noqa: BLE001
+            if self.model.device == "cpu":
+                raise
+            logger.warning(f"[OD&T] Detection failed on {self.model.device}: {err}. Falling back to CPU.")
+            self.model.to_cpu()
             self.device = "cpu"
-            model = YOLO(self.model_name)
-            model.to("cpu")
-            return model
+            return self.model.detect(bgr, self.min_score)
 
     def detect_on_keyframe(self, keyframe_path: str) -> List[Dict[str, Any]]:
         """Run object detection on a single keyframe image to extract bounding boxes.
@@ -117,33 +158,24 @@ class ObjectDetectorTracker:
             return []
 
         try:
-            results = self.model.predict(
-                source=keyframe_path,
-                conf=self.conf_threshold,
-                iou=self.iou_threshold,
-                device=self.device,
-                verbose=False,
-            )
-            if not results or len(results) == 0 or results[0].boxes is None:
+            image = cv2.imread(keyframe_path)
+            if image is None:
                 return []
-
-            res = results[0]
-            boxes = res.boxes
-            orig_h, orig_w = res.orig_shape
+            orig_h, orig_w = image.shape[:2]
+            boxes_xyxy, scores, class_ids = self._detect(image)
 
             detected: List[Dict[str, Any]] = []
-            for idx in range(len(boxes)):
-                xyxy = boxes.xyxy[idx].tolist()
-                conf = float(boxes.conf[idx].item())
-                cls_id = int(boxes.cls[idx].item())
-                label = self.model.names.get(cls_id, str(cls_id)).strip().lower()
+            for idx in range(len(scores)):
+                xyxy = boxes_xyxy[idx].tolist()
+                conf = float(scores[idx])
+                label = self.model.label(int(class_ids[idx]))
 
                 # Anti-flicker / confidence filtering
                 min_c = 0.65 if label in HIGH_CONF_CLASSES else self.conf_threshold
                 if conf < min_c:
                     continue
 
-                track_id = int(boxes.id[idx].item()) if boxes.id is not None else None
+                track_id = None
 
                 x1_norm = max(0.0, min(1.0, xyxy[0] / max(1, orig_w)))
                 y1_norm = max(0.0, min(1.0, xyxy[1] / max(1, orig_h)))
@@ -171,6 +203,31 @@ class ObjectDetectorTracker:
             logger.warning(f"[OD&T] Failed detection on keyframe '{keyframe_path}': {err}")
             return []
 
+    @staticmethod
+    def _update_tracker(tracker: Any, xyxy: Any, scores: Any, class_ids: Any, frame: Any) -> List[Tuple[List[float], float, int, Optional[int]]]:
+        """Run one BoT-SORT step; returns (xyxy, confidence, class_id, track_id|None) per output box."""
+        import numpy as np
+        import supervision as sv
+
+        if len(scores) == 0:
+            detections = sv.Detections.empty()
+        else:
+            detections = sv.Detections(
+                xyxy=np.asarray(xyxy, dtype=float),
+                confidence=np.asarray(scores, dtype=float),
+                class_id=np.asarray(class_ids, dtype=int),
+            )
+        result = tracker.update(detections, frame)
+        if result is None or len(result) == 0:
+            return []
+        ids = result.tracker_id if result.tracker_id is not None else [None] * len(result)
+        confs = result.confidence if result.confidence is not None else np.ones(len(result))
+        classes = result.class_id if result.class_id is not None else np.zeros(len(result), dtype=int)
+        return [
+            (result.xyxy[i].tolist(), float(confs[i]), int(classes[i]), None if ids[i] is None else int(ids[i]))
+            for i in range(len(result))
+        ]
+
     def track_video_scenes(
         self,
         video_path: str,
@@ -178,7 +235,7 @@ class ObjectDetectorTracker:
         sample_fps: int = 3,
         revoke_check_fn: Optional[Callable[[], None]] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Track objects across video scenes using ByteTrack with anti-flicker filtering,
+        """Track objects across video scenes using BoT-SORT with anti-flicker filtering,
         intra-scene track stitching, and object-maximized keyframe re-selection.
 
         Args:
@@ -258,6 +315,8 @@ class ObjectDetectorTracker:
                             pass
 
                     # 2. Track sampled frames across the scene and evaluate keyframe candidates
+                    # A cut ends every track, so each scene gets its own BoT-SORT instance.
+                    tracker = build_botsort(sample_fps)
                     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
                     curr_frame_idx = start_frame
 
@@ -278,34 +337,8 @@ class ObjectDetectorTracker:
                         frame_time_sec = round(curr_frame_idx / video_fps, 2)
                         h_f, w_f = frame.shape[:2]
 
-                        try:
-                            results = self.model.track(
-                                source=frame,
-                                persist=True,
-                                tracker="bytetrack.yaml",
-                                conf=self.conf_threshold,
-                                iou=self.iou_threshold,
-                                device=self.device,
-                                verbose=False,
-                            )
-                        except Exception as track_err:
-                            if self.device != "cpu":
-                                logger.warning(
-                                    f"[OD&T] Tracking failed on {self.device}: {track_err}. "
-                                    "Falling back to CPU for remainder of video."
-                                )
-                                self.device = "cpu"
-                                results = self.model.track(
-                                    source=frame,
-                                    persist=True,
-                                    tracker="bytetrack.yaml",
-                                    conf=self.conf_threshold,
-                                    iou=self.iou_threshold,
-                                    device="cpu",
-                                    verbose=False,
-                                )
-                            else:
-                                raise track_err
+                        det_xyxy, det_scores, det_classes = self._detect(frame)
+                        tracked = self._update_tracker(tracker, det_xyxy, det_scores, det_classes, frame)
 
                         # Compute object presence and sharpness for this candidate frame
                         gray_f = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -313,66 +346,63 @@ class ObjectDetectorTracker:
                         f_obj_score = 0.0
                         frame_unique_labels: Set[str] = set()
 
-                        if results and len(results) > 0 and results[0].boxes is not None:
-                            boxes = results[0].boxes
-                            for b_i in range(len(boxes)):
-                                conf = float(boxes.conf[b_i].item())
-                                cls_id = int(boxes.cls[b_i].item())
-                                label = self.model.names.get(cls_id, str(cls_id)).strip().lower()
+                        for xyxy, conf, cls_id, track_num in tracked:
+                            label = self.model.label(cls_id)
 
-                                # Stricter confidence filter for high-FP outdoor / food classes
-                                min_c = 0.65 if label in HIGH_CONF_CLASSES else self.conf_threshold
-                                if conf < min_c:
-                                    continue
+                            # Stricter confidence filter for high-FP outdoor / food classes
+                            min_c = 0.65 if label in HIGH_CONF_CLASSES else self.conf_threshold
+                            if conf < min_c:
+                                continue
 
-                                xyxy = boxes.xyxy[b_i].tolist()
-                                x1_n = max(0.0, min(1.0, xyxy[0] / max(1, w_f)))
-                                y1_n = max(0.0, min(1.0, xyxy[1] / max(1, h_f)))
-                                x2_n = max(0.0, min(1.0, xyxy[2] / max(1, w_f)))
-                                y2_n = max(0.0, min(1.0, xyxy[3] / max(1, h_f)))
-                                b_area = max(0.0, x2_n - x1_n) * max(0.0, y2_n - y1_n)
+                            x1_n = max(0.0, min(1.0, xyxy[0] / max(1, w_f)))
+                            y1_n = max(0.0, min(1.0, xyxy[1] / max(1, h_f)))
+                            x2_n = max(0.0, min(1.0, xyxy[2] / max(1, w_f)))
+                            y2_n = max(0.0, min(1.0, xyxy[3] / max(1, h_f)))
+                            b_area = max(0.0, x2_n - x1_n) * max(0.0, y2_n - y1_n)
 
-                                # Discard distant noise boxes (<0.5% screen area)
-                                if b_area < 0.005:
-                                    continue
+                            # Discard distant noise boxes (<0.5% screen area)
+                            if b_area < 0.005:
+                                continue
 
-                                is_edge = (x1_n <= 0.015 or x2_n >= 0.985 or y1_n <= 0.015 or y2_n >= 0.985)
-                                edge_penalty = 0.5 if is_edge else 1.0
-                                f_obj_score += conf * math.sqrt(max(0.001, b_area)) * edge_penalty
-                                frame_unique_labels.add(label)
+                            is_edge = (x1_n <= 0.015 or x2_n >= 0.985 or y1_n <= 0.015 or y2_n >= 0.985)
+                            edge_penalty = 0.5 if is_edge else 1.0
+                            f_obj_score += conf * math.sqrt(max(0.001, b_area)) * edge_penalty
+                            frame_unique_labels.add(label)
 
-                                if boxes.id is None:
-                                    continue
-                                t_id = int(boxes.id[b_i].item())
+                            # Unconfirmed BoT-SORT tracks (id < 0) still count towards the frame
+                            # score but are not registered as tracks.
+                            if track_num is None or track_num < 0:
+                                continue
+                            t_id = int(track_num)
 
-                                bbox_norm = [
-                                    round(x1_n, 4),
-                                    round(y1_n, 4),
-                                    round(x2_n, 4),
-                                    round(y2_n, 4),
-                                ]
+                            bbox_norm = [
+                                round(x1_n, 4),
+                                round(y1_n, 4),
+                                round(x2_n, 4),
+                                round(y2_n, 4),
+                            ]
 
-                                if t_id not in scene_raw_tracks:
-                                    scene_raw_tracks[t_id] = {
-                                        "track_id": t_id,
-                                        "label": label,
-                                        "confidences": [conf],
-                                        "first_seen_sec": frame_time_sec,
-                                        "last_seen_sec": frame_time_sec,
-                                        "frames_appeared": 1,
-                                        "sample_bbox_norm": bbox_norm,
-                                        "max_conf": conf,
-                                        "best_timestamp_sec": frame_time_sec,
-                                    }
-                                else:
-                                    st = scene_raw_tracks[t_id]
-                                    st["confidences"].append(conf)
-                                    st["last_seen_sec"] = frame_time_sec
-                                    st["frames_appeared"] += 1
-                                    if conf > st["max_conf"]:
-                                        st["max_conf"] = conf
-                                        st["sample_bbox_norm"] = bbox_norm
-                                        st["best_timestamp_sec"] = frame_time_sec
+                            if t_id not in scene_raw_tracks:
+                                scene_raw_tracks[t_id] = {
+                                    "track_id": t_id,
+                                    "label": label,
+                                    "confidences": [conf],
+                                    "first_seen_sec": frame_time_sec,
+                                    "last_seen_sec": frame_time_sec,
+                                    "frames_appeared": 1,
+                                    "sample_bbox_norm": bbox_norm,
+                                    "max_conf": conf,
+                                    "best_timestamp_sec": frame_time_sec,
+                                }
+                            else:
+                                st = scene_raw_tracks[t_id]
+                                st["confidences"].append(conf)
+                                st["last_seen_sec"] = frame_time_sec
+                                st["frames_appeared"] += 1
+                                if conf > st["max_conf"]:
+                                    st["max_conf"] = conf
+                                    st["sample_bbox_norm"] = bbox_norm
+                                    st["best_timestamp_sec"] = frame_time_sec
 
                         # Composite candidate score: heavy weight on count of unique object classes present in frame
                         # Formula: (unique_labels * 10.0) + (f_obj_score * 10.0) + normalized_sharpness
@@ -564,7 +594,7 @@ class ObjectDetectorTracker:
             cap.release()
 
         # Compute video-level objects summary with realistic deduplicated unique track count
-        # Instead of summing unbounded ByteTrack IDs, use sum of maximum concurrent tracks per class
+        # Instead of summing unbounded tracker IDs, use sum of maximum concurrent tracks per class
         total_unique_tracks = sum(global_max_concurrent.values())
         if total_unique_tracks == 0 and global_label_distribution:
             total_unique_tracks = len(global_label_distribution)

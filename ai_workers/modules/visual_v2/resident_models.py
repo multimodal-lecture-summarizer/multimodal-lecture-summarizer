@@ -17,3 +17,4 @@ def visual_resident_enabled() -> bool:
 CLIP_SLOT = ResidentSlot("CLIP")
 FLORENCE_SLOT = ResidentSlot("Florence-2")
 OCR_SLOT = ResidentSlot("PaddleOCR")
+DETECTOR_SLOT = ResidentSlot("RT-DETR")

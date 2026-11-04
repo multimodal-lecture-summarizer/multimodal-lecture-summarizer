@@ -4,8 +4,21 @@ import cv2
 import numpy as np
 import pytest
 
+from ai_workers.modules.visual_v2 import object_tracker
 from ai_workers.modules.visual_v2.object_tracker import ObjectDetectorTracker, compute_iou
 from ai_workers.modules.summarization.summarizer import Summarizer
+from ai_workers.tests.test_detector_resident import FakeDetector
+
+
+@pytest.fixture(autouse=True)
+def offline_detector(monkeypatch):
+    """Tracking logic runs against a stand-in detector, so no model download is needed."""
+    from ai_workers.modules.visual_v2.resident_models import DETECTOR_SLOT
+
+    DETECTOR_SLOT.clear()
+    monkeypatch.setattr(object_tracker, "build_detector", lambda repo, device: FakeDetector(repo, device))
+    yield
+    DETECTOR_SLOT.clear()
 
 
 def test_compute_iou():
@@ -47,6 +60,7 @@ def test_detect_on_keyframe_synthetic():
 
         res = tracker.detect_on_keyframe(img_path)
         assert isinstance(res, list)
+        assert [item["label"] for item in res] == ["person"]
         for item in res:
             assert "track_id" in item
             assert "label" in item
@@ -115,6 +129,8 @@ def test_track_video_scenes():
         assert isinstance(det["keyframe_bboxes"], list)
         assert isinstance(det["tracks_summary"], list)
         assert isinstance(scene["object_counts"], dict)
+        # The person is followed across the sampled frames by BoT-SORT and reported once.
+        assert scene["object_counts"] == {"person": 1}
 
         assert "total_unique_tracks" in summary
         assert "label_distribution" in summary
@@ -133,7 +149,7 @@ def test_rag_chunk_includes_objects():
         {
             "start_seconds": 0.0,
             "end_seconds": 10.0,
-            "ocr_text": "YOLO and ByteTrack",
+            "ocr_text": "RT-DETR and BoT-SORT",
             "caption": "A slide showing computer vision architecture",
             "object_counts": {"person": 1, "laptop": 2},
         }

@@ -24,9 +24,10 @@ deepfilternet
 opencv-python==4.9.0.80
 scenedetect[opencv]>=0.6
 
-# Object Detection & Tracking: Ultralytics YOLO & ByteTrack
-ultralytics>=8.0.0
-lapx>=0.5.5
+# Object Detection & Tracking: RT-DETR-R18vd (transformers) + BoT-SORT, as selected in the benchmark.
+# Versions are the ones the benchmark scored.
+trackers==2.6.1
+supervision==0.31.2
 
 # Semantic: OCR, CLIP, Florence-2
 paddlepaddle==2.6.2

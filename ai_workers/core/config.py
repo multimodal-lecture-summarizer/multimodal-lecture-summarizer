@@ -68,12 +68,17 @@ class WorkerSettings(BaseSettings):
     # Slide text language; English by default for the English-lecture scope ("vi" for Vietnamese slides).
     PADDLEOCR_LANG: str = "en"
 
-    # Object Detection & Tracking module. Off by default: the target content (single speaker,
-    # text slides) does not need it. Set ENABLE_OBJECT_TRACKING=true to restore the stage.
-    ENABLE_OBJECT_TRACKING: bool = False
-    YOLO_MODEL: str = "yolov8n.pt"
-    YOLO_CONF_THRESHOLD: float = 0.40
-    YOLO_IOU_THRESHOLD: float = 0.5
+    # Object Detection & Tracking module: RT-DETR-R18vd (detector) + BoT-SORT (tracker), the models
+    # the benchmark selected (benchmark/docs/BENCHMARK.md, 03a detection and 03b tracking). On by
+    # default; the detector weights are fetched and loaded at worker start-up (resident with the
+    # other visual models) so no job pays for them. Set ENABLE_OBJECT_TRACKING=false to skip it.
+    ENABLE_OBJECT_TRACKING: bool = True
+    OBJECT_DETECTOR_MODEL: str = "PekingU/rtdetr_r18vd"
+    # Boxes reported downstream need this confidence (some classes need more, see HIGH_CONF_CLASSES).
+    OBJECT_CONF_THRESHOLD: float = 0.40
+    # Floor for the boxes handed to the tracker: BoT-SORT's second association pass uses
+    # low-confidence boxes (it ignores anything at or below 0.1).
+    OBJECT_DETECTOR_MIN_SCORE: float = 0.15
     OBJECT_TRACKING_SAMPLE_FPS: int = 3
     OBJECT_TRACKING_DEVICE: str = "auto"
 

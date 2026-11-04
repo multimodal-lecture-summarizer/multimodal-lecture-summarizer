@@ -91,12 +91,22 @@ def _prefetch_paddleocr() -> None:
     load_paddleocr()
 
 
+def _prefetch_detector() -> None:
+    _snapshot(worker_settings.OBJECT_DETECTOR_MODEL, ignore_patterns=_SKIP_PATTERNS)
+    # With the weights local, load RT-DETR onto the GPU now (when residency is on) so no job pays.
+    from ai_workers.modules.visual_v2.object_tracker import preload_detector_model
+
+    preload_detector_model()
+
+
 def prefetch_tasks() -> list[tuple[str, Callable[[], None]]]:
     tasks: list[tuple[str, Callable[[], None]]] = [("whisper", _prefetch_whisper)]
     if worker_settings.ASR_ENGLISH_BACKEND == "qwen3":
         tasks.append(("qwen3-asr", _prefetch_qwen))
     tasks.append(("clip", _prefetch_clip))
     tasks.append(("paddleocr", _prefetch_paddleocr))
+    if worker_settings.ENABLE_OBJECT_TRACKING:
+        tasks.append(("detector", _prefetch_detector))
     if worker_settings.SUMMARIZER_ENGLISH_BACKEND == "led":
         tasks.append(("led", _prefetch_led))
     return tasks
