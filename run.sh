@@ -50,6 +50,7 @@ install_python_deps() {
     backend/.venv/bin/python -m pip install --upgrade pip
     backend/.venv/bin/python -m pip install -r backend/requirements.txt
     backend/.venv/bin/python -m pip install -r ai_workers/requirements.txt
+    backend/.venv/bin/python -m pip install --no-deps -r ai_workers/requirements-tracking.txt
 }
 
 setup_venv() {

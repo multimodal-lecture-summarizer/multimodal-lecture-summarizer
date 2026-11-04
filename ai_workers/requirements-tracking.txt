@@ -1,0 +1,5 @@
+# Install with: pip install --no-deps -r ai_workers/requirements-tracking.txt
+# (after ai_workers/requirements.txt). --no-deps is required because trackers 2.6.1 declares
+# numpy>=2.0.2 while this project pins numpy==1.26.4; BoT-SORT runs correctly on 1.26.4.
+trackers==2.6.1
+supervision==0.31.2

@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Two layers so a backend requirements change does not reinstall torch.
 COPY ai_workers/requirements.txt ai_workers/requirements.txt
 RUN pip install -r ai_workers/requirements.txt
+COPY ai_workers/requirements-tracking.txt ai_workers/requirements-tracking.txt
+# trackers declares numpy>=2 but runs on the pinned numpy 1.26.4: install it without its deps.
+RUN pip install --no-deps -r ai_workers/requirements-tracking.txt
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install -r backend/requirements.txt
 
