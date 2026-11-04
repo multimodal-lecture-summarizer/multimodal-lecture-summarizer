@@ -1,10 +1,27 @@
 import logging
 import os
+import re
 from typing import List, Dict, Any, Optional
 import chromadb
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _is_html(headers) -> bool:
+    """A Chroma server answers with JSON; HTML means a proxy/tunnel error page (e.g. Cloudflare)."""
+    return "text/html" in (headers.get("Content-Type", "") if headers else "").lower()
+
+
+def _short_error(exc: BaseException, limit: int = 200) -> str:
+    """One-line error text; a failing proxy returns a whole HTML page that would flood the log."""
+    text = str(exc)
+    if "<html" in text.lower() or "<!doctype" in text.lower():
+        match = re.search(r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+        title = " ".join(match.group(1).split()) if match else "HTML error page"
+        return f"the proxy returned an HTML error page ({title})"
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit] + "..."
 
 
 def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, api_key: str = "", timeout: float = 2.0) -> bool:
@@ -21,11 +38,12 @@ def is_chromadb_responsive(host: str, port: Optional[int], ssl: bool = False, ap
             if api_key:
                 req.add_header("Authorization", f"Bearer {api_key}")
             with urllib.request.urlopen(req, timeout=timeout) as response:
-                if response.getcode() == 200:
+                if response.getcode() == 200 and not _is_html(response.headers):
                     return True
         except urllib.error.HTTPError as e:
-            # If the server returned auth/deprecation HTTP errors (like 401, 403, 410, 501), it is responsive.
-            if e.code in (401, 403, 410, 501):
+            # Auth/deprecation errors (401, 403, 410, 501) from a real Chroma server still mean it is
+            # responsive; the same codes with an HTML body come from a failing proxy or tunnel.
+            if e.code in (401, 403, 410, 501) and not _is_html(e.headers):
                 return True
         except Exception:
             pass
@@ -103,7 +121,7 @@ class ChromaDBService:
                 return True
             except Exception as exc:
                 uvicorn_logger.warning(
-                    f"ChromaDB at {self.host}:{self.port} responded but the client failed: {exc}"
+                    f"ChromaDB at {self.host}:{self.port} responded but the client failed: {_short_error(exc)}"
                 )
 
         try:
@@ -115,7 +133,7 @@ class ChromaDBService:
             self.client = None
             self.collection = None
             uvicorn_logger.warning(
-                f"ChromaDB is unavailable at {self.host}:{self.port} and {self.persist_dir}: {exc}. "
+                f"ChromaDB is unavailable at {self.host}:{self.port} and {self.persist_dir}: {_short_error(exc)}. "
                 "Index writes will fail instead of using an in-memory store."
             )
             return False
@@ -273,7 +291,7 @@ class ChromaDBService:
                 last_error = RuntimeError("ChromaDB server and on-disk index are both unavailable.")
             except Exception as exc:
                 last_error = exc
-                uvicorn_logger.warning(f"ChromaDB connection attempt {attempt} failed: {exc}")
+                uvicorn_logger.warning(f"ChromaDB connection attempt {attempt} failed: {_short_error(exc)}")
             if attempt < retries:
                 time.sleep(delay)
 

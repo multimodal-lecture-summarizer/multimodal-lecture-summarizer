@@ -42,6 +42,10 @@ RUN pip install -r backend/requirements.txt
 # Faster-Whisper (CTranslate2) loads cuDNN/cuBLAS by name; use the copies installed with torch.
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib
 
+# Chroma's default embedding model (ONNX MiniLM, ~80 MB) would otherwise download on first use,
+# again every time the container is recreated.
+RUN python -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; DefaultEmbeddingFunction()(['warm up'])"
+
 # Database, broker, web server and process manager. The default PostgreSQL cluster is skipped:
 # the entrypoint creates one on the data volume instead.
 RUN mkdir -p /etc/postgresql-common \
