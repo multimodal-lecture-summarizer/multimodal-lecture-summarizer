@@ -131,6 +131,24 @@ def test_asr_starts_before_last_chunk_is_denoised():
     remember.assert_called_once()
 
 
+def test_asr_batch_waits_for_florence_deterministic_mode():
+    from ai_workers.modules.visual_v2.florence_runtime import FLORENCE_INFERENCE_LOCK
+
+    started = threading.Event()
+    model = SimpleNamespace(transcribe=lambda **kw: started.set() or [_empty_result()])
+    batch = [(0.0, np.zeros(SAMPLE_RATE, dtype=np.float32))]
+
+    FLORENCE_INFERENCE_LOCK.acquire()  # Florence-2 is captioning
+    worker = threading.Thread(target=QwenEnglishTranscriber._transcribe_batch, args=(model, batch))
+    try:
+        worker.start()
+        assert not started.wait(timeout=0.3)  # ASR must not run while the lock is held
+    finally:
+        FLORENCE_INFERENCE_LOCK.release()
+    worker.join(timeout=5)
+    assert started.is_set()
+
+
 def test_pipeline_batch_size_always_leaves_two_batches():
     from ai_workers.modules.audio_v2.qwen_transcriber import pipeline_batch_size
 

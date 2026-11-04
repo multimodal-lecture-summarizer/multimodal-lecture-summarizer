@@ -20,6 +20,7 @@ import numpy as np
 from ai_workers.core.config import worker_settings
 from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+from ai_workers.modules.visual_v2.florence_runtime import FLORENCE_INFERENCE_LOCK
 
 logger = logging.getLogger("ai_workers.modules.audio_v2.qwen_transcriber")
 
@@ -161,8 +162,16 @@ class QwenEnglishTranscriber(AudioTranscriber):
         fallback = AudioTranscriber({"model_name": worker_settings.FASTER_WHISPER_MODEL})
         return fallback.transcribe(audio_path, source_language="en")
 
+    @classmethod
+    def _transcribe_batch(cls, model: Any, batch: list[tuple[float, np.ndarray]]) -> list[Any]:
+        # Florence-2 captioning switches on process-wide deterministic mode, under which the
+        # aligner's CUDA cumsum raises. Inference therefore shares Florence's lock (the visual
+        # branch only holds it while captioning, so this waits at most that long).
+        with FLORENCE_INFERENCE_LOCK:
+            return cls._run_batch(model, batch)
+
     @staticmethod
-    def _transcribe_batch(model: Any, batch: list[tuple[float, np.ndarray]]) -> list[Any]:
+    def _run_batch(model: Any, batch: list[tuple[float, np.ndarray]]) -> list[Any]:
         """One forward pass for the batch; if batching is rejected, redo the chunks one by one."""
         if len(batch) > 1:
             try:
