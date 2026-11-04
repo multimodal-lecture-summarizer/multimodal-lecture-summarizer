@@ -54,6 +54,18 @@ else
     export REDIS_URL=redis://127.0.0.1:6379/0
     export AIO_START_REDIS=true
 fi
+# Chroma runs here as a server (one process owns the vector data; the API and the worker are
+# both HTTP clients), unless AIO_EXTERNAL_CHROMA=true keeps the CHROMADB_* values of backend/.env.
+if [ "$AIO_EXTERNAL_CHROMA" = "true" ]; then
+    export AIO_START_CHROMA=false
+    echo "[all-in-one] AIO_EXTERNAL_CHROMA=true; using the Chroma server from backend/.env."
+else
+    mkdir -p /var/lib/chroma
+    export CHROMADB_HOST=127.0.0.1 CHROMADB_PORT=8001 CHROMADB_SSL=False CHROMADB_API_KEY=""
+    export CHROMADB_TENANT=default_tenant CHROMADB_DATABASE=default_database
+    export AIO_START_CHROMA=true
+fi
+
 export WORKER_QUEUES="${WORKER_QUEUES:-celery}"
 
 exec "$@"

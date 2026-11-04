@@ -63,14 +63,16 @@ COPY --from=frontend-build /app/dist /usr/share/nginx/html
 COPY docker/all-in-one/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/all-in-one/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/all-in-one/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/all-in-one/wait-for-services.sh /usr/local/bin/wait-for-services.sh
 # Checked out on Windows these files may carry CRLF line endings, which break shell scripts.
-RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /etc/supervisor/supervisord.conf /etc/nginx/conf.d/default.conf \
-    && chmod +x /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /usr/local/bin/wait-for-services.sh \
+       /etc/supervisor/supervisord.conf /etc/nginx/conf.d/default.conf \
+    && chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/wait-for-services.sh
 
 ENV WORKER_QUEUES=celery \
     CUBLAS_WORKSPACE_CONFIG=":4096:8"
 
-VOLUME ["/var/lib/postgresql/data", "/var/lib/redis", "/app/storage", "/app/cache", "/app/outputs"]
+VOLUME ["/var/lib/postgresql/data", "/var/lib/redis", "/var/lib/chroma", "/app/storage", "/app/cache", "/app/outputs"]
 EXPOSE 80 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \

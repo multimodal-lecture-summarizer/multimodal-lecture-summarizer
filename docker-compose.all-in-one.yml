@@ -1,4 +1,4 @@
-# The whole system in ONE container (UI, API, AI worker, PostgreSQL, Redis) on an NVIDIA GPU:
+# The whole system in ONE container (UI, API, AI worker, PostgreSQL, Redis, Chroma) on an NVIDIA GPU:
 #
 #   docker compose -f docker-compose.all-in-one.yml up --build
 #
@@ -29,6 +29,9 @@ services:
       # bundled Redis is used instead (standalone, no Colab).
       SHARED_REDIS_URL: ${SHARED_REDIS_URL:-}
       AIO_POSTGRES_PASSWORD: ${AIO_POSTGRES_PASSWORD:-postgres}
+      # Chroma runs inside the container (volume mls_chroma). Set to true to keep using the
+      # CHROMADB_* server from backend/.env instead.
+      AIO_EXTERNAL_CHROMA: ${AIO_EXTERNAL_CHROMA:-false}
       # The local worker only takes the "celery" queue (RAG indexing and the CPU/GPU fallback when
       # no Colab worker is online). The "gpu" queue is left to Colab; use WORKER_QUEUES=gpu,celery
       # to let this machine's GPU take those jobs too.
@@ -59,6 +62,7 @@ services:
     volumes:
       - mls_pgdata:/var/lib/postgresql/data
       - mls_redis:/var/lib/redis
+      - mls_chroma:/var/lib/chroma
       - ./storage:/app/storage
       - ./cache:/app/cache
       - ./outputs:/app/outputs
@@ -75,3 +79,4 @@ services:
 volumes:
   mls_pgdata:
   mls_redis:
+  mls_chroma:
