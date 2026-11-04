@@ -261,6 +261,18 @@ class ObjectDetectorTracker:
         if not scenes:
             return scenes, empty_summary
 
+        # Fail once, loudly, when the tracking libraries are missing from the environment; the
+        # per-scene handler below would otherwise log the same ImportError for every scene.
+        try:
+            import supervision  # noqa: F401
+
+            build_botsort(sample_fps)
+        except ImportError as import_err:
+            raise RuntimeError(
+                f"Object tracking needs the 'trackers' and 'supervision' packages ({import_err}). "
+                "Install them with: pip install --no-deps -r ai_workers/requirements-tracking.txt"
+            ) from import_err
+
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             logger.warning(f"[OD&T] Could not open video file: {video_path}")

@@ -80,6 +80,25 @@ def test_botsort_uses_the_sampling_rate_as_frame_rate(monkeypatch):
     assert seen["lost_track_buffer"] == 30 and seen["track_activation_threshold"] == 0.7
 
 
+def test_missing_tracker_package_fails_once_with_install_hint(fake_detector, monkeypatch, tmp_path):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_trackers(name, *args, **kwargs):
+        if name == "trackers":
+            raise ImportError("No module named 'trackers'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_trackers)
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    tracker = object_tracker.ObjectDetectorTracker()
+
+    with pytest.raises(RuntimeError, match="requirements-tracking.txt"):
+        tracker.track_video_scenes(str(video), [{"start_frame": 0, "end_frame": 1}])
+
+
 def test_botsort_is_the_trackers_library_class():
     tracker = object_tracker.build_botsort(3)
     assert type(tracker).__name__ == "BoTSORTTracker"
