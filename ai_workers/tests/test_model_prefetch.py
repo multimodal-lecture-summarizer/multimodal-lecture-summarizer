@@ -67,6 +67,44 @@ def test_hub_downloads_never_overlap():
     assert overlaps == []
 
 
+def test_clip_prefetch_downloads_whichever_weights_exist():
+    seen = {}
+    with patch.object(model_prefetch, "_snapshot", lambda repo, **kw: seen.update(repo=repo, **kw)), \
+         patch("ai_workers.modules.visual_v2.semantic.preload_visual_models"):
+        model_prefetch._prefetch_clip()
+
+    assert seen["repo"] == model_prefetch.CLIP_REPO
+    assert "allow_patterns" not in seen  # the repo has only pytorch_model.bin
+    assert "ignore_patterns" in seen
+
+
+def test_prefetch_applies_the_torch_load_patch_before_any_task():
+    order = []
+    with patch.object(model_prefetch, "patch_transformers_torch_load_check", lambda: order.append("patch")), \
+         patch.object(model_prefetch, "prefetch_tasks", return_value=[("t", lambda: order.append("task"))]):
+        model_prefetch.run_prefetch(lambda _msg: None)
+
+    assert order == ["patch", "task"]
+
+
+def test_torch_load_patch_disables_the_transformers_gate(monkeypatch):
+    import transformers.modeling_utils as modeling_utils
+    import transformers.utils as utils
+    import transformers.utils.import_utils as import_utils
+
+    def blocked():
+        raise ValueError("torch.load blocked")
+
+    for module in (import_utils, utils, modeling_utils):
+        monkeypatch.setattr(module, "check_torch_load_is_safe", blocked)
+
+    from ai_workers.core.torch_load_patch import patch_transformers_torch_load_check
+
+    patch_transformers_torch_load_check()
+    assert modeling_utils.check_torch_load_is_safe() is None
+    assert import_utils.check_torch_load_is_safe() is None
+
+
 def test_task_list_follows_backend_settings(monkeypatch):
     monkeypatch.setattr(model_prefetch.worker_settings, "ASR_ENGLISH_BACKEND", "whisper")
     monkeypatch.setattr(model_prefetch.worker_settings, "SUMMARIZER_ENGLISH_BACKEND", "llm")

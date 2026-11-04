@@ -51,6 +51,9 @@ class WorkerSettings(BaseSettings):
     # Visual module
     SCENE_THRESHOLD: float = 27.0
     KEYFRAME_STRATEGY: str = "sharpest"
+    # Candidate frames sampled per scene when picking the sharpest keyframe. Each is a video seek,
+    # so fewer candidates extract faster (Colab notebook: 3); 7 keeps the original behavior.
+    KEYFRAME_CANDIDATES: int = 7
     FLORENCE_DEVICE: str = "cpu"
     ENABLE_FLORENCE_CAPTIONING: bool = True
     FLORENCE_MAX_BATCH_SIZE: int = 4

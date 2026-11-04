@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import time
 import cv2
 from typing import Any
 from scenedetect import ContentDetector
+
+from ai_workers.core.config import worker_settings
 
 
 class SceneDetector:
@@ -25,6 +28,7 @@ class SceneDetector:
         from scenedetect import open_video, SceneManager
         from scenedetect.detectors import ContentDetector
         
+        started = time.perf_counter()
         video = open_video(video_path)
         scene_manager = SceneManager()
         scene_manager.add_detector(ContentDetector(threshold=self.threshold))
@@ -44,7 +48,7 @@ class SceneDetector:
                 "start_frame": start_time.get_frames(),
                 "end_frame": end_time.get_frames(),
             })
-        print(f"[OK] Detected {len(scenes)} scenes.")
+        print(f"[OK] Detected {len(scenes)} scenes in {time.perf_counter() - started:.1f}s.", flush=True)
         return scenes
 
     def extract_keyframes(
@@ -72,15 +76,23 @@ class SceneDetector:
         job_id = os.path.basename(output_dir)
         static_dir = os.path.abspath(os.path.join(os.getcwd(), "storage", "mock_r2_bucket", "keyframes", job_id))
         os.makedirs(static_dir, exist_ok=True)
-        
-        for scene in scenes:
+
+        started = time.perf_counter()
+        print(f"[Keyframes] Extracting keyframes for {len(scenes)} scenes ({strategy})...", flush=True)
+        for scene_number, scene in enumerate(scenes, start=1):
+            if scene_number % 5 == 0:
+                print(
+                    f"[Keyframes] {scene_number}/{len(scenes)} scenes after {time.perf_counter() - started:.1f}s.",
+                    flush=True,
+                )
             start_f = scene["start_frame"]
             end_f = scene["end_frame"]
             total_scene_frames = max(1, end_f - start_f + 1)
-            
+
             if strategy in ("sharpest", "smart"):
-                # Sample 5 to 7 candidate frames evenly distributed across the scene
-                num_cands = min(7, max(1, total_scene_frames))
+                # Sample evenly spaced candidate frames across the scene. Every candidate is a
+                # seek that decodes from the previous video keyframe, so each one costs real time.
+                num_cands = min(max(1, worker_settings.KEYFRAME_CANDIDATES), max(1, total_scene_frames))
                 if num_cands <= 2:
                     candidates = [(start_f + end_f) // 2]
                 else:
@@ -151,6 +163,7 @@ class SceneDetector:
                     scene["blur_score"] = 0.0
                 
         cap.release()
+        print(f"[Keyframes] Extracted {len(keyframes)} keyframes in {time.perf_counter() - started:.1f}s.", flush=True)
         return keyframes
 
     def process(self, video_path: str, output_dir: str) -> dict[str, Any]:

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from ai_workers.core.config import flag_enabled, worker_settings
+from ai_workers.core.torch_load_patch import patch_transformers_torch_load_check
 
 CLIP_REPO = "openai/clip-vit-base-patch32"
 # Weight formats transformers never picks on this stack; skipping them roughly halves the download.
@@ -62,7 +63,8 @@ def _prefetch_qwen() -> None:
 
 
 def _prefetch_clip() -> None:
-    _snapshot(CLIP_REPO, allow_patterns=["*.json", "*.txt", "model.safetensors"])
+    # The CLIP repo ships only pytorch_model.bin, so fetch whichever weights exist.
+    _snapshot(CLIP_REPO, ignore_patterns=_SKIP_PATTERNS)
     # CLIP and Florence-2 (vendored, nothing to download) are loaded now and kept for every job.
     from ai_workers.modules.visual_v2.semantic import preload_visual_models
 
@@ -99,6 +101,8 @@ def prefetch_tasks() -> list[tuple[str, Callable[[], None]]]:
 def run_prefetch(log: Callable[[str], None] = print) -> dict[str, bool]:
     """Run every prefetch task (3 at a time); returns {name: succeeded}."""
     outcome: dict[str, bool] = {}
+    # The start-up preload loads the same .bin checkpoints a job does, so it needs the same patch.
+    patch_transformers_torch_load_check()
 
     def run(name: str, fn: Callable[[], None]) -> None:
         started = time.perf_counter()

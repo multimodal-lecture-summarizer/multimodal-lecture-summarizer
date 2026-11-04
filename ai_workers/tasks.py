@@ -28,6 +28,7 @@ from ai_workers.core.checkpoint import (
     build_config_fingerprint,
     sha256_file,
 )
+from ai_workers.core.torch_load_patch import patch_transformers_torch_load_check
 from ai_workers.modules.audio_v2.language import normalize_source_language
 from ai_workers.core.resource_cleanup import (
     ensure_process_memory_available,
@@ -35,22 +36,11 @@ from ai_workers.core.resource_cleanup import (
 )
 
 
-def _patch_transformers_torch_load_check() -> None:
-    """Patch Transformers lazily so Celery startup does not import the full AI stack."""
-    try:
-        import transformers.modeling_utils
-        import transformers.utils
-        import transformers.utils.import_utils
-
-        transformers.utils.import_utils.check_torch_load_is_safe = lambda: None
-        transformers.utils.check_torch_load_is_safe = lambda: None
-        transformers.modeling_utils.check_torch_load_is_safe = lambda: None
-    except Exception:
-        pass
+_patch_transformers_torch_load_check = patch_transformers_torch_load_check
 
 
 @app.task(bind=True, name="ai_workers.process_video")
-def process_video(self, job_id: str, video_path: str, config_stack: str = "hybrid", output_language: str = "vi", summary_length: str = "medium", source_language: str = "auto"):
+def process_video(self, job_id: str, video_path: str, config_stack: str = "hybrid", output_language: str = "en", summary_length: str = "medium", source_language: str = "auto"):
     """Main Celery task: orchestrate full multimodal pipeline with checkpoint resume capability.
 
     Pipeline stages:
