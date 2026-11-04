@@ -37,6 +37,9 @@ class WorkerSettings(BaseSettings):
     QWEN_ASR_MAX_NEW_TOKENS: int = 1024
     # Download model weights in the background at worker start: "auto" (only on Colab), "true", "false".
     PREFETCH_MODELS: str = "auto"
+    # Load Qwen3-ASR onto the GPU once (at worker start) and keep it for every job instead of
+    # reloading it each time (~2 min on Colab): "auto" (only on Colab), "true", "false".
+    QWEN_KEEP_RESIDENT: str = "auto"
     # Audio chunks transcribed per forward pass. 1 = one chunk at a time (original behavior);
     # raise on GPUs with spare VRAM (Colab T4: 4) since decoding is memory-bound.
     QWEN_ASR_BATCH_SIZE: int = 1
@@ -115,3 +118,13 @@ class WorkerSettings(BaseSettings):
 
 
 worker_settings = WorkerSettings()
+
+
+def flag_enabled(value: str | None) -> bool:
+    """Interpret a "auto" | "true" | "false" setting; "auto" means on only inside Colab."""
+    import os
+
+    text = (value or "auto").strip().lower()
+    if text == "auto":
+        return "COLAB_RELEASE_TAG" in os.environ or "COLAB_GPU" in os.environ
+    return text in ("1", "true", "yes", "on")

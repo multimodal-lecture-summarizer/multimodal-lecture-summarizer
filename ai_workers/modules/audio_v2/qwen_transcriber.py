@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 
-from ai_workers.core.config import worker_settings
+from ai_workers.core.config import flag_enabled, worker_settings
 from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
 from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
 from ai_workers.modules.visual_v2.florence_runtime import FLORENCE_INFERENCE_LOCK
@@ -57,6 +57,34 @@ def split_audio_chunks(audio: np.ndarray, sr: int = SAMPLE_RATE) -> list[tuple[f
         chunks.append((start / sr, audio[start:end]))
         start = end
     return chunks
+
+
+# The loaded model is kept between jobs when QWEN_KEEP_RESIDENT allows it. The lock makes loading
+# single-flight, so a job that starts while the start-up preload is still running waits for it
+# instead of loading a second copy.
+_resident_lock = threading.Lock()
+_resident_model: Any = None
+
+
+def resident_enabled() -> bool:
+    return flag_enabled(worker_settings.QWEN_KEEP_RESIDENT)
+
+
+def reset_resident_model() -> None:
+    """Forget the kept model (used after a failure, and by tests)."""
+    global _resident_model
+    with _resident_lock:
+        _resident_model = None
+    gc.collect()
+
+
+def preload_qwen_model() -> None:
+    """Load Qwen3-ASR onto the GPU ahead of the first job. No-op unless residency is enabled."""
+    if not resident_enabled():
+        return
+    started = time.perf_counter()
+    QwenEnglishTranscriber()._acquire_model()
+    print(f"[Prefetch] Qwen3-ASR is resident on the GPU after {time.perf_counter() - started:.1f}s.", flush=True)
 
 
 def pipeline_batch_size(chunk_count: int) -> int:
@@ -144,9 +172,19 @@ class QwenEnglishTranscriber(AudioTranscriber):
         )
         return model
 
+    def _acquire_model(self) -> Any:
+        """The kept GPU model when residency is on (loaded once per worker), else a fresh load."""
+        global _resident_model
+        if not resident_enabled() or self.device != "cuda":
+            return self._load_model()
+        with _resident_lock:
+            if _resident_model is None:
+                _resident_model = self._load_model()
+            return _resident_model
+
     def _timed_load_model(self) -> tuple[Any, float]:
         started = time.perf_counter()
-        model = self._load_model()
+        model = self._acquire_model()
         return model, time.perf_counter() - started
 
     def transcribe(self, audio_path: str, source_language: str | None = None) -> dict[str, Any]:
@@ -275,6 +313,7 @@ class QwenEnglishTranscriber(AudioTranscriber):
                         break
             except BaseException:
                 stop.set()  # let the denoise worker end at its next chunk
+                reset_resident_model()  # a failed run may leave the kept model unusable; reload next job
                 raise
             finally:
                 model = None

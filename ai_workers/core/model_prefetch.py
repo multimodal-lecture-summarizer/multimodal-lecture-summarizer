@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
-from ai_workers.core.config import worker_settings
+from ai_workers.core.config import flag_enabled, worker_settings
 
 CLIP_REPO = "openai/clip-vit-base-patch32"
 # Weight formats transformers never picks on this stack; skipping them roughly halves the download.
@@ -23,10 +23,7 @@ _SKIP_PATTERNS = ["*.h5", "*.msgpack", "flax_model*", "tf_model*", "rust_model*"
 
 
 def prefetch_enabled() -> bool:
-    setting = (worker_settings.PREFETCH_MODELS or "auto").strip().lower()
-    if setting == "auto":
-        return "COLAB_RELEASE_TAG" in os.environ or "COLAB_GPU" in os.environ
-    return setting in ("1", "true", "yes", "on")
+    return flag_enabled(worker_settings.PREFETCH_MODELS)
 
 
 # huggingface_hub creates tqdm bars per download; started from several threads at once, the
@@ -57,6 +54,11 @@ def _prefetch_whisper() -> None:
 def _prefetch_qwen() -> None:
     _snapshot(worker_settings.QWEN_ASR_MODEL, ignore_patterns=_SKIP_PATTERNS)
     _snapshot(worker_settings.QWEN_ALIGNER_MODEL, ignore_patterns=_SKIP_PATTERNS)
+    # With the weights local, load the model onto the GPU now (while the worker is idle) so the
+    # first job does not pay the ~2 min load either. A job that starts meanwhile waits for it.
+    from ai_workers.modules.audio_v2.qwen_transcriber import preload_qwen_model
+
+    preload_qwen_model()
 
 
 def _prefetch_clip() -> None:
