@@ -87,6 +87,11 @@ def preload_qwen_model() -> None:
     print(f"[Prefetch] Qwen3-ASR is resident on the GPU after {time.perf_counter() - started:.1f}s.", flush=True)
 
 
+# Denoising that takes under this share of the audio length counts as fast. DeepFilterNet manages
+# ~0.01-0.03x on an idle T4 and ~0.15-0.2x on the 2-vCPU CPU.
+DENOISE_FAST_RATIO = 0.08
+
+
 def pipeline_batch_size(chunk_count: int) -> int:
     """ASR batch size, capped so there are at least two batches.
 
@@ -236,13 +241,21 @@ class QwenEnglishTranscriber(AudioTranscriber):
         started = time.perf_counter()
         raw = self.load_samples(audio_path)
         chunks = split_audio_chunks(raw)
-        batch_size = pipeline_batch_size(len(chunks))
+        capped_batch = pipeline_batch_size(len(chunks))
+        full_batch = max(1, worker_settings.QWEN_ASR_BATCH_SIZE)
 
-        # Three things overlap: the model loads, a worker denoises chunk by chunk (CPU), and this
-        # thread runs ASR on each batch as soon as its chunks are denoised (GPU).
+        # Three things overlap: the model loads, a worker denoises chunk by chunk, and this thread
+        # runs ASR on each batch as soon as its chunks are denoised (GPU).
         ready: queue.Queue = queue.Queue()
         stop = threading.Event()
         denoise_seconds = [0.0]
+        denoise_rate = [None]  # denoise seconds per audio second, measured on the first chunk
+
+        def batch_size() -> int:
+            # Fast (GPU) denoising finishes long before ASR could use the time, so one big batch is
+            # more efficient; slow (CPU) denoising keeps the capped batch so ASR can start early.
+            rate = denoise_rate[0]
+            return full_batch if rate is not None and rate < DENOISE_FAST_RATIO else capped_batch
 
         def denoise_chunks() -> None:
             began = time.perf_counter()
@@ -251,7 +264,10 @@ class QwenEnglishTranscriber(AudioTranscriber):
                 for offset, chunk in chunks:
                     if stop.is_set():
                         return
+                    chunk_started = time.perf_counter()
                     clean = self.denoise_samples(chunk)
+                    if denoise_rate[0] is None:
+                        denoise_rate[0] = (time.perf_counter() - chunk_started) / max(len(chunk) / SAMPLE_RATE, 1e-6)
                     parts.append(clean)
                     ready.put((offset, clean))
                 denoise_seconds[0] = time.perf_counter() - began
@@ -277,7 +293,8 @@ class QwenEnglishTranscriber(AudioTranscriber):
                 asr_started = time.perf_counter()
                 print(
                     f"[ASR] Model ready {asr_started - started:.1f}s after start "
-                    f"(load {t_load:.1f}s); {len(chunks)} chunks, batch={batch_size}.",
+                    f"(load {t_load:.1f}s); {len(chunks)} chunks, batch {capped_batch} (slow denoise) "
+                    f"or {full_batch} (fast denoise).",
                     flush=True,
                 )
                 pending: list[tuple[float, np.ndarray]] = []
@@ -287,7 +304,7 @@ class QwenEnglishTranscriber(AudioTranscriber):
                         raise item
                     if item is not None:
                         pending.append(item)
-                        if len(pending) < batch_size:
+                        if len(pending) < batch_size():
                             continue
                     if pending:
                         batch, pending = pending, []

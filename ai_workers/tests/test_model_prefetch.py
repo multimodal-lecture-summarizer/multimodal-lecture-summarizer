@@ -123,12 +123,36 @@ def test_asr_starts_before_last_chunk_is_denoised():
          patch.object(QwenEnglishTranscriber, "remember_denoised") as remember, \
          patch.object(QwenEnglishTranscriber, "_load_model", lambda self: SimpleNamespace(transcribe=fake_transcribe)), \
          patch("ai_workers.modules.audio_v2.qwen_transcriber.worker_settings.QWEN_ASR_BATCH_SIZE", 4), \
+         patch("ai_workers.modules.audio_v2.qwen_transcriber.DENOISE_FAST_RATIO", 0.0), \
          patch("ai_workers.modules.audio_v2.qwen_transcriber.split_audio_chunks", return_value=chunks):
         result = QwenEnglishTranscriber()._transcribe_qwen("x.wav")
 
     assert result["language"] == "en"
     assert len(denoised) == 4
     remember.assert_called_once()
+
+
+def test_fast_denoise_runs_one_full_batch():
+    chunk = np.zeros(SAMPLE_RATE, dtype=np.float32)
+    chunks = [(float(i) * 240, chunk) for i in range(4)]
+    batch_sizes = []
+
+    def fake_transcribe(**kw):
+        audio = kw["audio"]
+        items = audio if isinstance(audio, list) else [audio]
+        batch_sizes.append(len(items))
+        return [_empty_result() for _ in items]
+
+    with patch.object(QwenEnglishTranscriber, "load_samples", return_value=chunk), \
+         patch.object(QwenEnglishTranscriber, "denoise_samples", side_effect=lambda s: s), \
+         patch.object(QwenEnglishTranscriber, "remember_denoised"), \
+         patch.object(QwenEnglishTranscriber, "_load_model", lambda self: SimpleNamespace(transcribe=fake_transcribe)), \
+         patch("ai_workers.modules.audio_v2.qwen_transcriber.worker_settings.QWEN_ASR_BATCH_SIZE", 4), \
+         patch("ai_workers.modules.audio_v2.qwen_transcriber.DENOISE_FAST_RATIO", 1.0), \
+         patch("ai_workers.modules.audio_v2.qwen_transcriber.split_audio_chunks", return_value=chunks):
+        QwenEnglishTranscriber()._transcribe_qwen("x.wav")
+
+    assert batch_sizes == [4]
 
 
 def test_asr_batch_waits_for_florence_deterministic_mode():

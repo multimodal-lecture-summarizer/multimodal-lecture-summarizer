@@ -63,6 +63,10 @@ def _prefetch_qwen() -> None:
 
 def _prefetch_clip() -> None:
     _snapshot(CLIP_REPO, allow_patterns=["*.json", "*.txt", "model.safetensors"])
+    # CLIP and Florence-2 (vendored, nothing to download) are loaded now and kept for every job.
+    from ai_workers.modules.visual_v2.semantic import preload_visual_models
+
+    preload_visual_models()
 
 
 def _prefetch_led() -> None:
@@ -74,10 +78,11 @@ def _prefetch_led() -> None:
 
 
 def _prefetch_paddleocr() -> None:
-    # Building the engine is what triggers PaddleOCR's own model download (CPU only, no GPU use).
-    from paddleocr import PaddleOCR
+    # Building the engine is what triggers PaddleOCR's own model download; with residency on the
+    # engine is kept, otherwise it is discarded.
+    from ai_workers.modules.visual_v2.semantic import load_paddleocr
 
-    PaddleOCR(use_angle_cls=True, lang=worker_settings.PADDLEOCR_LANG, use_gpu=False)
+    load_paddleocr()
 
 
 def prefetch_tasks() -> list[tuple[str, Callable[[], None]]]:

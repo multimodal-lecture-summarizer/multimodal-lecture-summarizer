@@ -10,6 +10,12 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModelForCausalLM
 
 from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
+from ai_workers.modules.visual_v2.resident_models import (
+    CLIP_SLOT,
+    FLORENCE_SLOT,
+    OCR_SLOT,
+    visual_resident_enabled,
+)
 from sklearn.metrics.pairwise import cosine_similarity
 from ai_workers.core.config import worker_settings
 from ai_workers.modules.visual_v2.florence_runtime import (
@@ -20,6 +26,48 @@ from ai_workers.modules.visual_v2.florence_runtime import (
     resolve_florence_runtime,
     verify_florence_model,
 )
+
+def _build_paddleocr():
+    # Imported here to avoid slow loading if not needed
+    from paddleocr import PaddleOCR
+    import logging
+    logging.getLogger("ppocr").setLevel(logging.WARNING)  # Suppress noisy logs
+
+    try:
+        return PaddleOCR(
+            use_angle_cls=True,
+            lang=worker_settings.PADDLEOCR_LANG,
+            use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
+        )
+    except Exception as init_err:
+        print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
+        return PaddleOCR(lang=worker_settings.PADDLEOCR_LANG)
+
+
+def load_paddleocr():
+    """The PaddleOCR engine; kept loaded between jobs when residency is on."""
+    return OCR_SLOT.get_or_load(_build_paddleocr) if visual_resident_enabled() else _build_paddleocr()
+
+
+def preload_visual_models() -> None:
+    """Load CLIP and Florence-2 ahead of the first job. No-op unless residency is enabled."""
+    if not visual_resident_enabled():
+        return
+    analyzer = SemanticAnalyzer()
+    analyzer.load_clip()
+    if worker_settings.ENABLE_FLORENCE_CAPTIONING:
+        model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
+        runtime = resolve_florence_runtime(worker_settings.FLORENCE_DEVICE)
+        verify_florence_model(model_dir)
+        # Same guard as a real job (seeded, deterministic), taken before the slot lock so the
+        # lock order matches the job's.
+        determinism = FlorenceDeterminism(runtime)
+        determinism.enable()
+        try:
+            analyzer.load_florence(model_dir, runtime)
+        finally:
+            determinism.restore()
+
 
 class SemanticAnalyzer:
     """Vision encoding (CLIP), semantic filtering, and captioning (Florence-2) for keyframes."""
@@ -38,6 +86,69 @@ class SemanticAnalyzer:
         if worker_settings.FLORENCE_DEVICE.strip().lower() == "cuda":
             return "cpu"
         return "cuda" if torch.cuda.is_available() else "cpu"
+
+    def load_clip(self):
+        """(processor, model) for CLIP; kept loaded between jobs when residency is on."""
+        def load():
+            with MODEL_LOAD_LOCK:
+                processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
+            return processor, model
+
+        return CLIP_SLOT.get_or_load(load) if visual_resident_enabled() else load()
+
+    def load_florence(self, model_dir: str, runtime):
+        """(processor, model) for Florence-2; kept loaded between jobs when residency is on.
+
+        Callers hold the FlorenceDeterminism guard, so weights are tied under the fixed seed.
+        """
+        def load():
+            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
+            import transformers
+            try:
+                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                # Ensure RobertaTokenizer specifically has it just in case
+                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
+                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
+                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
+                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                        )
+            except Exception as e:
+                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+
+            print("[Semantic] Loading Florence-2 processor...", flush=True)
+            with MODEL_LOAD_LOCK:
+                processor = AutoProcessor.from_pretrained(
+                    model_dir,
+                    trust_remote_code=True,
+                    use_fast=True,
+                )
+                print("[Semantic] Florence-2 processor loaded.", flush=True)
+                print("[Semantic] Loading Florence-2 model weights...", flush=True)
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_dir,
+                    dtype=runtime.dtype,
+                    trust_remote_code=True,
+                    attn_implementation=runtime.attention_implementation,
+                ).to(runtime.device)
+            model.eval()
+            print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
+
+            # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
+            if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
+                model.language_model.tie_weights()
+            elif hasattr(model, "tie_weights"):
+                model.tie_weights()
+            return processor, model
+
+        return FLORENCE_SLOT.get_or_load(load) if visual_resident_enabled() else load()
 
     def filter_scenes_clip(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Extract CLIP embeddings, perform zero-shot filtering, cluster, and score (V3)."""
@@ -96,10 +207,8 @@ class SemanticAnalyzer:
 
         try:
             print(f"[Semantic] Loading CLIP model to extract embeddings for {num_frames} frames...")
-            with MODEL_LOAD_LOCK:
-                processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-                model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
-            
+            processor, model = self.load_clip()
+
             # Prompts for zero-shot filtering and action scoring
             text_prompts = [
                 "a real photograph of people, objects, actions, or a scene",
@@ -349,7 +458,10 @@ class SemanticAnalyzer:
             print(f"[Semantic] Kept {len(filtered_scenes)} semantically distinct scenes.")
             return filtered_scenes
         finally:
-            print("[Semantic] Releasing CLIP model from memory...")
+            print(
+                "[Semantic] Done with CLIP (kept resident)." if visual_resident_enabled()
+                else "[Semantic] Releasing CLIP model from memory..."
+            )
             if model is not None:
                 del model
             if processor is not None:
@@ -407,50 +519,8 @@ class SemanticAnalyzer:
                 free_mb, total_mb = cuda_memory_mb
                 print(f"[Semantic] Available VRAM before Florence-2 load: {free_mb}/{total_mb} MB.")
             
-            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
-            import transformers
-            try:
-                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
-                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
-                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                    )
-                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
-                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
-                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                    )
-                # Ensure RobertaTokenizer specifically has it just in case
-                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
-                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
-                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
-                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                        )
-            except Exception as e:
-                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+            processor, model = self.load_florence(model_dir, runtime)
 
-            print("[Semantic] Loading Florence-2 processor...", flush=True)
-            with MODEL_LOAD_LOCK:
-                processor = AutoProcessor.from_pretrained(
-                    model_dir,
-                    trust_remote_code=True,
-                    use_fast=True,
-                )
-                print("[Semantic] Florence-2 processor loaded.", flush=True)
-                print("[Semantic] Loading Florence-2 model weights...", flush=True)
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_dir,
-                    dtype=runtime.dtype,
-                    trust_remote_code=True,
-                    attn_implementation=runtime.attention_implementation,
-                ).to(runtime.device)
-            model.eval()
-            print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
-            
-            # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
-            if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
-                model.language_model.tie_weights()
-            elif hasattr(model, "tie_weights"):
-                model.tie_weights()
-            
             # <CAPTION> generates a very short, concise sentence focused on the main subject,
             # eliminating unnecessary details like backgrounds or skies.
             task_prompt = "<CAPTION>"
@@ -571,7 +641,10 @@ class SemanticAnalyzer:
         except FlorenceResourceError as e:
             print(f"[Semantic] {e}")
         finally:
-            print("[Semantic] Releasing Florence-2 model from memory...")
+            print(
+                "[Semantic] Done with Florence-2 (kept resident)." if visual_resident_enabled()
+                else "[Semantic] Releasing Florence-2 model from memory..."
+            )
             if model is not None:
                 del model
             if processor is not None:
@@ -590,21 +663,8 @@ class SemanticAnalyzer:
             
         try:
             print("[Semantic] Loading PaddleOCR model...")
-            # We import here to avoid slow loading if not needed
-            from paddleocr import PaddleOCR
-            import logging
-            logging.getLogger("ppocr").setLevel(logging.WARNING) # Suppress noisy logs
-            
-            try:
-                ocr = PaddleOCR(
-                    use_angle_cls=True,
-                    lang=worker_settings.PADDLEOCR_LANG,
-                    use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
-                )
-            except Exception as init_err:
-                print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
-                ocr = PaddleOCR(lang=worker_settings.PADDLEOCR_LANG)
-            
+            ocr = load_paddleocr()
+
             for scene in scenes:
                 path = scene.get("keyframe_path")
                 if not path or not os.path.exists(path):

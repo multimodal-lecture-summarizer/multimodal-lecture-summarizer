@@ -40,6 +40,8 @@ class WorkerSettings(BaseSettings):
     # Load Qwen3-ASR onto the GPU once (at worker start) and keep it for every job instead of
     # reloading it each time (~2 min on Colab): "auto" (only on Colab), "true", "false".
     QWEN_KEEP_RESIDENT: str = "auto"
+    # Same for the visual models (CLIP, Florence-2, PaddleOCR): "auto" (only on Colab), "true", "false".
+    VISUAL_KEEP_RESIDENT: str = "auto"
     # Audio chunks transcribed per forward pass. 1 = one chunk at a time (original behavior);
     # raise on GPUs with spare VRAM (Colab T4: 4) since decoding is memory-bound.
     QWEN_ASR_BATCH_SIZE: int = 1
