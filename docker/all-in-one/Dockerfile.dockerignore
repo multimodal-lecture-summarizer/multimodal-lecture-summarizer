@@ -1,0 +1,37 @@
+# Build context for docker/all-in-one/Dockerfile is the repo root. Unlike the root .dockerignore
+# this keeps frontend/ (it is built inside the image) but drops its local build output.
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/.venv-*
+**/node_modules
+frontend/dist
+.coverage
+
+# Secrets are passed at runtime (--env-file / environment), never baked into the image.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Runtime data and research material
+storage
+cache
+outputs
+uploads
+backend/storage
+backend/local.db
+experiments
+benchmarks
+probes
+reports
+scratch
+plans
+docs
+tests
+ai_workers/tests
+backend/tests
+*.mp4
+*.wav
+*.pt

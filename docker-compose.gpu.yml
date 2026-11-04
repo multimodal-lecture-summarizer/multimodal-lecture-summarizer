@@ -6,6 +6,14 @@ services:
       WORKER_QUEUES: gpu,celery
       FLORENCE_DEVICE: ${FLORENCE_DEVICE:-cuda}
       SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
+      # Defaults sized for a single 6 GB+ GPU: DeepFilterNet on the GPU, models downloaded at
+      # start, LED for English summaries (no Groq), fewer keyframe candidates. Parallel branches
+      # and resident models need roughly 12 GB of VRAM; enable them in ./.env on a bigger card.
+      DENOISE_DEVICE: ${DENOISE_DEVICE:-cuda}
+      QWEN_ASR_BATCH_SIZE: ${QWEN_ASR_BATCH_SIZE:-2}
+      ENABLE_LLM_SUMMARIZER: ${ENABLE_LLM_SUMMARIZER:-false}
+      KEYFRAME_CANDIDATES: ${KEYFRAME_CANDIDATES:-3}
+      PREFETCH_MODELS: ${PREFETCH_MODELS:-true}
     deploy:
       resources:
         reservations:

@@ -1,0 +1,74 @@
+# The whole system in ONE container (UI, API, AI worker, PostgreSQL, Redis) on an NVIDIA GPU:
+#
+#   docker compose -f docker-compose.all-in-one.yml up --build
+#
+# UI http://localhost:3000, API http://localhost:8000/docs.
+# App settings (R2, Groq, Chroma...) come from backend/.env; its POSTGRES_* values are ignored
+# because the image brings its own database. The database lives in the "mls_pgdata" volume.
+# Set AIO_SHARED_REDIS_URL in ./.env to use a public Redis instead (so a Colab worker can join).
+#
+# Without a GPU, remove the "deploy" block and set FLORENCE_DEVICE=cpu, SEMANTIC_CLIP_DEVICE=cpu,
+# DENOISE_DEVICE=cpu.
+services:
+  all_in_one:
+    image: multimodal-lecture-summarizer:all-in-one
+    build:
+      context: .
+      dockerfile: docker/all-in-one/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "3000:80"
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Standalone by default: the bundled Redis is used. Deliberately a different name from
+      # SHARED_REDIS_URL so a value left in ./.env for the Colab setup does not pull this container
+      # into that queue. Set AIO_SHARED_REDIS_URL only to let a Colab/remote worker share the work.
+      SHARED_REDIS_URL: ${AIO_SHARED_REDIS_URL:-}
+      AIO_POSTGRES_PASSWORD: ${AIO_POSTGRES_PASSWORD:-postgres}
+      WORKER_QUEUES: ${WORKER_QUEUES:-gpu,celery}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+      PROCESS_MIN_AVAILABLE_MEMORY_MB: ${PROCESS_MIN_AVAILABLE_MEMORY_MB:-4096}
+      PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB: ${PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB:-3072}
+      FLORENCE_DEVICE: ${FLORENCE_DEVICE:-cuda}
+      SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
+      FLORENCE_MIN_AVAILABLE_MEMORY_MB: ${FLORENCE_MIN_AVAILABLE_MEMORY_MB:-6144}
+      FLORENCE_MIN_AVAILABLE_VRAM_MB: ${FLORENCE_MIN_AVAILABLE_VRAM_MB:-4096}
+      PADDLEOCR_USE_GPU: "0"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      ENABLE_SPRINT_STACK: ${ENABLE_SPRINT_STACK:-1}
+      SPRINT_STACK: ${SPRINT_STACK:-recommended}
+      MIN_CHAPTER_SEC: ${MIN_CHAPTER_SEC:-45}
+      # Speed switches, sized for a single 6 GB+ GPU (same as docker-compose.gpu.yml). Parallel
+      # branches and resident models need roughly 12 GB of VRAM; enable them in ./.env.
+      ENABLE_PARALLEL_BRANCHES: ${ENABLE_PARALLEL_BRANCHES:-false}
+      DENOISE_DEVICE: ${DENOISE_DEVICE:-cuda}
+      ASR_ENGLISH_BACKEND: ${ASR_ENGLISH_BACKEND:-qwen3}
+      QWEN_ASR_BATCH_SIZE: ${QWEN_ASR_BATCH_SIZE:-2}
+      ENABLE_LLM_SUMMARIZER: ${ENABLE_LLM_SUMMARIZER:-false}
+      KEYFRAME_CANDIDATES: ${KEYFRAME_CANDIDATES:-3}
+      PREFETCH_MODELS: ${PREFETCH_MODELS:-true}
+      QWEN_KEEP_RESIDENT: ${QWEN_KEEP_RESIDENT:-false}
+      VISUAL_KEEP_RESIDENT: ${VISUAL_KEEP_RESIDENT:-false}
+    volumes:
+      - mls_pgdata:/var/lib/postgresql/data
+      - mls_redis:/var/lib/redis
+      - ./storage:/app/storage
+      - ./cache:/app/cache
+      - ./outputs:/app/outputs
+    shm_size: "2gb"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  mls_pgdata:
+  mls_redis:

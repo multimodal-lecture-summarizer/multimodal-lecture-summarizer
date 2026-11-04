@@ -64,6 +64,9 @@ Image dùng chung cho mọi máy: `ai_workers/Dockerfile` (Python 3.11, torch 2.
 | Cả hệ thống, worker dùng GPU máy này | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build` |
 | Chỉ worker GPU, website ở máy khác | `docker compose -f docker-compose.worker.yml up --build` |
 
+- **Một image cho cả hệ thống** (giao diện, API, worker AI, PostgreSQL, Redis chạy chung một container qua supervisord): `docker compose -f docker-compose.all-in-one.yml up --build`, hoặc build thủ công `docker build -f docker/all-in-one/Dockerfile -t multimodal-lecture-summarizer:all-in-one .`. Giao diện http://localhost:3000, API http://localhost:8000/docs. Cơ sở dữ liệu nằm trong volume `mls_pgdata` (tự khởi tạo lần đầu, bỏ qua `POSTGRES_*` của `backend/.env`); `storage`, `cache`, `outputs` là thư mục trên máy. Mặc định chạy độc lập với Redis nội bộ; đặt `AIO_SHARED_REDIS_URL` trong `./.env` nếu muốn worker Colab dùng chung hàng đợi. Chạy bằng `docker run` thì phải thêm `-e` từng biến, vì `--env-file` không bỏ chú thích cuối dòng của `backend/.env` (compose thì có).
+- Ngôn ngữ đầu ra mặc định là tiếng Anh (backend, frontend); đổi ở trang Profile. Tài khoản đã lưu `vi` từ trước giữ nguyên lựa chọn đó.
+- `docker-compose.gpu.yml` đặt sẵn công tắc cho một GPU 6 GB+: khử nhiễu trên GPU, tải model lúc khởi động, LED thay Groq, 3 khung ứng viên mỗi scene. Chạy song song nhánh audio/visual và giữ model trên GPU cần khoảng 12 GB VRAM; bật bằng `ENABLE_PARALLEL_BRANCHES=true`, `QWEN_KEEP_RESIDENT=true`, `VISUAL_KEEP_RESIDENT=true` trong `./.env`. `docker-compose.worker.yml` (GPU lớn) bật sẵn các tùy chọn đó.
 - Frontend: http://localhost:3000, API: http://localhost:8000/docs.
 - `VITE_API_BASE_URL` được build vào frontend. Nếu người dùng truy cập từ máy khác, đặt `VITE_API_BASE_URL=http://<ip-may-chu>:8000/api/v1` trong `./.env` rồi build lại.
 - Không đặt `SHARED_REDIS_URL` thì mọi service dùng container `redis` nội bộ (không cho Colab tham gia).

@@ -101,6 +101,17 @@ services:
       ENABLE_SPRINT_STACK: ${ENABLE_SPRINT_STACK:-1}
       SPRINT_STACK: ${SPRINT_STACK:-recommended}
       MIN_CHAPTER_SEC: ${MIN_CHAPTER_SEC:-45}
+      # Speed switches. The defaults keep the original behavior; docker-compose.gpu.yml turns on
+      # the ones that suit a single NVIDIA GPU, and any of them can be set in ./.env.
+      ENABLE_PARALLEL_BRANCHES: ${ENABLE_PARALLEL_BRANCHES:-false}
+      DENOISE_DEVICE: ${DENOISE_DEVICE:-cpu}
+      ASR_ENGLISH_BACKEND: ${ASR_ENGLISH_BACKEND:-qwen3}
+      QWEN_ASR_BATCH_SIZE: ${QWEN_ASR_BATCH_SIZE:-1}
+      ENABLE_LLM_SUMMARIZER: ${ENABLE_LLM_SUMMARIZER:-true}
+      KEYFRAME_CANDIDATES: ${KEYFRAME_CANDIDATES:-7}
+      PREFETCH_MODELS: ${PREFETCH_MODELS:-false}
+      QWEN_KEEP_RESIDENT: ${QWEN_KEEP_RESIDENT:-false}
+      VISUAL_KEEP_RESIDENT: ${VISUAL_KEEP_RESIDENT:-false}
     volumes:
       - ./outputs:/app/outputs
       - ./cache:/app/cache

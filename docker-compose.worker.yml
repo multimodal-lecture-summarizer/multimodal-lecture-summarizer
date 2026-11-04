@@ -20,6 +20,16 @@ services:
       SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
       PADDLEOCR_USE_GPU: "0"
       CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      # Same switches as docker-compose.gpu.yml; this host is usually a bigger GPU (Colab-class,
+      # 15 GB), so the parallel/resident options are on by default. Override in ./.env.
+      ENABLE_PARALLEL_BRANCHES: ${ENABLE_PARALLEL_BRANCHES:-true}
+      DENOISE_DEVICE: ${DENOISE_DEVICE:-cuda}
+      QWEN_ASR_BATCH_SIZE: ${QWEN_ASR_BATCH_SIZE:-4}
+      ENABLE_LLM_SUMMARIZER: ${ENABLE_LLM_SUMMARIZER:-false}
+      KEYFRAME_CANDIDATES: ${KEYFRAME_CANDIDATES:-3}
+      PREFETCH_MODELS: ${PREFETCH_MODELS:-true}
+      QWEN_KEEP_RESIDENT: ${QWEN_KEEP_RESIDENT:-true}
+      VISUAL_KEEP_RESIDENT: ${VISUAL_KEEP_RESIDENT:-true}
     volumes:
       - ./cache:/app/cache
     restart: unless-stopped
