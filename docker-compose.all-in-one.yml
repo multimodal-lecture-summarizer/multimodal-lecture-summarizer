@@ -5,7 +5,8 @@
 # UI http://localhost:3000, API http://localhost:8000/docs.
 # App settings (R2, Groq, Chroma...) come from backend/.env; its POSTGRES_* values are ignored
 # because the image brings its own database. The database lives in the "mls_pgdata" volume.
-# Set AIO_SHARED_REDIS_URL in ./.env to use a public Redis instead (so a Colab worker can join).
+# Uses the public Redis in ./.env (SHARED_REDIS_URL) so jobs can go to the Colab worker. This
+# container's worker takes only the "celery" queue by default; Colab takes "gpu".
 #
 # Without a GPU, remove the "deploy" block and set FLORENCE_DEVICE=cpu, SEMANTIC_CLIP_DEVICE=cpu,
 # DENOISE_DEVICE=cpu.
@@ -24,12 +25,14 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # Standalone by default: the bundled Redis is used. Deliberately a different name from
-      # SHARED_REDIS_URL so a value left in ./.env for the Colab setup does not pull this container
-      # into that queue. Set AIO_SHARED_REDIS_URL only to let a Colab/remote worker share the work.
-      SHARED_REDIS_URL: ${AIO_SHARED_REDIS_URL:-}
+      # Same Redis as the Colab worker: SHARED_REDIS_URL from ./.env. Leave it empty and the
+      # bundled Redis is used instead (standalone, no Colab).
+      SHARED_REDIS_URL: ${SHARED_REDIS_URL:-}
       AIO_POSTGRES_PASSWORD: ${AIO_POSTGRES_PASSWORD:-postgres}
-      WORKER_QUEUES: ${WORKER_QUEUES:-gpu,celery}
+      # The local worker only takes the "celery" queue (RAG indexing and the CPU/GPU fallback when
+      # no Colab worker is online). The "gpu" queue is left to Colab; use WORKER_QUEUES=gpu,celery
+      # to let this machine's GPU take those jobs too.
+      WORKER_QUEUES: ${WORKER_QUEUES:-celery}
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
       PROCESS_MIN_AVAILABLE_MEMORY_MB: ${PROCESS_MIN_AVAILABLE_MEMORY_MB:-4096}
       PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB: ${PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB:-3072}

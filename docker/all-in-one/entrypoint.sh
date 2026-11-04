@@ -54,6 +54,6 @@ else
     export REDIS_URL=redis://127.0.0.1:6379/0
     export AIO_START_REDIS=true
 fi
-export WORKER_QUEUES="${WORKER_QUEUES:-gpu,celery}"
+export WORKER_QUEUES="${WORKER_QUEUES:-celery}"
 
 exec "$@"

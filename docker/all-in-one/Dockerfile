@@ -63,7 +63,7 @@ COPY docker/all-in-one/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /etc/supervisor/supervisord.conf /etc/nginx/conf.d/default.conf \
     && chmod +x /usr/local/bin/entrypoint.sh
 
-ENV WORKER_QUEUES=gpu,celery \
+ENV WORKER_QUEUES=celery \
     CUBLAS_WORKSPACE_CONFIG=":4096:8"
 
 VOLUME ["/var/lib/postgresql/data", "/var/lib/redis", "/app/storage", "/app/cache", "/app/outputs"]
