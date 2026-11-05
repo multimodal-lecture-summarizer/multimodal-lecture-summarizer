@@ -48,6 +48,9 @@ export DATABASE_URL="postgresql://$DB_USER:$DB_PASS@127.0.0.1:5432/$DB_NAME"
 if [ -n "$SHARED_REDIS_URL" ]; then
     export CELERY_BROKER_URL="$SHARED_REDIS_URL" CELERY_RESULT_BACKEND="$SHARED_REDIS_URL" REDIS_URL="$SHARED_REDIS_URL"
     export AIO_START_REDIS=false
+    # Managed Redis plans cap concurrent clients. The local worker is never inspected for GPU
+    # routing (only the Colab worker is), so it skips Celery's remote-control connection.
+    export WORKER_REMOTE_CONTROL="${WORKER_REMOTE_CONTROL:-false}"
     echo "[all-in-one] Using SHARED_REDIS_URL; the bundled Redis is not started."
 else
     export CELERY_BROKER_URL=redis://127.0.0.1:6379/0 CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1

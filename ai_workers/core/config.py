@@ -11,6 +11,10 @@ class WorkerSettings(BaseSettings):
     # Celery / Redis
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    # Celery remote control (inspect/revoke/ping) costs one extra Redis client per worker. Keep it on
+    # for any worker the backend inspects (the GPU/Colab worker); the all-in-one container turns it
+    # off when it shares a client-capped Redis.
+    WORKER_REMOTE_CONTROL: bool = True
 
     # GPU
     CUDA_VISIBLE_DEVICES: str = "0"

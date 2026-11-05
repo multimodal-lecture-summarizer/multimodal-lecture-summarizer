@@ -111,9 +111,11 @@ app.conf.update(
     # full, a worker that lost its connection would give up after the default 100 retries; keep
     # retrying until slots free up instead of exiting.
     broker_connection_max_retries=None,
-    # Remote control (pidbox) holds an extra dedicated connection and pub/sub channel per worker and
-    # nothing here uses inspect/ping/broadcast: revoked state is read from the result backend.
-    worker_enable_remote_control=False,
+    # Remote control (pidbox) costs one extra Redis client per worker. The backend needs it from the
+    # GPU worker (it inspects active queues to route jobs to Colab, and revokes cancelled jobs), so it
+    # stays on by default; the all-in-one container, whose local worker is never inspected for
+    # routing, switches it off with WORKER_REMOTE_CONTROL=false.
+    worker_enable_remote_control=worker_settings.WORKER_REMOTE_CONTROL,
     worker_gossip=False,
     worker_mingle=False,
     worker_send_task_events=False,
