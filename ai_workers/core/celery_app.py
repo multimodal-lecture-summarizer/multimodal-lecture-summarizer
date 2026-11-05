@@ -107,6 +107,13 @@ app.conf.update(
     redis_backend_health_check_interval=30,
     redis_retry_on_timeout=True,
     broker_connection_retry_on_startup=True,
+    # Redis Cloud's free plan allows ~30 clients shared by every worker and the API. When it is
+    # full, a worker that lost its connection would give up after the default 100 retries; keep
+    # retrying until slots free up instead of exiting.
+    broker_connection_max_retries=None,
+    # Remote control (pidbox) holds an extra dedicated connection and pub/sub channel per worker and
+    # nothing here uses inspect/ping/broadcast: revoked state is read from the result backend.
+    worker_enable_remote_control=False,
     worker_gossip=False,
     worker_mingle=False,
     worker_send_task_events=False,
