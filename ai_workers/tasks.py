@@ -14,6 +14,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import warnings
 warnings.filterwarnings("ignore")
 
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +30,7 @@ from ai_workers.core.checkpoint import (
     sha256_file,
 )
 from ai_workers.core.torch_load_patch import patch_transformers_torch_load_check
+from ai_workers.core.youtube_ingest import download_youtube, upload_video_to_r2
 from ai_workers.modules.audio_v2.language import normalize_source_language
 from ai_workers.core.resource_cleanup import (
     ensure_process_memory_available,
@@ -37,6 +39,47 @@ from ai_workers.core.resource_cleanup import (
 
 
 _patch_transformers_torch_load_check = patch_transformers_torch_load_check
+
+
+@app.task(bind=True, name="ai_workers.prepare_youtube_video")
+def prepare_youtube_video(self, job_id: str, youtube_url: str, handoff_queue: str, max_duration: int = 0, **process_kwargs):
+    """Download a YouTube video on this worker, publish it to R2, then hand the job to process_video.
+
+    Runs on the local worker so a remote GPU worker never has to reach YouTube from a blocked
+    datacenter IP. The task shares the job's task id with process_video: the backend tracks that one
+    id, so a failure here marks the job failed and a cancel still reaches the job after hand-off.
+    Ignore keeps this task's own result from overwriting the state process_video is writing.
+    """
+    from celery.exceptions import Ignore
+
+    from ai_workers.core.config import worker_settings
+
+    self.update_state(state="PROGRESS", meta={"stage": "download", "progress": 2})
+    try:
+        if not worker_settings.CF_R2_ACCESS_KEY_ID:
+            raise RuntimeError("Worker local chưa cấu hình R2.")
+        temp_root = os.path.abspath("./storage/temp")
+        os.makedirs(temp_root, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temp_root) as temp_dir:
+            print(f"Downloading YouTube video on the local worker: {youtube_url}")
+            local_path = download_youtube(youtube_url, os.path.join(temp_dir, "video.mp4"), max_duration)
+            extension = local_path.rsplit(".", 1)[-1]
+            object_key = f"videos/youtube_{job_id}.{extension}"
+            print(f"Uploading YouTube video to R2 under key: {object_key}")
+            video_url = upload_video_to_r2(local_path, object_key)
+    except Exception as err:
+        # Plain RuntimeError: yt-dlp exceptions do not survive the JSON result backend intact.
+        raise RuntimeError(f"Không thể chuẩn bị video YouTube: {err}") from err
+
+    print(f"Handing job {job_id} to queue '{handoff_queue}': {video_url}")
+    app.send_task(
+        "ai_workers.process_video",
+        args=[job_id, video_url],
+        kwargs=process_kwargs,
+        task_id=job_id,
+        queue=handoff_queue,
+    )
+    raise Ignore()
 
 
 @app.task(bind=True, name="ai_workers.process_video")
@@ -166,7 +209,6 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 raise e
 
     import requests
-    import yt_dlp
     import uuid
 
     local_video_path = video_path
@@ -209,28 +251,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             try:
                 if "youtube.com" in video_path or "youtu.be" in video_path:
                     print(f"Downloading YouTube video using yt-dlp from: {video_path}")
-                    ydl_opts = {
-                        'outtmpl': local_video_path,
-                        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                        'merge_output_format': 'mp4',
-                        'quiet': True,
-                        'retries': 10,
-                        'fragment_retries': 10,
-                        'source_address': '0.0.0.0',
-                        'extractor_args': {
-                            'youtube': {
-                                'player_client': ['android', 'web', 'mweb']
-                            }
-                        },
-                    }
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([video_path])
-
-                    import glob
-                    base_without_ext = local_video_path.rsplit(".", 1)[0]
-                    matching_files = glob.glob(base_without_ext + ".*")
-                    if matching_files:
-                        local_video_path = matching_files[0]
+                    local_video_path = download_youtube(video_path, local_video_path)
                     print(f"Successfully downloaded YouTube video to: {local_video_path}")
 
                     actual_ext = local_video_path.rsplit(".", 1)[-1]
@@ -249,21 +270,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     if worker_settings.CF_R2_ACCESS_KEY_ID:
                         try:
                             print(f"Uploading downloaded YouTube video to R2 under key: {object_key}...")
-                            import boto3
-                            s3_client = boto3.client(
-                                "s3",
-                                endpoint_url=f"https://{worker_settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-                                aws_access_key_id=worker_settings.CF_R2_ACCESS_KEY_ID,
-                                aws_secret_access_key=worker_settings.CF_R2_SECRET_ACCESS_KEY,
-                            )
-                            s3_client.upload_file(
-                                mock_filepath,
-                                worker_settings.CF_R2_BUCKET_NAME,
-                                object_key,
-                                ExtraArgs={"ContentType": "video/mp4"}
-                            )
-                            public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
-                            video_file_url = f"{public_base}/{object_key}"
+                            video_file_url = upload_video_to_r2(mock_filepath, object_key)
                             print(f"Successfully uploaded YouTube video to R2: {video_file_url}")
 
                             if os.path.exists(mock_filepath):

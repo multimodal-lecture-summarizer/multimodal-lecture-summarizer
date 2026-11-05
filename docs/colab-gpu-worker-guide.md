@@ -11,6 +11,7 @@ Website ──upload──► Backend ──send_task──► Redis (public) �
 
 - Backend gọi `choose_video_queue` (`backend/app/services/worker_routing.py`) trước mỗi job: hỏi Redis xem có worker nào nghe queue `gpu` không (timeout 1s).
 - Có worker GPU **và** video là URL (R2/YouTube) → queue `gpu`. Ngược lại → queue `celery`.
+- Link YouTube sắp vào queue `gpu` (và R2 đang bật) không đi thẳng tới worker GPU: worker local tải video bằng task `ai_workers.prepare_youtube_video`, đẩy lên R2, rồi chuyển `process_video` kèm URL R2 sang queue `gpu`. Lý do: YouTube thường chặn IP datacenter như Colab. Tải hoặc đẩy R2 lỗi thì job báo failed, không thử lại trên Colab.
 - Video lưu ở mock storage (đường dẫn trên ổ máy backend) luôn chạy CPU, vì worker từ xa không đọc được.
 - `build_rag_index` / `reindex_video` ghi thẳng vào DB nên luôn ở queue `celery`, cần một worker local (hoặc worker có quyền tới DB) nghe queue này.
 - Job đã vào queue `gpu` thì ở đó tới khi worker GPU nhận. Nếu Colab tắt giữa chừng, task được giao lại sau `visibility_timeout` của Redis (mặc định 1 giờ) khi một worker `gpu` quay lại.
@@ -90,6 +91,7 @@ Cấu hình trên Colab: `FLORENCE_DEVICE=cuda` (caption nhanh hơn, nhưng toke
 
 - Colab Pro: session tối đa 12 giờ, có idle timeout, GPU không được bảo đảm. Cần mở lại notebook mỗi session; cài đặt mất vài phút.
 - Điều khoản Colab cấm chạy distributed worker trên runtime free không còn compute unit. Gói Pro có compute unit thì được.
-- YouTube thường chặn tải từ IP datacenter (Colab). Video YouTube có thể lỗi trên Colab; upload file (đi qua R2) ổn định hơn.
+- Link YouTube cần worker local đang chạy (queue `celery`) để tải trước; nếu worker này tắt, job nằm chờ ở queue cho tới khi nó bật lại. YouTube vẫn có thể chặn cả IP local.
+- Video từ link YouTube hiện chỉ đạt 360p: các định dạng cao hơn bị 403 sau khoảng 1 MB vì `yt-dlp` không có PO Token. Chữ nhỏ trên slide có thể khó OCR; khi cần chất lượng cao, hãy upload file thay vì dán link.
 - Checkpoint (`storage/checkpoints/`) nằm trên đĩa Colab, mất khi session kết thúc.
 - Worker Colab chỉ nghe queue `gpu`; vẫn cần worker local nghe `celery` cho RAG indexing và job CPU.
