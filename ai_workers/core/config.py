@@ -79,7 +79,12 @@ class WorkerSettings(BaseSettings):
     # Floor for the boxes handed to the tracker: BoT-SORT's second association pass uses
     # low-confidence boxes (it ignores anything at or below 0.1).
     OBJECT_DETECTOR_MIN_SCORE: float = 0.15
-    OBJECT_TRACKING_SAMPLE_FPS: int = 3
+    # Frames per second fed to the detector and tracker. Lectures change slowly, so 1 is enough and
+    # costs a third of 3; raise it for fast-moving footage.
+    OBJECT_TRACKING_SAMPLE_FPS: int = 1
+    # BoT-SORT camera-motion compensation runs on frames shrunk by this factor (benchmark: 2).
+    # Larger is faster; it is the main per-frame tracker cost on 1080p video.
+    OBJECT_TRACKING_CMC_DOWNSCALE: int = 2
     OBJECT_TRACKING_DEVICE: str = "auto"
 
     # English summaries: "led" (default) runs the benchmarked LED map-reduce summarizer when

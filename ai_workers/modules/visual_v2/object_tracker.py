@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import cv2
@@ -69,7 +70,14 @@ def build_botsort(frame_rate: float) -> Any:
     """A fresh BoT-SORT tracker (one per scene: a cut ends every track)."""
     from trackers import BoTSORTTracker
 
-    return BoTSORTTracker(**{**BOTSORT_PARAMS, "frame_rate": float(max(1.0, frame_rate))})
+    # On static slides there is nothing to estimate, so the library warns on nearly every frame.
+    logging.getLogger("trackers.cmc").setLevel(logging.ERROR)
+    params = {
+        **BOTSORT_PARAMS,
+        "cmc_downscale": int(max(1, worker_settings.OBJECT_TRACKING_CMC_DOWNSCALE)),
+        "frame_rate": float(max(1.0, frame_rate)),
+    }
+    return BoTSORTTracker(**params)
 
 
 def resolve_tracking_device(requested_device: Optional[str] = None) -> str:
@@ -273,6 +281,11 @@ class ObjectDetectorTracker:
                 "Install them with: pip install --no-deps -r ai_workers/requirements-tracking.txt"
             ) from import_err
 
+        # Seconds spent per phase, logged once at the end so a slow stage can be attributed.
+        phase_seconds = {"decode": 0.0, "detect": 0.0, "track": 0.0}
+        frames_processed = 0
+        stage_started = time.perf_counter()
+
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             logger.warning(f"[OD&T] Could not open video file: {video_path}")
@@ -342,15 +355,22 @@ class ObjectDetectorTracker:
                         if revoke_check_fn is not None and (curr_frame_idx - start_frame) % (frame_stride * 10) == 0:
                             revoke_check_fn()
 
+                        t_phase = time.perf_counter()
                         ret, frame = cap.read()
+                        phase_seconds["decode"] += time.perf_counter() - t_phase
                         if not ret or frame is None:
                             break
 
                         frame_time_sec = round(curr_frame_idx / video_fps, 2)
                         h_f, w_f = frame.shape[:2]
 
+                        t_phase = time.perf_counter()
                         det_xyxy, det_scores, det_classes = self._detect(frame)
+                        phase_seconds["detect"] += time.perf_counter() - t_phase
+                        t_phase = time.perf_counter()
                         tracked = self._update_tracker(tracker, det_xyxy, det_scores, det_classes, frame)
+                        phase_seconds["track"] += time.perf_counter() - t_phase
+                        frames_processed += 1
 
                         # Compute object presence and sharpness for this candidate frame
                         gray_f = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -432,9 +452,11 @@ class ObjectDetectorTracker:
 
                         # Advance cap by frame_stride
                         if frame_stride > 1:
+                            t_phase = time.perf_counter()
                             for _ in range(frame_stride - 1):
                                 if not cap.grab():
                                     break
+                            phase_seconds["decode"] += time.perf_counter() - t_phase
                             curr_frame_idx += frame_stride
                         else:
                             curr_frame_idx += 1
@@ -624,6 +646,12 @@ class ObjectDetectorTracker:
             "sample_fps_used": sample_fps,
         }
 
+        print(
+            f"[OD&T] {frames_processed} frames at {sample_fps} fps in {time.perf_counter() - stage_started:.1f}s: "
+            f"decode {phase_seconds['decode']:.1f}s, detect {phase_seconds['detect']:.1f}s, "
+            f"track (BoT-SORT + CMC) {phase_seconds['track']:.1f}s.",
+            flush=True,
+        )
         logger.info(
             f"[OD&T] Completed tracking for {len(scenes)} scenes. "
             f"Realistic total unique tracks: {total_unique_tracks}, "
