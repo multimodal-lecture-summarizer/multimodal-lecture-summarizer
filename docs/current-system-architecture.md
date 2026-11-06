@@ -174,7 +174,7 @@ flowchart TD
 
 #### 4. Phân tích Ngữ nghĩa Khung hình (Stage 4: Semantic Analysis)
 - **Lọc trùng lặp**: Trích xuất vector đặc trưng hình ảnh bằng CLIP ViT-B/32, phân cụm bằng K-Means để loại bỏ các slide trùng hoặc chỉ chuyển động nhẹ của người thuyết trình.
-- **Nhận dạng chữ (OCR)**: Chạy `PaddleOCR` (ngôn ngữ theo `PADDLEOCR_LANG`, mặc định `en`) trên các slide đại diện để trích xuất toàn bộ văn bản bài giảng, công thức, đề mục hiển thị trên slide.
+- **Nhận dạng chữ (OCR)**: Chạy `PaddleOCR` (ngôn ngữ theo `PADDLEOCR_LANG`, mặc định `en`) trên các slide đại diện để trích xuất toàn bộ văn bản bài giảng, công thức, đề mục hiển thị trên slide. Mỗi cảnh lưu `ocr_text` (các dòng nối bằng ` | `, dùng cho tóm tắt) và `ocr_blocks_json` (từng dòng: `text`, `confidence`, `bbox_norm`, `polygon_norm`, `line_index`, toạ độ chuẩn hoá 0..1; tối đa `OCR_MAX_BLOCKS_PER_SCENE` dòng). PaddleOCR đã loại sẵn dòng dưới 50%. Trang kết quả (dev mode) hiển thị bằng `SceneOcrExplorer`. Video xử lý trước khi có hai cột này không có dữ liệu OCR chi tiết; cần chạy `alembic upgrade head` rồi xử lý lại video.
 - **Phát hiện và theo dõi vật thể (RT-DETR-R18vd + BoT-SORT)**: bật mặc định (`ENABLE_OBJECT_TRACKING=true`). Hai mô hình lấy theo kết quả benchmark (`benchmark/docs/BENCHMARK.md`): RT-DETR-R18vd (`PekingU/rtdetr_r18vd`, mAP 0,429, dẫn đầu nhóm mô hình COCO đóng) và BoT-SORT (`trackers==2.6.1`, cấu hình mặc định đã chấm điểm, bù chuyển động camera, không ReID; HOTA dẫn đầu trên DanceTrack). Mỗi cảnh dùng một bộ theo dõi riêng, `frame_rate` bằng tốc độ lấy mẫu (`OBJECT_TRACKING_SAMPLE_FPS`). Trọng số detector được tải và nạp sẵn lên GPU lúc worker khởi động (cùng nhóm mô hình thị giác thường trú, `VISUAL_KEEP_RESIDENT`), nên job không mất thời gian nạp. Kết quả benchmark là phạm vi nghiên cứu trên ảnh COCO và DanceTrack, không phải video bài giảng. Đặt `ENABLE_OBJECT_TRACKING=false` để bỏ qua bước này.
 - **Sinh mô tả ảnh (Captioning)**: Sử dụng mô hình `Florence-2-base` (chạy trên chế độ CPU/FP32/eager nhằm đảm bảo tính tái lập 100% giữa Windows và Linux, tránh hiện tượng sinh token rác). Tự động bỏ qua captioning nếu RAM hệ thống khả dụng nhỏ hơn 6144 MB.
 
@@ -313,6 +313,8 @@ erDiagram
         string keyframe_url
         text caption
         text script
+        text ocr_text
+        json ocr_blocks_json
     }
 
     VIDEO_STANDARDS {

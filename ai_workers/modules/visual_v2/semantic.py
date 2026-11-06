@@ -49,6 +49,43 @@ def load_paddleocr():
     return OCR_SLOT.get_or_load(_build_paddleocr) if visual_resident_enabled() else _build_paddleocr()
 
 
+def _parse_ocr_lines(lines: Any, img_w: int, img_h: int, max_blocks: int = 200) -> list[dict[str, Any]]:
+    """Convert PaddleOCR 2.x lines ``[poly(4x[x,y]), (text, conf)]`` into normalized blocks.
+
+    Coordinates are divided by image size and clamped to 0..1 so the UI is resolution
+    independent. Malformed entries and empty texts are skipped. Engine order is kept.
+    """
+    blocks: list[dict[str, Any]] = []
+    if not lines or img_w <= 0 or img_h <= 0:
+        return blocks
+
+    def _norm(v: float, size: int) -> float:
+        return round(min(1.0, max(0.0, v / size)), 4)
+
+    for idx, line in enumerate(lines):
+        try:
+            poly, rec = line[0], line[1]
+            text = str(rec[0]).strip()
+            if not text or len(poly) != 4:
+                continue
+            conf = round(float(rec[1]), 4)
+            polygon = [[_norm(float(p[0]), img_w), _norm(float(p[1]), img_h)] for p in poly]
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        xs = [p[0] for p in polygon]
+        ys = [p[1] for p in polygon]
+        blocks.append({
+            "line_index": idx,
+            "text": text,
+            "confidence": conf,
+            "bbox_norm": [min(xs), min(ys), max(xs), max(ys)],
+            "polygon_norm": polygon,
+        })
+        if len(blocks) >= max_blocks:
+            break
+    return blocks
+
+
 def preload_visual_models() -> None:
     """Load CLIP and Florence-2 ahead of the first job. No-op unless residency is enabled."""
     if not visual_resident_enabled():
@@ -667,28 +704,41 @@ class SemanticAnalyzer:
 
             for scene in scenes:
                 path = scene.get("keyframe_path")
+                scene["ocr_blocks"] = []
                 if not path or not os.path.exists(path):
                     scene["ocr_text"] = ""
                     continue
-                
+
                 try:
                     result = ocr.ocr(path, cls=True)
-                    text_blocks = []
-                    if result and result[0]:
-                        for line in result[0]:
-                            text_blocks.append(line[1][0])
-                    
+                    lines = result[0] if result and result[0] else []
+                    # ocr_text keeps the legacy format: summarizer code depends on it.
+                    text_blocks = [line[1][0] for line in lines]
                     ocr_text = " | ".join(text_blocks)
                     scene["ocr_text"] = ocr_text.strip()
+
+                    img = cv2.imread(path)
+                    if img is not None:
+                        img_h, img_w = img.shape[:2]
+                        scene["ocr_blocks"] = _parse_ocr_lines(
+                            lines, img_w, img_h, worker_settings.OCR_MAX_BLOCKS_PER_SCENE
+                        )
                 except Exception as e:
                     print(f"[Semantic] OCR Error for {path}: {e}")
                     scene["ocr_text"] = ""
-                    
-            print(f"[Semantic] OCR extraction completed for {len(scenes)} scenes.")
+                    scene["ocr_blocks"] = []
+
+            total_blocks = sum(len(s.get("ocr_blocks") or []) for s in scenes)
+            with_text = sum(1 for s in scenes if s.get("ocr_blocks"))
+            print(
+                f"[Semantic] OCR extraction completed for {len(scenes)} scenes "
+                f"({with_text} with text, {total_blocks} blocks)."
+            )
         except Exception as e:
             print(f"[Semantic] Failed to load or run PaddleOCR: {e}")
             for scene in scenes:
                 scene["ocr_text"] = ""
+                scene["ocr_blocks"] = []
                 
     def process(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Full semantic pipeline: CLIP filtering -> Florence-2 captioning -> OCR."""

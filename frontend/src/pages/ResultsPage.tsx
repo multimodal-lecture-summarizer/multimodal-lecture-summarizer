@@ -16,6 +16,7 @@ import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
 import { KeyTakeawaysWidget } from '../components/results/KeyTakeawaysWidget';
 import { SceneObjectExplorer } from '../components/SceneObjectExplorer';
+import { SceneOcrExplorer } from '../components/SceneOcrExplorer';
 import { useDevMode } from '../context/DevModeContext';
 
 interface ChapterDTO {
@@ -1361,6 +1362,10 @@ export const ResultsPage: React.FC = () => {
                 onSeekVideo={seekTo}
                 currentTime={currentTime}
               />
+            )}
+
+            {videoId && (
+              <SceneOcrExplorer videoId={videoId} onSeekVideo={seekTo} />
             )}
 
             {/* Keyframes Gallery Section */}

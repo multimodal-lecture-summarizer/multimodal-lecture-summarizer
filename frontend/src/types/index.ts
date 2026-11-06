@@ -173,6 +173,17 @@ export interface ObjectTrackSummary {
   bestTimestampSec?: number;
 }
 
+export interface OcrBlock {
+  line_index?: number;
+  lineIndex?: number;
+  text: string;
+  confidence: number;
+  bbox_norm?: [number, number, number, number];
+  bboxNorm?: [number, number, number, number]; // [x1, y1, x2, y2] in 0..1
+  polygon_norm?: [number, number][];
+  polygonNorm?: [number, number][];
+}
+
 export interface SceneDetectedObjects {
   keyframe_bboxes?: KeyframeBBox[];
   keyframeBboxes?: KeyframeBBox[];
@@ -214,6 +225,8 @@ export interface VideoScene {
   script?: string;
   ocrText?: string;
   ocr_text?: string;
+  ocrBlocksJson?: OcrBlock[] | null;
+  ocr_blocks_json?: OcrBlock[] | null;
   detectedObjectsJson?: SceneDetectedObjects | null;
   detected_objects_json?: SceneDetectedObjects | null;
   objectCountsJson?: Record<string, number> | null;

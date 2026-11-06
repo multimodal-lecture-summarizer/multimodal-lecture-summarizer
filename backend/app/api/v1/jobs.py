@@ -171,6 +171,8 @@ def sync_job_status(job: Job, db: Session):
                     script=scene.get("script", ""),
                     detected_objects_json=scene.get("detected_objects"),
                     object_counts_json=scene.get("object_counts"),
+                    ocr_text=scene.get("ocr_text"),
+                    ocr_blocks_json=scene.get("ocr_blocks"),
                 )
                 db.add(db_scene)
 

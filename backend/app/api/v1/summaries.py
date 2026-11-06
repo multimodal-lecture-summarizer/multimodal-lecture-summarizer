@@ -346,7 +346,7 @@ def resummarize_video(
                 "timestamp": sc.start_seconds,
                 "start_timecode": sc.start_timecode,
                 "caption": sc.caption or "",
-                "ocr_text": sc.script or "",
+                "ocr_text": sc.ocr_text or "",
                 "description": sc.caption or "",
                 "importanceScore": 0.85,
                 "imageUrl": sc.keyframe_url or "",

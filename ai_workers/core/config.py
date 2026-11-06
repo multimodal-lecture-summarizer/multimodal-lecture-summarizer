@@ -71,6 +71,7 @@ class WorkerSettings(BaseSettings):
     PADDLEOCR_USE_GPU: bool = False
     # Slide text language; English by default for the English-lecture scope ("vi" for Vietnamese slides).
     PADDLEOCR_LANG: str = "en"
+    OCR_MAX_BLOCKS_PER_SCENE: int = 200
 
     # Object Detection & Tracking module: RT-DETR-R18vd (detector) + BoT-SORT (tracker), the models
     # the benchmark selected (benchmark/docs/BENCHMARK.md, 03a detection and 03b tracking). On by

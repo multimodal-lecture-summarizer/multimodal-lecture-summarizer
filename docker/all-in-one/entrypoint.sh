@@ -39,6 +39,15 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
     echo "[all-in-one] Database '$DB_NAME' is ready."
 fi
 
+# Existing data volumes: the API only runs create_all, which never adds columns to a table that
+# already exists. Add the scene OCR columns idempotently (no-op on a fresh database).
+as_postgres "$PGBIN/pg_ctl" -D "$PGDATA" -w \
+    -o "-c listen_addresses='' -c unix_socket_directories=$PGSOCKET" start > /dev/null
+as_postgres "$PGBIN/psql" -h "$PGSOCKET" -U "$DB_USER" -d "$DB_NAME" -q -c \
+    "ALTER TABLE IF EXISTS video_scenes ADD COLUMN IF NOT EXISTS ocr_text TEXT, ADD COLUMN IF NOT EXISTS ocr_blocks_json JSON" \
+    || echo "[all-in-one] Warning: could not add scene OCR columns."
+as_postgres "$PGBIN/pg_ctl" -D "$PGDATA" -m fast -w stop > /dev/null
+
 # The bundled database wins over any hosted POSTGRES_* values that came in with backend/.env.
 export POSTGRES_SERVER=localhost POSTGRES_PORT=5432
 export POSTGRES_USER="$DB_USER" POSTGRES_PASSWORD="$DB_PASS" POSTGRES_DB="$DB_NAME"

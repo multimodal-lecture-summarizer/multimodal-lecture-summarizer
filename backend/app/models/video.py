@@ -111,6 +111,8 @@ class VideoScene(Base):
     script: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     detected_objects_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     object_counts_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    ocr_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ocr_blocks_json: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     video: Mapped["Video"] = relationship("Video", back_populates="scenes")

@@ -78,6 +78,14 @@ class VideoObjectsDetailResponseDTO(CamelModel):
     objects: List[VideoObjectLabelDetailDTO] = Field(default=[], description="Per-label breakdown with scene timestamps")
 
 
+class OcrBlockDTO(CamelModel):
+    line_index: int = Field(0, description="Position of this line in PaddleOCR output order")
+    text: str = Field(..., description="Recognized text of this line")
+    confidence: float = Field(..., description="Recognition confidence (0.0 - 1.0)")
+    bbox_norm: List[float] = Field(..., description="Axis-aligned box [x1, y1, x2, y2] in range [0.0, 1.0]")
+    polygon_norm: List[List[float]] = Field(default=[], description="4-point text polygon, normalized 0.0 - 1.0")
+
+
 class VideoSceneBase(CamelModel):
     scene_index: int = Field(..., description="Sequence number of the scene (1-indexed)")
     start_seconds: float = Field(..., description="Scene start time in seconds")
@@ -96,11 +104,17 @@ class VideoSceneBase(CamelModel):
     object_counts_json: Optional[dict[str, int]] = Field(
         None, description="Unique object counts per label in this scene"
     )
+    ocr_text: Optional[str] = Field(None, description="OCR text of the keyframe, lines joined by ' | '")
+    ocr_blocks_json: Optional[List[OcrBlockDTO]] = Field(
+        None, description="Per-line OCR results with confidence and normalized boxes"
+    )
 
     @model_validator(mode="before")
     @classmethod
     def normalize_scene_objects(cls, data: Any) -> Any:
         if isinstance(data, dict):
+            if "ocr_blocks" in data and "ocr_blocks_json" not in data:
+                data["ocr_blocks_json"] = data["ocr_blocks"]
             if "detected_objects" in data and "detected_objects_json" not in data:
                 data["detected_objects_json"] = data["detected_objects"]
             if "object_counts" in data and "object_counts_json" not in data:
