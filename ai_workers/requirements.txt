@@ -18,7 +18,8 @@ ctranslate2>=4.5.0,<5; sys_platform != "win32"
 pyannote.audio>=3.1
 # English ASR default (Qwen3-ASR + forced aligner). Pins transformers==4.57.6, same as below.
 qwen-asr>=0.0.6
-deepfilternet
+# Without this floor uv falls back to 0.2.4, whose deepfilterlib has no wheel and needs a Rust toolchain.
+deepfilternet>=0.5.6
 
 # Visual: PySceneDetect, OpenCV
 opencv-python==4.9.0.80
