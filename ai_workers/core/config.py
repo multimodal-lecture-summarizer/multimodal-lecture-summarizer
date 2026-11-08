@@ -99,6 +99,8 @@ class WorkerSettings(BaseSettings):
     ENABLE_LLM_SUMMARIZER: bool = True
     LED_MODEL: str = "allenai/led-large-16384-arxiv"
     LED_MODEL_REVISION: str = "0f8b26971c44af9d4e21edd17ccb5e000f22dac1"
+    # Interleave cleaned slide OCR into the LED input; false restores transcript-only input.
+    LED_INCLUDE_OCR: bool = True
 
     # Fusion module
     LLM_PROVIDER: str = "openai"

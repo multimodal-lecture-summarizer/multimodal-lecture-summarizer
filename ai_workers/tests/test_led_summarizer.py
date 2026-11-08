@@ -183,3 +183,61 @@ def test_summarizer_returns_led_result_when_available():
     with patch.object(led, "build_led_result", return_value=sentinel):
         out = Summarizer().summarize(UTTERANCES, [], CHAPTERS, job_id="j", output_language="en")
     assert out is sentinel
+
+
+class _RecordingLed(_FakeLed):
+    def __init__(self):
+        super().__init__()
+        self.sources = []
+
+    def encode(self, text):
+        self.sources.append(text)
+        return super().encode(text)
+
+
+SLIDES = [{"start_seconds": 5.0, "ocr_text": "Gradient descent notes"}]
+PLAIN = " ".join(u["text"] for u in UTTERANCES)
+
+
+def _build_with(slides, utterances=UTTERANCES):
+    fake = _RecordingLed()
+    with patch("torch.cuda.is_available", return_value=True), patch.object(led, "LedModel", return_value=fake):
+        result = led.build_led_result(
+            utterances, slides, CHAPTERS, job_id="j", output_language="en", length_key="medium"
+        )
+    return result, fake
+
+
+def test_ocr_enabled_interleaves_slides_and_marks_model_used(led_on, monkeypatch):
+    monkeypatch.setattr(worker_settings, "LED_INCLUDE_OCR", True)
+    result, fake = _build_with(SLIDES)
+    assert "Slide: Gradient descent notes." in fake.sources[0]
+    assert result["model_used"].endswith("+ OCR)")
+
+
+def test_ocr_disabled_feeds_plain_transcript(led_on, monkeypatch):
+    monkeypatch.setattr(worker_settings, "LED_INCLUDE_OCR", False)
+    result, fake = _build_with(SLIDES)
+    assert fake.sources[0] == PLAIN
+    assert "+ OCR" not in result["model_used"]
+
+
+def test_slides_without_ocr_feed_plain_transcript(led_on, monkeypatch):
+    monkeypatch.setattr(worker_settings, "LED_INCLUDE_OCR", True)
+    result, fake = _build_with([{"start_seconds": 5.0, "ocr_text": None}])
+    assert fake.sources[0] == PLAIN
+    assert "+ OCR" not in result["model_used"]
+
+
+def test_merge_failure_keeps_led_on_transcript(led_on, monkeypatch):
+    monkeypatch.setattr(worker_settings, "LED_INCLUDE_OCR", True)
+    with patch("ai_workers.modules.summarization.ocr_evidence.merge_speech_and_ocr", side_effect=ValueError("boom")):
+        result, fake = _build_with(SLIDES)
+    assert fake.sources[0] == PLAIN
+    assert result is not None and "+ OCR" not in result["model_used"]
+
+
+def test_empty_transcript_with_ocr_returns_none(led_on, monkeypatch):
+    monkeypatch.setattr(worker_settings, "LED_INCLUDE_OCR", True)
+    result, fake = _build_with(SLIDES, utterances=[{"start": 0.0, "text": "  "}])
+    assert result is None and fake.sources == []

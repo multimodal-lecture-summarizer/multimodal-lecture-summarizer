@@ -2,7 +2,8 @@
 
 Reproduces the benchmarked profile `led-ngram3` (allenai/led-large-16384-arxiv, fp16, 4096-token
 encoder windows padded to a multiple of 1024, global attention on the first token, 4 beams,
-no_repeat_ngram_size=3, 256-token map/reduce notes, 768-token final note, plain transcript input).
+no_repeat_ngram_size=3, 256-token map/reduce notes, 768-token final note). Input is the transcript with slide OCR interleaved by time
+(LED_INCLUDE_OCR, on by default); with it off the input is the plain transcript the benchmark used.
 Only the summary text comes from LED; title, takeaways and chapter summaries stay extractive.
 Any failure returns None so the caller falls through to the LLM path.
 """
@@ -249,10 +250,25 @@ def build_led_result(
         generate_calls[0] += 1
         return led.generate(ids, max_new_tokens)
 
+    source, ocr_words = transcript, 0
+    if worker_settings.LED_INCLUDE_OCR:
+        try:
+            from ai_workers.modules.summarization.ocr_evidence import merge_speech_and_ocr
+
+            source, stats = merge_speech_and_ocr(utterances, slides)
+            ocr_words = stats["ocr_words"]
+            _say(
+                f"Đầu vào LED: {stats['transcript_words']} từ lời giảng, "
+                f"{ocr_words} từ OCR từ {stats['slides_used']} slide."
+            )
+        except Exception as err:
+            source, ocr_words = transcript, 0
+            _say(f"Không ghép được OCR, dùng transcript: {err!r}")
+
     failed = False
     generate_started = time.perf_counter()
     try:
-        raw = led_map_reduce(led.encode(transcript), led.encode, counted_generate)
+        raw = led_map_reduce(led.encode(source), led.encode, counted_generate)
     except Exception as err:
         failed = True
         _say(f"LED tóm tắt thất bại, chuyển sang LLM: {err!r}")
@@ -298,7 +314,7 @@ def build_led_result(
 
     word_count = len(summary.split())
     reading_time_sec = max(10, int((word_count / 200) * 60))
-    model_used = f"LED ({worker_settings.LED_MODEL}, map-reduce)"
+    model_used = f"LED ({worker_settings.LED_MODEL}, map-reduce{' + OCR' if ocr_words > 0 else ''})"
     result.update(
         {
             "summary": summary,
