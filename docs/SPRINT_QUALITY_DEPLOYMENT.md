@@ -303,7 +303,7 @@ flowchart TB
 
 | Mục | Liên kết |
 |---|---|
-| Kiến trúc tổng thể | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Kiến trúc tổng thể | [current-system-architecture.md](./current-system-architecture.md) |
 | Benchmark metrics | [BENCHMARK.md](./BENCHMARK.md) |
 | Florence CPU/GPU | [florence-2-cpu-reproducibility.md](./florence-2-cpu-reproducibility.md) |
 | Sprint code | `experiments/pipeline/sprints.py` |

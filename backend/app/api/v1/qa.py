@@ -4,7 +4,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.exceptions import NotFoundException
+from app.core.constants import RagStatus
+from app.core.exceptions import ConflictException, NotFoundException
 from app.middleware.case_converter import CamelCaseAPIRoute
 from app.schemas import BaseDTO, QAAskRequest, QALogDTO
 from app.schemas.qa import QACitationDTO
@@ -33,6 +34,12 @@ FORBIDDEN_SCRIPT_RE = re.compile(
     r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
     r"\uac00-\ud7af\u0600-\u06ff\u0400-\u04ff]"
 )
+
+
+def rag_status_value(status: object) -> str:
+    if isinstance(status, RagStatus):
+        return status.value
+    return str(status or RagStatus.PENDING.value)
 
 
 def clean_qa_answer(answer: str) -> str:
@@ -80,6 +87,13 @@ def ask_question(
     )
     if not video:
         raise NotFoundException(message=f"Video with ID {video_id} not found")
+
+    current_rag_status = rag_status_value(video.rag_status)
+    if current_rag_status != RagStatus.READY.value:
+        raise ConflictException(
+            message="Chỉ mục hỏi đáp chưa sẵn sàng. Hãy đợi dựng index xong hoặc dựng lại.",
+            details={"ragStatus": current_rag_status},
+        )
 
     summary = db.query(Summary).filter(Summary.video_id == video_id).first()
     if not summary:

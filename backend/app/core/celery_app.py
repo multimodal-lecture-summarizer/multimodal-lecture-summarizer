@@ -15,6 +15,11 @@ celery_app.conf.update(
     enable_utc=True,
     broker_pool_limit=0,
     redis_max_connections=2,
+    # Release dead sockets promptly; the managed Redis plan caps concurrent clients.
+    broker_transport_options={"socket_keepalive": True, "health_check_interval": 30},
+    redis_socket_keepalive=True,
+    redis_backend_health_check_interval=30,
+    redis_retry_on_timeout=True,
     worker_gossip=False,
     worker_mingle=False,
     worker_send_task_events=False,

@@ -5,6 +5,7 @@ structured logging sanitization, and fallback schemas.
 """
 
 from __future__ import annotations
+from asr_factory_stub import factory_stub
 
 import io
 import json
@@ -366,6 +367,24 @@ class LLMResilienceTests(unittest.TestCase):
         self.assertIn("llm_error", result)
         self.assertEqual(result["llm_error"]["error_code"], "LLM_TIMEOUT")
 
+    def test_summarizer_skips_llm_providers_when_disabled(self):
+        """ENABLE_LLM_SUMMARIZER=false never calls OpenRouter/Groq and still returns a summary."""
+        summarizer = Summarizer(custom_wait=wait_none())
+        summarizer.openrouter_client._client = MagicMock()
+        summarizer.groq_client._client = MagicMock()
+
+        utterances = [{"start": 0.0, "end": 60.0, "text": "Hello world"}]
+        slides = [{"start_seconds": 0.0, "end_seconds": 60.0, "caption": "Intro slide", "ocr_text": "AI"}]
+        chapters = [{"title": "Introduction", "startTime": 0.0, "endTime": 60.0, "summary": "Intro"}]
+
+        with patch("ai_workers.core.config.worker_settings.ENABLE_LLM_SUMMARIZER", False):
+            result = summarizer.summarize(utterances, slides, chapters, job_id="job-no-llm", output_language="vi")
+
+        summarizer.openrouter_client._client.chat.completions.create.assert_not_called()
+        summarizer.groq_client._client.chat.completions.create.assert_not_called()
+        self.assertTrue(result["summary"])
+        self.assertIn("chapters", result)
+
     def test_summarizer_success_with_chapters(self):
         """When LLM returns valid schema, summarizer parses and formats chapters correctly."""
         summarizer = Summarizer(custom_wait=wait_none())
@@ -374,7 +393,8 @@ class LLMResilienceTests(unittest.TestCase):
         json_response = json.dumps({
             "analysis": "Analysis CoT...",
             "video_title": "Bài giảng Trí tuệ Nhân tạo",
-            "summary": "Tóm tắt bài giảng chi tiết về AI.",
+            "title_evidence": "Trí tuệ Nhân tạo",
+            "summary": "Tóm tắt bài giảng chi tiết và toàn diện về Trí tuệ Nhân tạo và ứng dụng thực tiễn.",
             "chapters": [
                 {
                     "title": "Giới thiệu AI",
@@ -388,14 +408,14 @@ class LLMResilienceTests(unittest.TestCase):
         mock_resp = make_mock_response(json_response)
         summarizer.openrouter_client._client.chat.completions.create.return_value = mock_resp
 
-        utterances = [{"start": 0.0, "end": 60.0, "text": "Hello AI world"}]
+        utterances = [{"start": 0.0, "end": 60.0, "text": "Bài học hôm nay nói về Trí tuệ Nhân tạo."}]
         slides = []
         chapters = [{"title": "Chương 1", "startTime": 0.0, "endTime": 60.0, "summary": "Demo"}]
 
         result = summarizer.summarize(utterances, slides, chapters, job_id="job-success")
 
         self.assertEqual(result["video_title"], "Bài giảng Trí tuệ Nhân tạo")
-        self.assertEqual(result["summary"], "Tóm tắt bài giảng chi tiết về AI.")
+        self.assertEqual(result["summary"], "Tóm tắt bài giảng chi tiết và toàn diện về Trí tuệ Nhân tạo và ứng dụng thực tiễn.")
         self.assertEqual(len(result["chapters"]), 1)
         self.assertEqual(result["chapters"][0]["title"], "Giới thiệu AI")
 
@@ -480,6 +500,7 @@ class LLMResilienceTests(unittest.TestCase):
 
         mock_modules = {
             "ai_workers.modules.audio_v2.transcriber": mock_audio_mod,
+            "ai_workers.modules.audio_v2.factory": factory_stub(mock_audio_mod),
             "ai_workers.modules.audio_v2.speaker": mock_speaker_mod,
             "ai_workers.modules.visual_v2.scene_detector": mock_scene_mod,
             "ai_workers.modules.visual_v2.semantic": mock_semantic_mod,

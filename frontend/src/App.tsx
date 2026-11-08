@@ -10,8 +10,10 @@ import { HistoryPage } from './pages/HistoryPage';
 import { AuthPage } from './pages/AuthPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { DocsPage } from './pages/DocsPage';
+import { EvaluationBenchmarkPage } from './pages/EvaluationBenchmarkPage';
 import { api } from './services/api';
 import { ToastProvider } from './context/ToastContext';
+import { DevModeProvider } from './context/DevModeContext';
 import { TopProgress } from './components/TopProgress';
 import './App.css';
 
@@ -64,8 +66,9 @@ function App() {
 
   return (
     <ToastProvider>
-      <TopProgress />
-      <Router>
+      <DevModeProvider>
+        <TopProgress />
+        <Router>
         <div className="app-container">
           <Header isLoggedIn={isLoggedIn} onLogout={handleLogout} />
           <main className="app-main-content">
@@ -88,6 +91,10 @@ function App() {
                 element={isLoggedIn ? (user?.role === 'admin' ? <AdminPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
               />
               <Route 
+                path="/evaluation" 
+                element={isLoggedIn ? (user?.role === 'admin' ? <EvaluationBenchmarkPage /> : <Navigate to="/history" />) : <Navigate to="/auth" />} 
+              />
+              <Route 
                 path="/history" 
                 element={isLoggedIn ? <HistoryPage /> : <Navigate to="/auth" />} 
               />
@@ -105,6 +112,7 @@ function App() {
           </main>
         </div>
       </Router>
+      </DevModeProvider>
     </ToastProvider>
   );
 }

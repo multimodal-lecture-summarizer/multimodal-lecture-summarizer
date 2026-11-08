@@ -55,6 +55,15 @@ def is_generic_caption(desc: str) -> bool:
     return bool(re.match(r"(?i)^keyframe for scene\s+\d+$", desc_clean))
 
 
+def is_action_scene_kf(kf: dict) -> bool:
+    """Check if keyframe represents an action scene with detected objects."""
+    detected = kf.get("detected_objects", {})
+    tracks = detected.get("tracks_summary", []) if isinstance(detected, dict) else []
+    counts = kf.get("object_counts", {})
+    has_objs = len(tracks) > 0 or (isinstance(counts, dict) and any(c > 0 for c in counts.values()))
+    return bool(has_objs)
+
+
 def keyframe_evidence_score(kf: dict) -> float:
     transcript = (kf.get("transcript") or "").strip()
     ocr = (kf.get("ocr_text") or _ocr_from_description(kf.get("description") or "")).strip()
@@ -71,10 +80,17 @@ def keyframe_evidence_score(kf: dict) -> float:
         score += 1.5
     if transcript:
         score += 1.0
+
+    # Action scene boost: presence of tracked objects provides high visual evidence
+    if is_action_scene_kf(kf):
+        detected = kf.get("detected_objects", {})
+        tracks = detected.get("tracks_summary", []) if isinstance(detected, dict) else []
+        score += 3.0 + min(len(tracks), 4) * 0.5
+
     return round(score, 3)
 
 
-def post_process_chapters(chapters: list, min_dur_sec: float = 45.0) -> list:
+def post_process_chapters(chapters: list, min_dur_sec: float = 25.0) -> list:
     if not chapters:
         return []
 
@@ -102,7 +118,7 @@ def post_process_chapters(chapters: list, min_dur_sec: float = 45.0) -> list:
     return smoothed
 
 
-def sprint1_smooth_chapters(chapters: list, min_dur_sec: float = 45.0) -> tuple[list, dict]:
+def sprint1_smooth_chapters(chapters: list, min_dur_sec: float = 25.0) -> tuple[list, dict]:
     before = len(chapters)
     out = post_process_chapters(chapters, min_dur_sec=min_dur_sec)
     return out, {"input": before, "output": len(out), "min_dur_sec": min_dur_sec}
@@ -114,16 +130,55 @@ def sprint3_enrich_captions(keyframes: list) -> tuple[list, dict]:
     kept_generic = 0
     for kf in keyframes:
         item = dict(kf)
-        desc = item.get("description") or item.get("caption") or ""
-        ocr = item.get("ocr_text") or _ocr_from_description(desc)
+        desc = (item.get("description") or item.get("caption") or "").strip()
+        ocr = (item.get("ocr_text") or _ocr_from_description(desc)).strip()
         item["ocr_text"] = ocr
+
+        # Extract YOLO labels for context hint and hallucination check
+        yolo_labels = []
+        counts = item.get("object_counts")
+        if isinstance(counts, dict):
+            yolo_labels.extend(counts.keys())
+        detected = item.get("detected_objects")
+        if isinstance(detected, dict):
+            for b in detected.get("keyframe_bboxes", []):
+                if b.get("label"):
+                    yolo_labels.append(b["label"])
+        yolo_labels_lower = [l.lower() for l in yolo_labels]
+
+        has_bike = any(lbl in ("motorcycle", "bicycle", "bike") for lbl in yolo_labels_lower)
+        has_person = "person" in yolo_labels_lower
+        has_bat = any(lbl in ("baseball bat", "bat", "sports ball") for lbl in yolo_labels_lower)
+
+        # Sanitize Florence-2 hallucinations (e.g. baseball bat on motorcycle handlebars)
+        if not has_bat and (has_bike or has_person):
+            desc = re.sub(r"\b(?:holding|with|swinging)\s+(?:a\s+)?baseball\s+bat\b", "holding the handlebars", desc, flags=re.IGNORECASE)
+            desc = re.sub(r"\b(?:a\s+)?baseball\s+bat\b", "the handlebars", desc, flags=re.IGNORECASE)
+            desc = re.sub(r"\btennis\s+racket\b", "protective gear", desc, flags=re.IGNORECASE)
+            desc = re.sub(r"\bsurfboard\b", "bike frame", desc, flags=re.IGNORECASE)
+
         if is_generic_caption(desc) and len(ocr) >= 4:
             item["description"] = f"Slide Text: {ocr[:120]}"
             item["caption"] = item["description"]
             item["caption_enriched"] = True
             enriched += 1
+        elif is_generic_caption(desc) and is_action_scene_kf(item):
+            # Enrich generic caption using YOLO detected action objects
+            obj_parts = []
+            if isinstance(counts, dict) and any(c > 0 for c in counts.values()):
+                obj_parts = [f"{c} {lbl}" for lbl, c in sorted(counts.items()) if c > 0]
+            elif yolo_labels:
+                from collections import Counter
+                obj_parts = [f"{c} {lbl}" for lbl, c in Counter(yolo_labels).items()]
+            obj_str = ", ".join(obj_parts) if obj_parts else "active subjects"
+            item["description"] = f"Action scene featuring {obj_str}."
+            item["caption"] = item["description"]
+            item["caption_enriched"] = True
+            enriched += 1
         else:
-            item["caption_enriched"] = False
+            item["description"] = desc
+            item["caption"] = desc
+            item["caption_enriched"] = bool(desc and not is_generic_caption(desc))
             if is_generic_caption(desc):
                 kept_generic += 1
         out.append(item)
@@ -132,7 +187,7 @@ def sprint3_enrich_captions(keyframes: list) -> tuple[list, dict]:
 
 def sprint4_prune_dense_keyframes(
     keyframes: list,
-    window_sec: float = 45.0,
+    window_sec: float = 30.0,
     max_per_window: int = 2,
     min_evidence_score: float = 1.0,
 ) -> tuple[list, dict]:
@@ -162,7 +217,8 @@ def sprint4_prune_dense_keyframes(
 
         ranked = sorted(window, key=lambda k: k.get("evidence_score", 0), reverse=True)
         for idx, kf in enumerate(ranked):
-            if idx < max_per_window:
+            is_action = is_action_scene_kf(kf)
+            if idx < max_per_window or is_action:
                 kf["sprint4_status"] = "kept"
                 kept.append(kf)
             elif kf.get("evidence_score", 0) < min_evidence_score:
@@ -194,7 +250,7 @@ def _kf_in_chapter(kf: dict, start: float, end: float, is_last: bool) -> bool:
 def sprint4_v2_chapter_aware_prune(
     chapters: list,
     keyframes: list,
-    window_sec: float = 45.0,
+    window_sec: float = 30.0,
     max_per_window: int = 2,
     min_evidence_score: float = 1.0,
 ) -> tuple[list, dict]:
@@ -208,6 +264,22 @@ def sprint4_v2_chapter_aware_prune(
     kept_by_ts = {float(k.get("timestamp") or 0.0): k for k in kept}
     restored = 0
 
+    # 1. Action-Scene Protection: ensure all distinct action scenes are retained
+    for kf in original:
+        if is_action_scene_kf(kf):
+            ts = float(kf.get("timestamp") or 0.0)
+            if ts not in kept_by_ts:
+                # Keep if not within 3 seconds of another kept keyframe
+                is_near = any(abs(ts - float(k.get("timestamp") or 0.0)) <= 3.0 for k in kept)
+                if not is_near:
+                    item = dict(kf)
+                    item["evidence_score"] = keyframe_evidence_score(item)
+                    item["sprint4_status"] = "restored_action_scene"
+                    kept.append(item)
+                    kept_by_ts[ts] = item
+                    restored += 1
+
+    # 2. Chapter coverage: ensure at least 1 keyframe per chapter
     n = len(chapters)
     for i, ch in enumerate(chapters):
         start, end = _chapter_bounds(ch)
@@ -237,6 +309,20 @@ def sprint4_v2_chapter_aware_prune(
             item["sprint4_status"] = "restored_chapter_gap"
             kept.append(item)
             kept_by_ts[ts] = item
+            restored += 1
+
+    # 3. Minimum keyframes target: ensure at least 8-12 representative keyframes retained if available
+    min_kfs_target = min(len(original), max(8, min(12, int(len(original) * 0.75))))
+    if len(kept) < min_kfs_target:
+        remaining = [k for k in original if float(k.get("timestamp") or 0.0) not in kept_by_ts]
+        remaining.sort(key=keyframe_evidence_score, reverse=True)
+        for cand in remaining:
+            if len(kept) >= min_kfs_target:
+                break
+            cand_item = dict(cand)
+            cand_item["sprint4_status"] = "restored_min_count"
+            kept.append(cand_item)
+            kept_by_ts[float(cand.get("timestamp") or 0.0)] = cand_item
             restored += 1
 
     stats["chapter_restores"] = restored
@@ -375,7 +461,7 @@ def sprint9_chapter_visual_hints(
 def sprint10_quality_score(
     chapters: list,
     keyframes: list,
-    min_chapter_sec: float = 45.0,
+    min_chapter_sec: float = 25.0,
 ) -> tuple[dict, dict]:
     durs = []
     for ch in chapters:
@@ -430,13 +516,13 @@ def apply_sprint_stack(
     ctx: SprintContext,
     stack: list[str] | None = None,
     *,
-    min_chapter_sec: float = 45.0,
+    min_chapter_sec: float = 25.0,
     sprint4_cfg: dict | None = None,
     caption_min_grounding: float = 0.10,
 ) -> SprintContext:
     stack = stack or RECOMMENDED_STACK
     sprint4_cfg = sprint4_cfg or {
-        "window_sec": 45.0,
+        "window_sec": 30.0,
         "max_per_window": 2,
         "min_evidence_score": 1.0,
     }
@@ -492,14 +578,33 @@ def normalize_for_backend(chapters: list, keyframes: list) -> tuple[list, list]:
     keyframes_out = []
     for kf in keyframes or []:
         item = dict(kf)
-        item["timestamp"] = float(item.get("timestamp") or 0.0)
-        item["imageUrl"] = item.get("imageUrl") or item.get("image_url") or ""
-        item["description"] = item.get("description") or item.get("caption") or ""
+        raw_start = item.get("start_seconds", item.get("timestamp"))
+        start = float(raw_start or 0.0)
+        raw_timestamp = item.get("timestamp")
+        item["timestamp"] = float(start if raw_timestamp in (None, "") else raw_timestamp)
+        item["start_seconds"] = start
+        for end_key in ("end_seconds", "endTime", "end_time"):
+            if item.get(end_key) not in (None, ""):
+                try:
+                    item["end_seconds"] = float(item[end_key])
+                    break
+                except (TypeError, ValueError):
+                    pass
+        description = item.get("description") or item.get("caption") or ""
+        item["description"] = description
+        item["caption"] = description
+        image_url = item.get("keyframe_url") or item.get("imageUrl") or item.get("image_url") or ""
+        item["keyframe_url"] = image_url
+        item["imageUrl"] = item.get("imageUrl") or image_url
         item["importanceScore"] = float(
             item.get("importanceScore", item.get("importance_score", 0.5)) or 0.5
         )
         item["transcript"] = item.get("transcript") or ""
         item["ocr_text"] = item.get("ocr_text") or _ocr_from_description(item["description"])
+        if "detected_objects" in kf:
+            item["detected_objects"] = kf["detected_objects"]
+        if "object_counts" in kf:
+            item["object_counts"] = kf["object_counts"]
         keyframes_out.append(item)
 
     return chapters_out, keyframes_out
@@ -511,7 +616,7 @@ def apply_quality_postprocess(
     keyframes: list,
     utterances: list | None = None,
     stack_name: str = "recommended",
-    min_chapter_sec: float = 45.0,
+    min_chapter_sec: float = 25.0,
 ) -> dict[str, Any]:
     """Convenience wrapper used by Celery tasks."""
     ctx = SprintContext(

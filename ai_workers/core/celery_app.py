@@ -100,6 +100,22 @@ app.conf.update(
     worker_prefetch_multiplier=1,  # 1 task at a time per worker for GPU tasks
     broker_pool_limit=1,
     redis_max_connections=2,
+    # Managed Redis caps concurrent clients; keepalive and health checks let dead sockets
+    # (killed Colab sessions, NAT drops) be detected and released instead of lingering.
+    broker_transport_options={"socket_keepalive": True, "health_check_interval": 30},
+    redis_socket_keepalive=True,
+    redis_backend_health_check_interval=30,
+    redis_retry_on_timeout=True,
+    broker_connection_retry_on_startup=True,
+    # Redis Cloud's free plan allows ~30 clients shared by every worker and the API. When it is
+    # full, a worker that lost its connection would give up after the default 100 retries; keep
+    # retrying until slots free up instead of exiting.
+    broker_connection_max_retries=None,
+    # Remote control (pidbox) costs one extra Redis client per worker. The backend needs it from the
+    # GPU worker (it inspects active queues to route jobs to Colab, and revokes cancelled jobs), so it
+    # stays on by default; the all-in-one container, whose local worker is never inspected for
+    # routing, switches it off with WORKER_REMOTE_CONTROL=false.
+    worker_enable_remote_control=worker_settings.WORKER_REMOTE_CONTROL,
     worker_gossip=False,
     worker_mingle=False,
     worker_send_task_events=False,
@@ -113,6 +129,19 @@ _startup_log(
     f"prefetch={app.conf.worker_prefetch_multiplier}, "
     f"acks_late={app.conf.task_acks_late}, timezone={app.conf.timezone}"
 )
+
+
+@worker_shutdown.connect
+def release_redis_connections(**_kwargs):
+    """Close broker and result-backend sockets on exit so the Redis client slots free immediately."""
+    try:
+        app.close()
+        backend_pool = getattr(getattr(app.backend, "client", None), "connection_pool", None)
+        if backend_pool is not None:
+            backend_pool.disconnect()
+        _startup_log("Worker shutdown: Redis connections released.")
+    except Exception as exc:
+        _startup_log(f"Worker shutdown: releasing Redis connections failed: {exc!r}")
 
 
 @setup_logging.connect
@@ -231,6 +260,18 @@ def validate_florence_runtime_on_startup(**_kwargs):
         f"Florence-2 runtime verified: "
         f"{runtime.device}/float32/eager, all asset SHA-256 checks OK."
     )
+
+
+@worker_init.connect
+def start_model_prefetch(**_kwargs):
+    """Warm the model caches in the background; never blocks or fails worker start-up."""
+    try:
+        from ai_workers.core.model_prefetch import start_prefetch_thread
+
+        if start_prefetch_thread(_startup_log) is not None:
+            _startup_log("Model prefetch started in the background.")
+    except Exception as exc:
+        _startup_log(f"Model prefetch not started: {exc!r}")
 
 
 @worker_ready.connect

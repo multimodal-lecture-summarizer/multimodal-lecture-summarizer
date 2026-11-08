@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Fast rebuild: reuse an existing all-in-one image (Python deps, apt packages already installed)
+# and replace only the application code, the built UI and the entrypoint scripts.
+# Use when requirements did NOT change; otherwise build docker/all-in-one/Dockerfile.
+#
+#   docker tag multimodal-lecture-summarizer:all-in-one multimodal-lecture-summarizer:all-in-one-base
+#   docker build -f docker/all-in-one/Dockerfile.patch -t multimodal-lecture-summarizer:all-in-one .
+
+ARG BASE_IMAGE=multimodal-lecture-summarizer:all-in-one-base
+
+FROM node:22-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+ARG VITE_API_BASE_URL=http://localhost:8000/api/v1
+ARG VITE_BACKEND_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
+    VITE_BACKEND_URL=$VITE_BACKEND_URL
+RUN npm run build
+
+FROM ${BASE_IMAGE}
+RUN rm -rf /app/ai_workers /app/backend /usr/share/nginx/html/*
+COPY ai_workers ai_workers
+COPY backend backend
+RUN rm -rf /app/backend/storage && ln -s /app/storage /app/backend/storage
+COPY --from=frontend-build /app/dist /usr/share/nginx/html
+COPY docker/all-in-one/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/all-in-one/wait-for-services.sh /usr/local/bin/wait-for-services.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /usr/local/bin/wait-for-services.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/wait-for-services.sh

@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
 from faster_whisper import WhisperModel
 
 from ai_workers.core.config import worker_settings
+from ai_workers.modules.audio_v2.language import whisper_language_arg
 
 
 class AudioTranscriber:
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
-        self.model_size = self.config.get("model_name", "base.en")
+        self.model_size = (
+            self.config.get("model_name")
+            or getattr(worker_settings, "FASTER_WHISPER_MODEL", None)
+            or "small"
+        )
         self.cache_dir = Path(worker_settings.CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -39,14 +45,20 @@ class AudioTranscriber:
 
         import torch
 
-        # CTranslate2 on Windows still expects cuDNN 8 symbols; prefer GPU only when present.
-        cudnn8_dll = ctranslate2_dir / "cudnn_ops_infer64_8.dll"
-        if not cudnn8_dll.exists():
-            cudnn8_dll = cudnn_bin / "cudnn_ops_infer64_8.dll"
+        # CTranslate2 on Windows still expects cuDNN 8 DLLs; prefer GPU only when present.
+        # Linux (Docker/Colab) uses ctranslate2>=4.5 with the cuDNN 9 libraries from the
+        # torch wheels, which must be on LD_LIBRARY_PATH before the process starts.
+        if sys.platform == "win32":
+            cudnn8_dll = ctranslate2_dir / "cudnn_ops_infer64_8.dll"
+            if not cudnn8_dll.exists():
+                cudnn8_dll = cudnn_bin / "cudnn_ops_infer64_8.dll"
+            cudnn_missing = not cudnn8_dll.exists()
+        else:
+            cudnn_missing = False
         force_device = str(self.config.get("device") or os.environ.get("FASTER_WHISPER_DEVICE", "")).lower()
 
-        if force_device == "cpu" or (torch.cuda.is_available() and not cudnn8_dll.exists()):
-            if torch.cuda.is_available() and force_device != "cpu" and not cudnn8_dll.exists():
+        if force_device == "cpu" or (torch.cuda.is_available() and cudnn_missing):
+            if torch.cuda.is_available() and force_device != "cpu" and cudnn_missing:
                 print(
                     "[ASR] cuDNN 8 DLL missing for Faster-Whisper; using CPU for ASR "
                     "(Florence/CLIP can still use CUDA)."
@@ -96,11 +108,32 @@ class AudioTranscriber:
         print(f"[OK] Extracted audio WAV file: {output_path}")
         return output_path
 
+    def load_samples(self, audio_path: str) -> np.ndarray:
+        """Read the 16 kHz mono WAV that extract_audio produced, without denoising."""
+        import soundfile as sf
+
+        samples, _ = sf.read(audio_path, dtype="float32")
+        return samples.mean(axis=1) if samples.ndim > 1 else samples
+
+    def denoise_samples(self, samples: np.ndarray) -> np.ndarray:
+        from ai_workers.modules.common.denoise import denoise_samples
+
+        return denoise_samples(samples)
+
+    def remember_denoised(self, audio_path: str, denoised: np.ndarray) -> None:
+        """Let a fallback ASR engine reuse the denoised audio instead of denoising again."""
+        from ai_workers.modules.common.denoise import remember_denoised
+
+        remember_denoised(audio_path, denoised)
+
     def reduce_noise(self, audio_path: str) -> np.ndarray:
+        started = time.perf_counter()
+        # First import pulls in librosa/torchaudio/DeepFilterNet, which is slow on a cold Colab disk.
         from ai_workers.modules.common.denoise import get_denoised_audio_array
+        print(f"[Denoise] Module import took {time.perf_counter() - started:.1f}s.", flush=True)
         return get_denoised_audio_array(audio_path)
 
-    def transcribe(self, audio_path: str) -> dict[str, Any]:
+    def transcribe(self, audio_path: str, source_language: str | None = None) -> dict[str, Any]:
         """Run ASR on audio file with word-level timestamps using Faster-Whisper.
 
         Returns:
@@ -122,16 +155,22 @@ class AudioTranscriber:
             download_root=str(self.cache_dir),
         )
 
-        print(f"Transcribing audio file: {audio_path} using Faster-Whisper with VAD...")
-        audio_input = self.reduce_noise(audio_path)
-        
-        segments_gen, info = model.transcribe(
-            audio_input,
-            beam_size=5,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=2000),
-            word_timestamps=True
+        language = whisper_language_arg(source_language)
+        print(
+            f"Transcribing audio file: {audio_path} using Faster-Whisper "
+            f"({self.model_size}, language={language or 'auto'}) with VAD..."
         )
+        audio_input = self.reduce_noise(audio_path)
+
+        transcribe_kwargs: dict[str, Any] = {
+            "beam_size": 5,
+            "vad_filter": True,
+            "vad_parameters": dict(min_silence_duration_ms=2000),
+            "word_timestamps": True,
+        }
+        if language:
+            transcribe_kwargs["language"] = language
+        segments_gen, info = model.transcribe(audio_input, **transcribe_kwargs)
 
         segments = []
         full_text_list = []
@@ -227,11 +266,14 @@ class AudioTranscriber:
         return {
             "text": full_text,
             "segments": segments,
-            "language": info.language
+            "language": info.language,
+            "source_language": language or "auto",
+            "asr_model": self.model_size,
         }
 
-    def process(self, video_path: str) -> dict[str, Any]:
+    def process(self, video_path: str, source_language: str | None = None) -> dict[str, Any]:
         audio_path = video_path.rsplit(".", 1)[0] + ".wav"
+        started = time.perf_counter()
         self.extract_audio(video_path, audio_path)
-        result = self.transcribe(audio_path)
-        return result
+        print(f"[ASR] FFmpeg audio extraction took {time.perf_counter() - started:.1f}s.", flush=True)
+        return self.transcribe(audio_path, source_language=source_language)

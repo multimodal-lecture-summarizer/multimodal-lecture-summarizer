@@ -261,7 +261,7 @@ python experiments/scripts/run_eval_tables.py `
 |----------|----------|
 | [`docs/EVAL_TABLES.md`](EVAL_TABLES.md) | Khung bảng luận văn, lệnh CLI |
 | [`docs/DATASET_EDA.md`](DATASET_EDA.md) | EDA TED-LIUM + TVSum |
-| [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) | Kiến trúc pipeline |
+| [`docs/current-system-architecture.md`](current-system-architecture.md) | Kiến trúc pipeline hiện tại |
 | [`experiments/evaluation/model_compare.py`](../experiments/evaluation/model_compare.py) | Production registry + compare helpers |
 
 ---

@@ -1,0 +1,132 @@
+{
+  "version": "1.0.0-od-gt-benchmark",
+  "dataset_name": "Multimodal Lecture Object Detection & Tracking Benchmark (EduVid-OD)",
+  "description": "Standardized Ground-Truth annotations for lecture scenes with normalized bounding boxes [x1, y1, x2, y2] in range [0, 1] and tracking identity.",
+  "coordinate_system": "normalized_xyxy",
+  "iou_thresholds": [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95],
+  "target_classes": [
+    "person",
+    "laptop",
+    "tv",
+    "cell phone",
+    "chair",
+    "book",
+    "bottle"
+  ],
+  "sample_video_metadata": {
+    "title": "Machine Learning Lecture - Deep Neural Networks",
+    "duration_sec": 180.0,
+    "resolution": "1920x1080",
+    "fps": 30.0
+  },
+  "reference_objects": [
+    {
+      "scene_index": 1,
+      "timestamp_sec": 12.5,
+      "objects": [
+        {
+          "label": "person",
+          "bbox_norm": [0.35, 0.15, 0.65, 0.85],
+          "track_id": 1,
+          "confidence": 1.0,
+          "description": "Lecturer standing in front of lecture screen"
+        },
+        {
+          "label": "laptop",
+          "bbox_norm": [0.20, 0.60, 0.45, 0.88],
+          "track_id": 2,
+          "confidence": 1.0,
+          "description": "Lecturer laptop on podium"
+        },
+        {
+          "label": "tv",
+          "bbox_norm": [0.05, 0.05, 0.50, 0.55],
+          "track_id": 3,
+          "confidence": 1.0,
+          "description": "Slide projector screen displaying presentation"
+        }
+      ]
+    },
+    {
+      "scene_index": 2,
+      "timestamp_sec": 45.0,
+      "objects": [
+        {
+          "label": "person",
+          "bbox_norm": [0.32, 0.14, 0.63, 0.87],
+          "track_id": 1,
+          "confidence": 1.0,
+          "description": "Lecturer gesturing toward whiteboard"
+        },
+        {
+          "label": "chair",
+          "bbox_norm": [0.25, 0.50, 0.55, 0.90],
+          "track_id": 4,
+          "confidence": 1.0,
+          "description": "Podium office chair"
+        },
+        {
+          "label": "book",
+          "bbox_norm": [0.60, 0.68, 0.75, 0.82],
+          "track_id": 5,
+          "confidence": 1.0,
+          "description": "Textbook open on desk"
+        }
+      ]
+    },
+    {
+      "scene_index": 3,
+      "timestamp_sec": 98.2,
+      "objects": [
+        {
+          "label": "person",
+          "bbox_norm": [0.40, 0.18, 0.68, 0.88],
+          "track_id": 1,
+          "confidence": 1.0,
+          "description": "Lecturer holding handheld device"
+        },
+        {
+          "label": "cell phone",
+          "bbox_norm": [0.48, 0.42, 0.54, 0.52],
+          "track_id": 6,
+          "confidence": 1.0,
+          "description": "Smartphone used as presentation clicker"
+        },
+        {
+          "label": "bottle",
+          "bbox_norm": [0.70, 0.65, 0.78, 0.85],
+          "track_id": 7,
+          "confidence": 1.0,
+          "description": "Water bottle on podium table"
+        }
+      ]
+    },
+    {
+      "scene_index": 4,
+      "timestamp_sec": 152.0,
+      "objects": [
+        {
+          "label": "person",
+          "bbox_norm": [0.38, 0.16, 0.66, 0.86],
+          "track_id": 1,
+          "confidence": 1.0,
+          "description": "Lecturer summarizing lecture conclusions"
+        },
+        {
+          "label": "laptop",
+          "bbox_norm": [0.22, 0.58, 0.48, 0.86],
+          "track_id": 2,
+          "confidence": 1.0,
+          "description": "Lecturer laptop on podium"
+        },
+        {
+          "label": "chair",
+          "bbox_norm": [0.26, 0.52, 0.56, 0.92],
+          "track_id": 4,
+          "confidence": 1.0,
+          "description": "Podium office chair"
+        }
+      ]
+    }
+  ]
+}

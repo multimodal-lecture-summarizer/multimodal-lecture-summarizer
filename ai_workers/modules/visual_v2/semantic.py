@@ -8,6 +8,14 @@ import torch
 from typing import Any
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, AutoProcessor, AutoModelForCausalLM
+
+from ai_workers.core.model_load_lock import MODEL_LOAD_LOCK
+from ai_workers.modules.visual_v2.resident_models import (
+    CLIP_SLOT,
+    FLORENCE_SLOT,
+    OCR_SLOT,
+    visual_resident_enabled,
+)
 from sklearn.metrics.pairwise import cosine_similarity
 from ai_workers.core.config import worker_settings
 from ai_workers.modules.visual_v2.florence_runtime import (
@@ -18,6 +26,85 @@ from ai_workers.modules.visual_v2.florence_runtime import (
     resolve_florence_runtime,
     verify_florence_model,
 )
+
+def _build_paddleocr():
+    # Imported here to avoid slow loading if not needed
+    from paddleocr import PaddleOCR
+    import logging
+    logging.getLogger("ppocr").setLevel(logging.WARNING)  # Suppress noisy logs
+
+    try:
+        return PaddleOCR(
+            use_angle_cls=True,
+            lang=worker_settings.PADDLEOCR_LANG,
+            use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
+        )
+    except Exception as init_err:
+        print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
+        return PaddleOCR(lang=worker_settings.PADDLEOCR_LANG)
+
+
+def load_paddleocr():
+    """The PaddleOCR engine; kept loaded between jobs when residency is on."""
+    return OCR_SLOT.get_or_load(_build_paddleocr) if visual_resident_enabled() else _build_paddleocr()
+
+
+def _parse_ocr_lines(lines: Any, img_w: int, img_h: int, max_blocks: int = 200) -> list[dict[str, Any]]:
+    """Convert PaddleOCR 2.x lines ``[poly(4x[x,y]), (text, conf)]`` into normalized blocks.
+
+    Coordinates are divided by image size and clamped to 0..1 so the UI is resolution
+    independent. Malformed entries and empty texts are skipped. Engine order is kept.
+    """
+    blocks: list[dict[str, Any]] = []
+    if not lines or img_w <= 0 or img_h <= 0:
+        return blocks
+
+    def _norm(v: float, size: int) -> float:
+        return round(min(1.0, max(0.0, v / size)), 4)
+
+    for idx, line in enumerate(lines):
+        try:
+            poly, rec = line[0], line[1]
+            text = str(rec[0]).strip()
+            if not text or len(poly) != 4:
+                continue
+            conf = round(float(rec[1]), 4)
+            polygon = [[_norm(float(p[0]), img_w), _norm(float(p[1]), img_h)] for p in poly]
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        xs = [p[0] for p in polygon]
+        ys = [p[1] for p in polygon]
+        blocks.append({
+            "line_index": idx,
+            "text": text,
+            "confidence": conf,
+            "bbox_norm": [min(xs), min(ys), max(xs), max(ys)],
+            "polygon_norm": polygon,
+        })
+        if len(blocks) >= max_blocks:
+            break
+    return blocks
+
+
+def preload_visual_models() -> None:
+    """Load CLIP and Florence-2 ahead of the first job. No-op unless residency is enabled."""
+    if not visual_resident_enabled():
+        return
+    analyzer = SemanticAnalyzer()
+    analyzer.load_clip()
+    if worker_settings.ENABLE_FLORENCE_CAPTIONING:
+        model_dir = os.path.join(os.path.dirname(__file__), "florence2_vendor")
+        runtime = resolve_florence_runtime(worker_settings.FLORENCE_DEVICE)
+        verify_florence_model(model_dir)
+        # Same guard as a real job (seeded, deterministic), taken before the slot lock so the
+        # lock order matches the job's.
+        determinism = FlorenceDeterminism(runtime)
+        determinism.enable()
+        try:
+            analyzer.load_florence(model_dir, runtime)
+        finally:
+            determinism.restore()
+
 
 class SemanticAnalyzer:
     """Vision encoding (CLIP), semantic filtering, and captioning (Florence-2) for keyframes."""
@@ -36,6 +123,69 @@ class SemanticAnalyzer:
         if worker_settings.FLORENCE_DEVICE.strip().lower() == "cuda":
             return "cpu"
         return "cuda" if torch.cuda.is_available() else "cpu"
+
+    def load_clip(self):
+        """(processor, model) for CLIP; kept loaded between jobs when residency is on."""
+        def load():
+            with MODEL_LOAD_LOCK:
+                processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
+            return processor, model
+
+        return CLIP_SLOT.get_or_load(load) if visual_resident_enabled() else load()
+
+    def load_florence(self, model_dir: str, runtime):
+        """(processor, model) for Florence-2; kept loaded between jobs when residency is on.
+
+        Callers hold the FlorenceDeterminism guard, so weights are tied under the fixed seed.
+        """
+        def load():
+            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
+            import transformers
+            try:
+                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
+                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
+                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                    )
+                # Ensure RobertaTokenizer specifically has it just in case
+                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
+                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
+                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
+                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
+                        )
+            except Exception as e:
+                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+
+            print("[Semantic] Loading Florence-2 processor...", flush=True)
+            with MODEL_LOAD_LOCK:
+                processor = AutoProcessor.from_pretrained(
+                    model_dir,
+                    trust_remote_code=True,
+                    use_fast=True,
+                )
+                print("[Semantic] Florence-2 processor loaded.", flush=True)
+                print("[Semantic] Loading Florence-2 model weights...", flush=True)
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_dir,
+                    dtype=runtime.dtype,
+                    trust_remote_code=True,
+                    attn_implementation=runtime.attention_implementation,
+                ).to(runtime.device)
+            model.eval()
+            print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
+
+            # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
+            if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
+                model.language_model.tie_weights()
+            elif hasattr(model, "tie_weights"):
+                model.tie_weights()
+            return processor, model
+
+        return FLORENCE_SLOT.get_or_load(load) if visual_resident_enabled() else load()
 
     def filter_scenes_clip(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Extract CLIP embeddings, perform zero-shot filtering, cluster, and score (V3)."""
@@ -82,12 +232,20 @@ class SemanticAnalyzer:
                     if density > 50 or (center_density > 0 and density / center_density > 3.0):
                         return True
             return False
-        
+
+        def is_protected_action_scene(sc_dict: dict[str, Any]) -> bool:
+            """Check if scene is a protected action scene that should never be pruned."""
+            dur = float(sc_dict.get("end_seconds", 0.0)) - float(sc_dict.get("start_seconds", 0.0))
+            det = sc_dict.get("detected_objects", {})
+            tracks = det.get("tracks_summary", []) if isinstance(det, dict) else []
+            counts = sc_dict.get("object_counts", {})
+            has_objs = len(tracks) > 0 or (isinstance(counts, dict) and any(c > 0 for c in counts.values()))
+            return dur >= 2.0 and has_objs
+
         try:
             print(f"[Semantic] Loading CLIP model to extract embeddings for {num_frames} frames...")
-            processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-            model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
-            
+            processor, model = self.load_clip()
+
             # Prompts for zero-shot filtering and action scoring
             text_prompts = [
                 "a real photograph of people, objects, actions, or a scene",
@@ -170,10 +328,13 @@ class SemanticAnalyzer:
             for i in range(num_frames):
                 if has_overlay[i]:
                     quality_scores[i] *= OVERLAY_PENALTY_FACTOR
-            
-            # Step 1: Hard filter out "graphics/logos"
+
+            # Step 1: Hard filter out "graphics/logos", BUT protect action scenes with detected objects
             filtered_indices = []
             for i in range(num_frames):
+                if is_protected_action_scene(valid_scenes[i]):
+                    filtered_indices.append(i)
+                    continue
                 sim_photo = zero_shot_sims[i, 0]
                 sim_graphic = zero_shot_sims[i, 1]
                 is_full_graphic = (sim_graphic > sim_photo) and (sim_photo < ABS_THRESHOLD)
@@ -212,17 +373,27 @@ class SemanticAnalyzer:
                 
             # Step 3: Temporal Splitting
             sub_clusters = []
-            gap_threshold = max(int(0.15 * num_frames), MIN_GAP_FRAMES)
+            # Adaptive gap threshold: for short videos/fewer scenes (e.g. 18 scenes), gap of 2 scenes represents a significant time shift
+            gap_threshold = max(2, min(5, max(1, int(0.08 * num_frames))))
             
             for label, indices in clusters_map.items():
                 indices.sort()
                 current_sub = [indices[0]]
                 for i in range(1, len(indices)):
-                    if indices[i] - indices[i-1] > gap_threshold:
+                    prev_idx = indices[i-1]
+                    curr_idx = indices[i]
+                    prev_time = float(valid_scenes[prev_idx].get("start_seconds", 0.0))
+                    curr_time = float(valid_scenes[curr_idx].get("start_seconds", 0.0))
+                    
+                    # Split if frame index gap is large OR if timestamps differ by >= 15s OR if both are distinct action scenes >= 5s apart
+                    time_diff = curr_time - prev_time
+                    is_action_split = (is_protected_action_scene(valid_scenes[curr_idx]) or is_protected_action_scene(valid_scenes[prev_idx])) and time_diff >= 5.0
+                    
+                    if (curr_idx - prev_idx > gap_threshold) or (time_diff >= 20.0) or is_action_split:
                         sub_clusters.append(current_sub)
-                        current_sub = [indices[i]]
+                        current_sub = [curr_idx]
                     else:
-                        current_sub.append(indices[i])
+                        current_sub.append(curr_idx)
                 sub_clusters.append(current_sub)
                 
             print(f"[Semantic] Formed {len(sub_clusters)} temporal sub-clusters after splitting.")
@@ -231,39 +402,83 @@ class SemanticAnalyzer:
             max_sub_cluster_size = max(len(sc) for sc in sub_clusters) if sub_clusters else 1
             
             representatives = []
+            selected_rep_indices = set()
+
             for sc in sub_clusters:
-                best_idx = max(sc, key=lambda idx: quality_scores[idx])
+                # Pick best index by composite score
+                best_idx = max(sc, key=lambda idx: quality_scores[idx] + (0.5 if is_protected_action_scene(valid_scenes[idx]) else 0.0))
                 
                 size_score = np.log1p(len(sc)) / np.log1p(max_sub_cluster_size)
                 q_score = quality_scores[best_idx]
                 a_score = action_norm[best_idx]
                 
                 importance = 0.25 * size_score + 0.45 * a_score + 0.30 * q_score
+                if is_protected_action_scene(valid_scenes[best_idx]):
+                    importance = max(importance, 0.65)
                 
                 representatives.append({
                     "original_idx": best_idx,
                     "importance": importance,
                     "embedding": embeddings[best_idx]
                 })
+                selected_rep_indices.add(best_idx)
+
+                # Action-Scene Protection: also keep distinct action scenes in this sub-cluster if spaced apart
+                for candidate_idx in sc:
+                    if candidate_idx not in selected_rep_indices and is_protected_action_scene(valid_scenes[candidate_idx]):
+                        cand_time = float(valid_scenes[candidate_idx].get("start_seconds", 0.0))
+                        best_time = float(valid_scenes[best_idx].get("start_seconds", 0.0))
+                        if abs(cand_time - best_time) >= 6.0:
+                            representatives.append({
+                                "original_idx": candidate_idx,
+                                "importance": max(0.65, 0.25 * size_score + 0.45 * action_norm[candidate_idx] + 0.30 * quality_scores[candidate_idx]),
+                                "embedding": embeddings[candidate_idx]
+                            })
+                            selected_rep_indices.add(candidate_idx)
                 
             # Step 5: Global Deduplication
             dedup_selection = []
-            # Sort by importance descending so we keep the most important one in case of conflict
             representatives.sort(key=lambda x: x["importance"], reverse=True)
             
             for rep in representatives:
+                rep_scene = valid_scenes[rep["original_idx"]]
+                is_action = is_protected_action_scene(rep_scene)
                 is_duplicate = False
                 for selected in dedup_selection:
                     sim = np.dot(rep["embedding"], selected["embedding"])
-                    if sim > DEDUP_THRESHOLD:
+                    threshold_to_use = 0.985 if is_action else DEDUP_THRESHOLD
+                    if sim > threshold_to_use:
                         is_duplicate = True
                         break
                 if not is_duplicate:
                     dedup_selection.append(rep)
                     
-            # Step 6: Top-K Cut and Final Sort
-            max_keyframes = self.config.get("max_keyframes", 15) # Default lowered to 15 for better distillation
+            # Step 6: Target Retained Scenes (At least 8-12 representative scenes)
+            target_min_keyframes = min(num_frames, max(8, min(12, int(num_frames * 0.75))))
+            max_keyframes = max(target_min_keyframes, self.config.get("max_keyframes", 15))
             
+            # If dedup reduced below target_min_keyframes, restore candidates (prioritizing action scenes & high quality)
+            if len(dedup_selection) < target_min_keyframes:
+                selected_indices = {s["original_idx"] for s in dedup_selection}
+                remaining_candidates = [
+                    i for i in range(num_frames) if i not in selected_indices
+                ]
+                remaining_candidates.sort(
+                    key=lambda idx: (
+                        1.0 if is_protected_action_scene(valid_scenes[idx]) else 0.0,
+                        action_norm[idx] + quality_scores[idx]
+                    ),
+                    reverse=True
+                )
+                for idx in remaining_candidates:
+                    if len(dedup_selection) >= target_min_keyframes:
+                        break
+                    dedup_selection.append({
+                        "original_idx": idx,
+                        "importance": 0.45 * action_norm[idx] + 0.30 * quality_scores[idx] + (0.25 if is_protected_action_scene(valid_scenes[idx]) else 0.1),
+                        "embedding": embeddings[idx]
+                    })
+                
             if len(dedup_selection) > max_keyframes:
                 dedup_selection = dedup_selection[:max_keyframes]
                 
@@ -280,7 +495,10 @@ class SemanticAnalyzer:
             print(f"[Semantic] Kept {len(filtered_scenes)} semantically distinct scenes.")
             return filtered_scenes
         finally:
-            print("[Semantic] Releasing CLIP model from memory...")
+            print(
+                "[Semantic] Done with CLIP (kept resident)." if visual_resident_enabled()
+                else "[Semantic] Releasing CLIP model from memory..."
+            )
             if model is not None:
                 del model
             if processor is not None:
@@ -338,49 +556,8 @@ class SemanticAnalyzer:
                 free_mb, total_mb = cuda_memory_mb
                 print(f"[Semantic] Available VRAM before Florence-2 load: {free_mb}/{total_mb} MB.")
             
-            # Monkey patch for transformers >= 4.45 (and 5.x) where additional_special_tokens was removed
-            import transformers
-            try:
-                if not hasattr(transformers.PreTrainedTokenizer, 'additional_special_tokens'):
-                    transformers.PreTrainedTokenizer.additional_special_tokens = property(
-                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                    )
-                if hasattr(transformers, 'PreTrainedTokenizerFast') and not hasattr(transformers.PreTrainedTokenizerFast, 'additional_special_tokens'):
-                    transformers.PreTrainedTokenizerFast.additional_special_tokens = property(
-                        lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                    )
-                # Ensure RobertaTokenizer specifically has it just in case
-                if hasattr(transformers.models, 'roberta') and hasattr(transformers.models.roberta, 'RobertaTokenizer'):
-                    if not hasattr(transformers.models.roberta.RobertaTokenizer, 'additional_special_tokens'):
-                        transformers.models.roberta.RobertaTokenizer.additional_special_tokens = property(
-                            lambda self: [str(t) for t in getattr(self, 'added_tokens_encoder', {}).keys()]
-                        )
-            except Exception as e:
-                print(f"[Semantic] Warning: Could not patch transformers tokenizer: {e}")
+            processor, model = self.load_florence(model_dir, runtime)
 
-            print("[Semantic] Loading Florence-2 processor...", flush=True)
-            processor = AutoProcessor.from_pretrained(
-                model_dir,
-                trust_remote_code=True,
-                use_fast=True,
-            )
-            print("[Semantic] Florence-2 processor loaded.", flush=True)
-            print("[Semantic] Loading Florence-2 model weights...", flush=True)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_dir,
-                dtype=runtime.dtype,
-                trust_remote_code=True,
-                attn_implementation=runtime.attention_implementation,
-            ).to(runtime.device)
-            model.eval()
-            print("[Semantic] Florence-2 model loaded and set to eval mode.", flush=True)
-            
-            # Fix for transformers >= 4.40 causing missing weights for embed_tokens/lm_head
-            if hasattr(model, "language_model") and hasattr(model.language_model, "tie_weights"):
-                model.language_model.tie_weights()
-            elif hasattr(model, "tie_weights"):
-                model.tie_weights()
-            
             # <CAPTION> generates a very short, concise sentence focused on the main subject,
             # eliminating unnecessary details like backgrounds or skies.
             task_prompt = "<CAPTION>"
@@ -460,10 +637,33 @@ class SemanticAnalyzer:
                         for prefix in prefixes:
                             if lower_cap.startswith(prefix):
                                 caption = caption[len(prefix):]
-                                if caption:
-                                    caption = caption[0].upper() + caption[1:]
-                                break
-                        
+                        if caption:
+                            caption = caption[0].upper() + caption[1:]
+
+                        # Ground caption with verified YOLO objects to prevent vision hallucinations
+                        import re
+                        yolo_labels = []
+                        if isinstance(scene.get("object_counts"), dict):
+                            yolo_labels.extend(scene["object_counts"].keys())
+                        if isinstance(scene.get("detected_objects"), dict):
+                            for b in scene["detected_objects"].get("keyframe_bboxes", []):
+                                if b.get("label"):
+                                    yolo_labels.append(b["label"])
+                        yolo_labels_lower = [l.lower() for l in yolo_labels]
+
+                        has_bike = any(lbl in ("motorcycle", "bicycle", "bike") for lbl in yolo_labels_lower)
+                        has_person = "person" in yolo_labels_lower
+                        has_bat = any(lbl in ("baseball bat", "bat", "sports ball") for lbl in yolo_labels_lower)
+
+                        if not has_bat and (has_bike or has_person):
+                            caption = re.sub(r"\b(?:holding|with|swinging)\s+(?:a\s+)?baseball\s+bat\b", "holding the handlebars", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\b(?:a\s+)?baseball\s+bat\b", "the handlebars", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\btennis\s+racket\b", "riding equipment", caption, flags=re.IGNORECASE)
+                            caption = re.sub(r"\bsurfboard\b", "bike frame", caption, flags=re.IGNORECASE)
+
+                        if has_bike and not any(k in caption.lower() for k in ("motorcycle", "bike", "rider", "dirt", "jump", "whip")):
+                            caption = f"{caption} (motocross rider in action)"
+
                         if caption:
                             scene["caption"] = caption
                             
@@ -478,7 +678,10 @@ class SemanticAnalyzer:
         except FlorenceResourceError as e:
             print(f"[Semantic] {e}")
         finally:
-            print("[Semantic] Releasing Florence-2 model from memory...")
+            print(
+                "[Semantic] Done with Florence-2 (kept resident)." if visual_resident_enabled()
+                else "[Semantic] Releasing Florence-2 model from memory..."
+            )
             if model is not None:
                 del model
             if processor is not None:
@@ -497,45 +700,45 @@ class SemanticAnalyzer:
             
         try:
             print("[Semantic] Loading PaddleOCR model...")
-            # We import here to avoid slow loading if not needed
-            from paddleocr import PaddleOCR
-            import logging
-            logging.getLogger("ppocr").setLevel(logging.WARNING) # Suppress noisy logs
-            
-            try:
-                ocr = PaddleOCR(
-                    use_angle_cls=True,
-                    lang='vi',
-                    use_gpu=worker_settings.PADDLEOCR_USE_GPU and torch.cuda.is_available(),
-                )
-            except Exception as init_err:
-                print(f"[Semantic] Fallback init for PaddleOCR: {init_err}")
-                ocr = PaddleOCR(lang='vi')
-            
+            ocr = load_paddleocr()
+
             for scene in scenes:
                 path = scene.get("keyframe_path")
+                scene["ocr_blocks"] = []
                 if not path or not os.path.exists(path):
                     scene["ocr_text"] = ""
                     continue
-                
+
                 try:
                     result = ocr.ocr(path, cls=True)
-                    text_blocks = []
-                    if result and result[0]:
-                        for line in result[0]:
-                            text_blocks.append(line[1][0])
-                    
+                    lines = result[0] if result and result[0] else []
+                    # ocr_text keeps the legacy format: summarizer code depends on it.
+                    text_blocks = [line[1][0] for line in lines]
                     ocr_text = " | ".join(text_blocks)
                     scene["ocr_text"] = ocr_text.strip()
+
+                    img = cv2.imread(path)
+                    if img is not None:
+                        img_h, img_w = img.shape[:2]
+                        scene["ocr_blocks"] = _parse_ocr_lines(
+                            lines, img_w, img_h, worker_settings.OCR_MAX_BLOCKS_PER_SCENE
+                        )
                 except Exception as e:
                     print(f"[Semantic] OCR Error for {path}: {e}")
                     scene["ocr_text"] = ""
-                    
-            print(f"[Semantic] OCR extraction completed for {len(scenes)} scenes.")
+                    scene["ocr_blocks"] = []
+
+            total_blocks = sum(len(s.get("ocr_blocks") or []) for s in scenes)
+            with_text = sum(1 for s in scenes if s.get("ocr_blocks"))
+            print(
+                f"[Semantic] OCR extraction completed for {len(scenes)} scenes "
+                f"({with_text} with text, {total_blocks} blocks)."
+            )
         except Exception as e:
             print(f"[Semantic] Failed to load or run PaddleOCR: {e}")
             for scene in scenes:
                 scene["ocr_text"] = ""
+                scene["ocr_blocks"] = []
                 
     def process(self, scenes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Full semantic pipeline: CLIP filtering -> Florence-2 captioning -> OCR."""

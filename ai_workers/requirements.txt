@@ -8,15 +8,35 @@ pyyaml>=6.0
 # Audio: WhisperX, pyannote
 torch==2.5.1
 torchaudio==2.5.1
-whisperx
-faster-whisper>=1.0.0
-ctranslate2<4.5.0
+# Windows keeps the cuDNN 8 stack (ctranslate2 4.4). Linux GPU hosts (Docker, Colab)
+# share cuDNN 9 with the torch 2.5.1 wheels, which needs ctranslate2 4.5+.
+# whisperx is not imported by the worker; it stays on Windows only because it pins ctranslate2.
+whisperx; sys_platform == "win32"
+faster-whisper>=1.1.0  # detect_language(language_detection_segments=...) used by the auto-language router
+ctranslate2<4.5.0; sys_platform == "win32"
+ctranslate2>=4.5.0,<5; sys_platform != "win32"
 pyannote.audio>=3.1
-deepfilternet
+# English ASR default (Qwen3-ASR + forced aligner). Pins transformers==4.57.6, same as below.
+qwen-asr>=0.0.6
+# Without this floor uv falls back to 0.2.4, whose deepfilterlib has no wheel and needs a Rust toolchain.
+deepfilternet>=0.5.6
 
 # Visual: PySceneDetect, OpenCV
 opencv-python==4.9.0.80
 scenedetect[opencv]>=0.6
+
+# Object Detection & Tracking: RT-DETR-R18vd (transformers) + BoT-SORT, as selected in the benchmark.
+# `trackers` and `supervision` (versions the benchmark scored) are installed by a second step,
+# `pip install --no-deps -r ai_workers/requirements-tracking.txt`: trackers declares numpy>=2.0.2 but
+# runs on the numpy 1.26.4 pinned below (verified), so a normal install cannot resolve. Their other
+# dependencies are listed here.
+av>=14.2
+defusedxml>=0.7.1
+matplotlib>=3.6
+scipy>=1.13.1
+rich>=13.0.0
+requests>=2.28.0
+pydeprecate>=0.9,<0.14
 
 # Semantic: OCR, CLIP, Florence-2
 paddlepaddle==2.6.2

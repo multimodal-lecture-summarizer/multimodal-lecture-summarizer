@@ -14,41 +14,81 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import warnings
 warnings.filterwarnings("ignore")
 
+import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from ai_workers.core.celery_app import app
+from ai_workers.core.parallel_branches import run_branches
 from ai_workers.core.checkpoint import (
     CheckpointManager,
     STAGE_QUALITY_COMPLETE,
     STATUS_INTERMEDIATE_READY,
     STATUS_SUMMARIZING,
+    build_config_fingerprint,
+    sha256_file,
 )
+from ai_workers.core.torch_load_patch import patch_transformers_torch_load_check
+from ai_workers.core.youtube_ingest import download_youtube, upload_video_to_r2
+from ai_workers.modules.audio_v2.language import normalize_source_language
 from ai_workers.core.resource_cleanup import (
     ensure_process_memory_available,
     release_worker_resources,
 )
 
 
-def _patch_transformers_torch_load_check() -> None:
-    """Patch Transformers lazily so Celery startup does not import the full AI stack."""
-    try:
-        import transformers.modeling_utils
-        import transformers.utils
-        import transformers.utils.import_utils
+_patch_transformers_torch_load_check = patch_transformers_torch_load_check
 
-        transformers.utils.import_utils.check_torch_load_is_safe = lambda: None
-        transformers.utils.check_torch_load_is_safe = lambda: None
-        transformers.modeling_utils.check_torch_load_is_safe = lambda: None
-    except Exception:
-        pass
+
+@app.task(bind=True, name="ai_workers.prepare_youtube_video")
+def prepare_youtube_video(self, job_id: str, youtube_url: str, handoff_queue: str, max_duration: int = 0, **process_kwargs):
+    """Download a YouTube video on this worker, publish it to R2, then hand the job to process_video.
+
+    Runs on the local worker so a remote GPU worker never has to reach YouTube from a blocked
+    datacenter IP. The task shares the job's task id with process_video: the backend tracks that one
+    id, so a failure here marks the job failed and a cancel still reaches the job after hand-off.
+    Ignore keeps this task's own result from overwriting the state process_video is writing.
+    """
+    from celery.exceptions import Ignore
+
+    from ai_workers.core.config import worker_settings
+
+    self.update_state(state="PROGRESS", meta={"stage": "download", "progress": 2})
+    try:
+        if not worker_settings.CF_R2_ACCESS_KEY_ID:
+            raise RuntimeError("Worker local chưa cấu hình R2.")
+        temp_root = os.path.abspath("./storage/temp")
+        os.makedirs(temp_root, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temp_root) as temp_dir:
+            print(f"Downloading YouTube video on the local worker: {youtube_url}")
+            local_path = download_youtube(youtube_url, os.path.join(temp_dir, "video.mp4"), max_duration)
+            extension = local_path.rsplit(".", 1)[-1]
+            object_key = f"videos/youtube_{job_id}.{extension}"
+            print(f"Uploading YouTube video to R2 under key: {object_key}")
+            video_url = upload_video_to_r2(local_path, object_key)
+    except Exception as err:
+        # Plain RuntimeError: yt-dlp exceptions do not survive the JSON result backend intact.
+        raise RuntimeError(f"Không thể chuẩn bị video YouTube: {err}") from err
+
+    print(f"Handing job {job_id} to queue '{handoff_queue}': {video_url}")
+    app.send_task(
+        "ai_workers.process_video",
+        args=[job_id, video_url],
+        kwargs=process_kwargs,
+        task_id=job_id,
+        queue=handoff_queue,
+    )
+    raise Ignore()
 
 
 @app.task(bind=True, name="ai_workers.process_video")
-def process_video(self, job_id: str, video_path: str, config_stack: str = "hybrid"):
+def process_video(self, job_id: str, video_path: str, config_stack: str = "hybrid", output_language: str = "en", summary_length: str = "medium", source_language: str = "auto"):
     """Main Celery task: orchestrate full multimodal pipeline with checkpoint resume capability.
 
     Pipeline stages:
-        1. Audio extraction + ASR (WhisperX)
-        2. Speaker diarization (pyannote)
+        1. Audio extraction + ASR (Faster-Whisper)
+        2. Speaker diarization (pyannote only when HF_TOKEN is set)
         3. Scene detection + keyframe extraction (PySceneDetect)
         4. Semantic analysis: OCR + CLIP + Florence-2
         5. Timeline alignment + chapter segmentation
@@ -78,44 +118,90 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         raise
 
     _patch_transformers_torch_load_check()
-    from ai_workers.modules.audio_v2.transcriber import AudioTranscriber
+    from ai_workers.modules.audio_v2.factory import asr_identifier, build_transcriber
     from ai_workers.modules.audio_v2.speaker import SpeakerDiarizer
     from ai_workers.modules.visual_v2.scene_detector import SceneDetector
+    from ai_workers.modules.visual_v2.object_tracker import ObjectDetectorTracker
     from ai_workers.modules.visual_v2.semantic import SemanticAnalyzer
     from ai_workers.modules.fusion.timeline import TimelineBuilder
     from ai_workers.modules.fusion.summarizer import Summarizer
     from ai_workers.modules.fusion.quality_postprocess import apply_quality_postprocess
 
     checkpoint_manager = CheckpointManager()
-    checkpoint = checkpoint_manager.load_checkpoint(job_id, expected_stage=STAGE_QUALITY_COMPLETE)
+    checkpoint_manager.cleanup_expired()
+    source_language = normalize_source_language(source_language)
+    config_fingerprint = build_config_fingerprint(
+        asr_model=asr_identifier(source_language),
+        source_language=source_language,
+        florence_device=worker_settings.FLORENCE_DEVICE,
+        sprint_stack=worker_settings.SPRINT_STACK,
+    )
+    source_sha256 = ""
+    if os.path.isfile(video_path) and not str(video_path).startswith(("http://", "https://")):
+        try:
+            source_sha256 = sha256_file(video_path)
+        except Exception as hash_err:
+            print(f"[Checkpoint] Could not hash source video: {hash_err}")
+    checkpoint = checkpoint_manager.load_checkpoint(
+        job_id,
+        expected_stage=STAGE_QUALITY_COMPLETE,
+        expected_source_sha256=source_sha256 or None,
+        expected_config_fingerprint=config_fingerprint,
+    )
+    if checkpoint and not source_sha256 and checkpoint.get("source_sha256"):
+        print("[Checkpoint] Source file is no longer available, refusing resume.")
+        checkpoint = None
     is_resumed = bool(checkpoint is not None)
+    if is_resumed and checkpoint:
+        output_language = checkpoint.get("data", {}).get("output_language", output_language)
+        summary_length = checkpoint.get("data", {}).get("summary_length", summary_length)
 
     start_time = time.time()
     output_dir = f"./outputs/{job_id}"
 
     logs = []
+    # Parallel branches share these: one lock serializes Redis access (the broker pool is capped
+    # at 2 connections) and the floor keeps the reported progress from moving backwards.
+    state_lock = threading.RLock()
+    progress_floor = [0]
+    stage_spans = {}  # stage -> [first_log_time, last_log_time] for the timing summary
+    # self.request is thread-local in Celery; branch threads would see id=None, so capture it here.
+    task_id = self.request.id if getattr(self, "request", None) else None
+    abort_event = threading.Event()
+
     def log_step(message, stage, progress):
         from datetime import datetime
-        timestamp = datetime.utcnow().strftime("%H:%M:%S")
-        log_line = f"[{timestamp}] {message}"
-        logs.append(log_line)
-        del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
-        print(f"[{stage.upper()}] {message}", flush=True)
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "stage": stage,
-                "progress": progress,
-                "logs": logs
-            }
-        )
+        with state_lock:
+            progress = max(progress, progress_floor[0])
+            progress_floor[0] = progress
+            now = time.time()
+            span = stage_spans.setdefault(stage, [now, now])
+            span[1] = now
+            elapsed = now - start_time
+            timestamp = datetime.utcnow().strftime("%H:%M:%S")
+            log_line = f"[{timestamp}] {message}"
+            logs.append(log_line)
+            del logs[:-40]  # Keep the latest pipeline logs for the final status payload.
+            print(f"[{stage.upper()} +{elapsed:.1f}s] {message}", flush=True)
+            self.update_state(
+                task_id=task_id,
+                state="PROGRESS",
+                meta={
+                    "stage": stage,
+                    "progress": progress,
+                    "logs": logs
+                }
+            )
 
     def check_revoked():
-        if not hasattr(self, "request") or not self.request or not self.request.id:
+        if abort_event.is_set():
+            raise Exception("Tác vụ bị hủy vì nhánh song song khác đã lỗi.")
+        if not task_id:
             return
         from celery.result import AsyncResult
         try:
-            state = AsyncResult(self.request.id, app=app).state
+            with state_lock:
+                state = AsyncResult(task_id, app=app).state
             if state == 'REVOKED':
                 raise Exception("Tác vụ bị hủy bởi người dùng.")
         except Exception as e:
@@ -123,12 +209,13 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 raise e
 
     import requests
-    import yt_dlp
     import uuid
 
     local_video_path = video_path
     is_temp_file = False
     video_file_url = None
+    video_streams_info = None
+    video_objects_summary = None
 
     if is_resumed:
         # Load verified intermediate state from checkpoint
@@ -142,6 +229,8 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         sprint_stats = ckpt_data.get("sprint_stats")
         export_meta = ckpt_data.get("export_meta")
         video_file_url = ckpt_data.get("video_file_url")
+        video_streams_info = ckpt_data.get("video_metadata")
+        video_objects_summary = ckpt_data.get("video_objects_summary")
         log_step(
             "Tìm thấy checkpoint hợp lệ (Quality Complete). Bỏ qua ASR, Visual, Fusion, Quality và tiếp tục từ Summarization.",
             STATUS_INTERMEDIATE_READY,
@@ -162,28 +251,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
             try:
                 if "youtube.com" in video_path or "youtu.be" in video_path:
                     print(f"Downloading YouTube video using yt-dlp from: {video_path}")
-                    ydl_opts = {
-                        'outtmpl': local_video_path,
-                        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                        'merge_output_format': 'mp4',
-                        'quiet': True,
-                        'retries': 10,
-                        'fragment_retries': 10,
-                        'source_address': '0.0.0.0',
-                        'extractor_args': {
-                            'youtube': {
-                                'player_client': ['android', 'web', 'mweb']
-                            }
-                        },
-                    }
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([video_path])
-
-                    import glob
-                    base_without_ext = local_video_path.rsplit(".", 1)[0]
-                    matching_files = glob.glob(base_without_ext + ".*")
-                    if matching_files:
-                        local_video_path = matching_files[0]
+                    local_video_path = download_youtube(video_path, local_video_path)
                     print(f"Successfully downloaded YouTube video to: {local_video_path}")
 
                     actual_ext = local_video_path.rsplit(".", 1)[-1]
@@ -202,21 +270,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     if worker_settings.CF_R2_ACCESS_KEY_ID:
                         try:
                             print(f"Uploading downloaded YouTube video to R2 under key: {object_key}...")
-                            import boto3
-                            s3_client = boto3.client(
-                                "s3",
-                                endpoint_url=f"https://{worker_settings.CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-                                aws_access_key_id=worker_settings.CF_R2_ACCESS_KEY_ID,
-                                aws_secret_access_key=worker_settings.CF_R2_SECRET_ACCESS_KEY,
-                            )
-                            s3_client.upload_file(
-                                mock_filepath,
-                                worker_settings.CF_R2_BUCKET_NAME,
-                                object_key,
-                                ExtraArgs={"ContentType": "video/mp4"}
-                            )
-                            public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
-                            video_file_url = f"{public_base}/{object_key}"
+                            video_file_url = upload_video_to_r2(mock_filepath, object_key)
                             print(f"Successfully uploaded YouTube video to R2: {video_file_url}")
 
                             if os.path.exists(mock_filepath):
@@ -261,58 +315,191 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     os.remove(local_video_path)
                 raise e
 
+        # Stage 0: Video Inspector & Technical Standards Validation
+        check_revoked()
+        log_step("Thẩm định kỹ thuật tệp video (codec, độ phân giải, luồng dữ liệu)...", "preflight", 4)
+        video_streams_info = None
+        if os.path.exists(local_video_path):
+            try:
+                from app.services.video_inspector import inspect_video_streams, validate_video_standards
+                video_streams_info = inspect_video_streams(local_video_path)
+                
+                # Fetch active standard from DB
+                try:
+                    from app.core.database import SessionLocal
+                    from app.models.video import VideoStandard
+                    _db = SessionLocal()
+                    try:
+                        active_std = _db.query(VideoStandard).order_by(VideoStandard.standard_id.desc()).first()
+                    finally:
+                        _db.close()
+                except Exception as db_err:
+                    print(f"[Inspector] Warning: Could not fetch VideoStandard from DB: {db_err}")
+                    active_std = None
+
+                if active_std is not None:
+                    is_valid_std, val_err = validate_video_standards(video_streams_info, active_std)
+                    if not is_valid_std:
+                        err_msg = f"Tệp video không đáp ứng tiêu chuẩn kỹ thuật: {val_err}"
+                        log_step(err_msg, "failed", 100)
+                        raise ValueError(err_msg)
+
+                v_info = video_streams_info.get("video") or {}
+                log_step(
+                    f"Thẩm định video hoàn tất: Codec={v_info.get('codec_name', 'N/A')}, "
+                    f"Resolution={v_info.get('width', 0)}x{v_info.get('height', 0)}, "
+                    f"FPS={v_info.get('fps', 0)}.",
+                    "preflight",
+                    5,
+                )
+            except ValueError:
+                raise
+            except Exception as insp_err:
+                print(f"[Inspector] Non-fatal inspection warning: {insp_err}")
+        else:
+            log_step("Tệp video cục bộ không tồn tại trên ổ đĩa để trích xuất metadata luồng, tiếp tục pipeline.", "preflight", 5)
+
         try:
-            # Stage 1: Audio
-            check_revoked()
-            log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 5)
-            log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
-            audio = AudioTranscriber()
-            audio_result = audio.process(local_video_path)
-            log_step("Trích xuất và nhận dạng giọng nói thành công.", "audio", 20)
+            # Stages 1-4 are two independent branches that only meet at the timeline stage:
+            # audio (ASR + diarization) and visual (scenes + object tracking + semantic).
+            def run_audio_branch():
+                # Stage 1: Audio
+                check_revoked()
+                log_step("Khởi chạy tiến trình xử lý video bài giảng...", "audio", 6)
+                log_step("Bắt đầu trích xuất âm thanh từ tệp video...", "audio", 8)
+                audio = build_transcriber(source_language)
+                branch_audio_result = audio.process(local_video_path, source_language=source_language)
+                log_step(
+                    f"Nhận dạng giọng nói xong bằng {branch_audio_result.get('asr_model', worker_settings.FASTER_WHISPER_MODEL)} "
+                    f"(ngôn ngữ nguồn: {branch_audio_result.get('source_language', source_language)}).",
+                    "audio",
+                    20,
+                )
 
-            # Stage-level VRAM cleanup
-            del audio
-            release_worker_resources("audio stage")
+                # Stage-level VRAM cleanup
+                del audio
+                release_worker_resources("audio stage")
 
-            # Stage 2: Speaker diarization
-            check_revoked()
-            log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
-            speaker = SpeakerDiarizer()
-            utterances = speaker.process(
-                local_video_path.rsplit(".", 1)[0] + ".wav",
-                audio_result.get("segments", []),
+                # Stage 2: Speaker diarization
+                check_revoked()
+                log_step("Bắt đầu phân tích phân biệt người nói...", "speaker", 22)
+                speaker = SpeakerDiarizer()
+                branch_utterances = speaker.process(
+                    local_video_path.rsplit(".", 1)[0] + ".wav",
+                    branch_audio_result.get("segments", []),
+                )
+                if isinstance(branch_audio_result, dict):
+                    branch_audio_result["diarization_status"] = str(speaker.status or "skipped")
+                    branch_audio_result["diarization_reason"] = str(speaker.reason or "")
+                if speaker.status == "completed":
+                    speaker_message = f"Đã gán người nói cho {len(branch_utterances)} phân đoạn."
+                elif speaker.status == "skipped":
+                    speaker_message = "Bỏ qua phân biệt người nói vì không có HF_TOKEN."
+                else:
+                    speaker_message = f"Phân biệt người nói thất bại, giữ transcript không gán speaker giả: {speaker.reason}"
+                log_step(speaker_message, "speaker", 35)
+
+                del speaker
+                release_worker_resources("speaker stage")
+                return branch_audio_result, branch_utterances
+
+            def run_visual_branch():
+                # Stage 3: Visual
+                check_revoked()
+                log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
+                visual = SceneDetector()
+                branch_visual_result = visual.process(local_video_path, output_dir)
+                log_step(f"Đã trích xuất xong {len(branch_visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
+
+                del visual
+                release_worker_resources("visual stage")
+
+                # Stage 3.5: Object Detection & Tracking (OD&T)
+                check_revoked()
+                if not worker_settings.ENABLE_OBJECT_TRACKING:
+                    # Out of scope for single-speaker slide lectures; keep the summary shape downstream expects.
+                    log_step("Bỏ qua theo dõi đối tượng (ENABLE_OBJECT_TRACKING=false).", "object_tracking", 57)
+                    branch_objects_summary = {
+                        "total_unique_tracks": 0,
+                        "label_distribution": {},
+                        "most_frequent_objects": [],
+                        "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                    }
+                else:
+                    log_step("Bắt đầu phát hiện và theo dõi đối tượng (RT-DETR + BoT-SORT)...", "object_tracking", 56)
+                    try:
+                        ensure_process_memory_available(
+                            1536,
+                            soft_min_available_mb=worker_settings.PROCESS_SOFT_MIN_AVAILABLE_MEMORY_MB,
+                            retry_seconds=worker_settings.PROCESS_MEMORY_RETRY_SECONDS,
+                            retry_interval_seconds=worker_settings.PROCESS_MEMORY_RETRY_INTERVAL_SECONDS,
+                        )
+                    except Exception as mem_err:
+                        print(f"[OD&T] Memory check warning before object tracking: {mem_err}")
+
+                    tracker = None
+                    try:
+                        tracker = ObjectDetectorTracker()
+                        updated_scenes, branch_objects_summary = tracker.track_video_scenes(
+                            video_path=local_video_path,
+                            scenes=branch_visual_result.get("scenes", []),
+                            sample_fps=getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                            revoke_check_fn=check_revoked,
+                        )
+                        branch_visual_result["scenes"] = updated_scenes
+                        log_step(
+                            f"Hoàn thành theo dõi đối tượng. Tìm thấy {branch_objects_summary.get('total_unique_tracks', 0)} đối tượng duy nhất.",
+                            "object_tracking",
+                            57,
+                        )
+                    except Exception as tracker_err:
+                        print(f"[OD&T] Warning: Object tracking failed: {tracker_err}")
+                        branch_objects_summary = {
+                            "total_unique_tracks": 0,
+                            "label_distribution": {},
+                            "most_frequent_objects": [],
+                            "sample_fps_used": getattr(worker_settings, "OBJECT_TRACKING_SAMPLE_FPS", 3),
+                        }
+                    finally:
+                        if tracker is not None:
+                            del tracker
+                        import gc
+                        gc.collect()
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        release_worker_resources("object detection & tracking stage")
+
+                # Stage 4: Semantic
+                check_revoked()
+                log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
+                semantic = SemanticAnalyzer()
+                log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
+                filtered_scenes = semantic.filter_scenes_clip(branch_visual_result.get("scenes", []))
+                log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
+                semantic.caption_scenes_florence2(filtered_scenes)
+                log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
+                semantic.extract_ocr_paddleocr(filtered_scenes)
+                branch_visual_result["scenes"] = filtered_scenes
+                log_step(f"Đã hoàn thành phân tích nội dung slide. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
+
+                del semantic
+                release_worker_resources("semantic stage")
+                return branch_visual_result, branch_objects_summary, filtered_scenes
+
+            if worker_settings.ENABLE_PARALLEL_BRANCHES:
+                log_step("Chạy song song nhánh audio và nhánh visual.", "audio", 6)
+            branch_results = run_branches(
+                [("audio", run_audio_branch), ("visual", run_visual_branch)],
+                parallel=worker_settings.ENABLE_PARALLEL_BRANCHES,
+                abort=abort_event,
+                on_fallback=lambda name, exc: log_step(
+                    f"Nhánh {name} thiếu tài nguyên khi chạy song song ({exc}); chạy lại tuần tự.", name, 0
+                ),
+                cleanup=release_worker_resources,
             )
-            log_step(f"Hoàn thành phân tích người nói. Tìm thấy {len(utterances)} phân đoạn thoại.", "speaker", 35)
-
-            del speaker
-            release_worker_resources("speaker stage")
-
-            # Stage 3: Visual
-            check_revoked()
-            log_step("Bắt đầu phát hiện phân cảnh và trích xuất slide keyframes...", "visual", 38)
-            visual = SceneDetector()
-            visual_result = visual.process(local_video_path, output_dir)
-            log_step(f"Đã trích xuất xong {len(visual_result.get('keyframes', []))} slide keyframes.", "visual", 55)
-
-            del visual
-            release_worker_resources("visual stage")
-
-            # Stage 4: Semantic
-            check_revoked()
-            log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
-            semantic = SemanticAnalyzer()
-            log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
-            filtered_scenes = semantic.filter_scenes_clip(visual_result.get("scenes", []))
-            log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
-            semantic.caption_scenes_florence2(filtered_scenes)
-            log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
-            semantic.extract_ocr_paddleocr(filtered_scenes)
-            visual_result["scenes"] = filtered_scenes
-            slides = filtered_scenes
-            log_step(f"Đã hoàn thành phân tích nội dung slide. Giữ lại {len(filtered_scenes)} slide đặc trưng.", "semantic", 70)
-
-            del semantic
-            release_worker_resources("semantic stage")
+            audio_result, utterances = branch_results["audio"]
+            visual_result, video_objects_summary, slides = branch_results["visual"]
 
             # Stage 5: Timeline
             check_revoked()
@@ -361,16 +548,31 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
             keyframes = []
             for scene in scenes:
-                keyframes.append({
-                    "timestamp": scene.get("start_seconds", 0.0),
+                start = float(scene.get("start_seconds") or 0.0)
+                caption = scene.get("caption") or f"Slide at {scene.get('start_timecode', '00:00')}"
+                image_url = scene.get("keyframe_url") or ""
+                keyframe = {
+                    "timestamp": start,
+                    "start_seconds": start,
                     "local_path": scene.get("keyframe_path"),
-                    "imageUrl": scene.get("keyframe_url", ""),
-                    "description": scene.get("caption") or f"Slide at {scene.get('start_timecode', '00:00')}",
+                    "imageUrl": image_url,
+                    "keyframe_url": image_url,
+                    "description": caption,
+                    "caption": caption,
                     "transcript": scene.get("script", ""),
                     "ocr_text": scene.get("ocr_text", ""),
                     "blur_score": scene.get("blur_score"),
                     "importanceScore": scene.get("importanceScore", 0.8),
-                })
+                    "detected_objects": scene.get("detected_objects"),
+                    "object_counts": scene.get("object_counts"),
+                }
+                end_raw = scene.get("end_seconds")
+                if end_raw not in (None, ""):
+                    try:
+                        keyframe["end_seconds"] = float(end_raw)
+                    except (TypeError, ValueError):
+                        pass
+                keyframes.append(keyframe)
 
             sprint_stats = None
             export_meta = None
@@ -378,12 +580,17 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 log_step(f"Đang chạy quality sprint stack ({worker_settings.SPRINT_STACK})...", "quality", 86)
                 sprint_start_time = time.time()
                 try:
+                    total_dur = max(
+                        (float(c.get("end_time", 0.0)) for c in chapters),
+                        default=0.0
+                    )
+                    effective_min_chap = 25.0 if (0 < total_dur <= 600.0) else worker_settings.MIN_CHAPTER_SEC
                     qp = apply_quality_postprocess(
                         chapters=chapters,
                         keyframes=keyframes,
                         utterances=utterances,
                         stack_name=worker_settings.SPRINT_STACK,
-                        min_chapter_sec=worker_settings.MIN_CHAPTER_SEC,
+                        min_chapter_sec=effective_min_chap,
                     )
                     chapters = qp["chapters"]
                     keyframes = qp["keyframes"]
@@ -408,17 +615,23 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     )
                     bucket_name = worker_settings.CF_R2_BUCKET_NAME
 
-                    for kf in keyframes:
+                    public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
+
+                    def upload_keyframe(kf):
                         local_path = kf.get("local_path")
-                        if local_path and os.path.exists(local_path):
-                            filename = os.path.basename(local_path)
-                            object_key = f"keyframes/{job_id}/{filename}"
-                            try:
-                                s3_client.upload_file(local_path, bucket_name, object_key, ExtraArgs={"ContentType": "image/png"})
-                                public_base = worker_settings.CF_R2_PUBLIC_URL.rstrip("/")
-                                kf["imageUrl"] = f"{public_base}/{object_key}"
-                            except Exception as upload_err:
-                                print(f"R2 upload error: {upload_err}")
+                        if not (local_path and os.path.exists(local_path)):
+                            return
+                        object_key = f"keyframes/{job_id}/{os.path.basename(local_path)}"
+                        try:
+                            s3_client.upload_file(local_path, bucket_name, object_key, ExtraArgs={"ContentType": "image/png"})
+                            kf["imageUrl"] = f"{public_base}/{object_key}"
+                            kf["keyframe_url"] = kf["imageUrl"]
+                        except Exception as upload_err:
+                            print(f"R2 upload error: {upload_err}")
+
+                    # boto3 clients are thread-safe; each task only mutates its own keyframe dict.
+                    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="r2-upload") as upload_pool:
+                        list(upload_pool.map(upload_keyframe, keyframes))
 
                     r2_duration = time.time() - r2_start
                     log_step(f"Đã tải xong {len(keyframes)} keyframes lên R2 trong {r2_duration:.2f}s.", "storage", 88)
@@ -434,6 +647,10 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     kf = valid_kf_map[path]
                     if kf.get("imageUrl"):
                         scene["keyframe_url"] = kf["imageUrl"]
+                    if kf.get("detected_objects"):
+                        scene["detected_objects"] = kf["detected_objects"]
+                    if kf.get("object_counts"):
+                        scene["object_counts"] = kf["object_counts"]
                     synced_scenes.append(scene)
 
             # Update the visual result so the API job saver sees the filtered & URL-updated scenes
@@ -455,7 +672,14 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     "sprint_stats": sprint_stats,
                     "export_meta": export_meta,
                     "video_file_url": video_file_url,
+                    "video_metadata": video_streams_info,
+                    "video_objects_summary": video_objects_summary,
+                    "output_language": output_language,
+                    "summary_length": summary_length,
+                    "source_language": source_language,
                 },
+                source_sha256=source_sha256 or (sha256_file(local_video_path) if os.path.isfile(local_video_path) else ""),
+                config_fingerprint=config_fingerprint,
             )
             if not checkpoint_saved:
                 raise RuntimeError(f"Failed to persist checkpoint for job {job_id} before LLM summarization.")
@@ -467,23 +691,36 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                     os.remove(local_video_path)
                 except Exception:
                     pass
+            failed_wav = local_video_path.rsplit(".", 1)[0] + ".wav"
+            if os.path.exists(failed_wav):
+                try:
+                    os.remove(failed_wav)
+                except Exception:
+                    pass
             release_worker_resources("process_video stage failure")
             raise stage_err
 
     try:
         # Stage 6: Summarization
         check_revoked()
-        log_step("Đang yêu cầu mô hình AI (Groq/OpenRouter) sinh bản tóm tắt chi tiết...", STATUS_SUMMARIZING, 89)
+        log_step("Đang sinh bản tóm tắt chi tiết (LED cho đầu ra tiếng Anh, Groq/OpenRouter cho phần còn lại)...", STATUS_SUMMARIZING, 89)
         summarizer = Summarizer()
         try:
             text_result = summarizer.process(
-                utterances, keyframes, chapters, job_id=job_id
+                utterances, keyframes, chapters, job_id=job_id, output_language=output_language, summary_length=summary_length
             )
         except Exception as summ_err:
             print(f"[Summarization] Unexpected summarizer error for job {job_id}: {summ_err}")
+            is_en = (output_language or "").strip().lower() == "en"
+            default_title = "Untitled Lecture Video (AI Error)" if is_en else "Bài giảng chưa đặt tên (Lỗi AI)"
+            default_summary = (
+                f"### Lecture Summary\n\nContent extracted successfully. (Encountered error generating AI summary: {summ_err})"
+                if is_en else
+                f"### Tóm tắt bài giảng\n\nNội dung bài giảng đã trích xuất thành công. (Gặp lỗi khi tạo tóm tắt bằng AI: {summ_err})"
+            )
             text_result = {
-                "video_title": "Bài giảng chưa đặt tên (Lỗi AI)",
-                "summary": f"### Tóm tắt bài giảng\n\nNội dung bài giảng đã trích xuất thành công. (Gặp lỗi khi tạo tóm tắt bằng AI: {summ_err})",
+                "video_title": default_title,
+                "summary": default_summary,
                 "chapters": chapters,
                 "model_used": f"Offline Fallback (Error: {summ_err})",
                 "llm_error": {"error_code": "UNEXPECTED_ERROR", "message": str(summ_err)},
@@ -502,22 +739,20 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         del summarizer
         release_worker_resources("summarization stage")
     finally:
-        # Cleanup temporary files
-        if is_temp_file:
-            if os.path.exists(local_video_path):
-                try:
-                    os.remove(local_video_path)
-                    print(f"Cleaned up temporary video file: {local_video_path}")
-                except Exception as err:
-                    print(f"Failed to clean up temporary video file {local_video_path}: {err}")
+        if is_temp_file and os.path.exists(local_video_path):
+            try:
+                os.remove(local_video_path)
+                print(f"Cleaned up temporary video file: {local_video_path}")
+            except Exception as err:
+                print(f"Failed to clean up temporary video file {local_video_path}: {err}")
 
-            wav_path = local_video_path.rsplit(".", 1)[0] + ".wav"
-            if os.path.exists(wav_path):
-                try:
-                    os.remove(wav_path)
-                    print(f"Cleaned up temporary audio file: {wav_path}")
-                except Exception as err:
-                    print(f"Failed to clean up temporary audio file {wav_path}: {err}")
+        wav_path = local_video_path.rsplit(".", 1)[0] + ".wav"
+        if os.path.exists(wav_path):
+            try:
+                os.remove(wav_path)
+                print(f"Cleaned up temporary audio file: {wav_path}")
+            except Exception as err:
+                print(f"Failed to clean up temporary audio file {wav_path}: {err}")
         release_worker_resources("process_video pipeline")
 
     elapsed_time = time.time() - start_time
@@ -533,14 +768,37 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     else:
         final_stage = "completed"
 
+    active_summary = text_result.get("summary", "")
+    active_takeaways = text_result.get("key_takeaways", [])
+    active_length = text_result.get("summary_length", summary_length)
+    summary_variants = text_result.get("summary_variants") or {}
+    calculated_word_count = text_result.get("word_count") or (len(active_summary.split()) if active_summary else 0)
+    calculated_reading_time = text_result.get("reading_time_sec") or (max(1, calculated_word_count // 3) if calculated_word_count else 0)
+
+    if not summary_variants and active_summary:
+        summary_variants = {
+            active_length: {
+                "summary_text": active_summary,
+                "key_takeaways_json": active_takeaways,
+                "word_count": calculated_word_count,
+                "reading_time_sec": calculated_reading_time,
+                "model_used": text_result.get("model_used", "Groq"),
+                "generated_at": datetime.utcnow().isoformat(),
+            }
+        }
+
     result = {
         "job_id": job_id,
         "status": final_status,
         "stage": final_stage,
         "progress": 100,
         "video_title": text_result.get("video_title", "Untitled Lecture Video"),
-        "summary": text_result.get("summary", ""),
-        "key_takeaways": text_result.get("key_takeaways", []),
+        "summary": active_summary,
+        "summary_length": active_length,
+        "summary_variants": summary_variants,
+        "word_count": calculated_word_count,
+        "reading_time_sec": calculated_reading_time,
+        "key_takeaways": active_takeaways,
         "chapters": chapters,
         "keyframes": keyframes,
         "transcript_text": audio_result.get("text", "") if isinstance(audio_result, dict) else "",
@@ -557,6 +815,10 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         result["sprint_stats"] = sprint_stats
     if export_meta is not None:
         result["export_meta"] = export_meta
+    if video_streams_info is not None:
+        result["video_metadata"] = video_streams_info
+    if video_objects_summary is not None:
+        result["video_objects_summary"] = video_objects_summary
     if "llm_error" in text_result and text_result["llm_error"]:
         result["llm_error"] = text_result["llm_error"]
 
@@ -567,7 +829,21 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
     else:
         log_step("Hoàn tất xử lý video và lưu kết quả.", "completed", 100)
 
+    with state_lock:
+        span_text = ", ".join(f"{name}={last - first:.1f}s" for name, (first, last) in stage_spans.items())
+    video_seconds = result.get("duration") or 0.0
+    realtime_factor = f", realtime_factor={elapsed_time / video_seconds:.2f}x" if video_seconds else ""
+    print(f"[TIMING] total={elapsed_time:.1f}s, video={video_seconds:.1f}s{realtime_factor} | stage spans: {span_text}", flush=True)
     result["logs"] = list(logs)
+    result["source_language"] = source_language
+    result["asr_model"] = (
+        audio_result.get("asr_model") if isinstance(audio_result, dict) else None
+    ) or worker_settings.FASTER_WHISPER_MODEL
+    if isinstance(audio_result, dict):
+        result["detected_language"] = audio_result.get("language")
+        result["diarization_status"] = audio_result.get("diarization_status", "skipped")
+    if not is_failed:
+        checkpoint_manager.delete_checkpoint(job_id)
     release_worker_resources("process_video result assembly")
     return result
 
@@ -591,7 +867,7 @@ def process_audio(job_id: str, video_path: str):
 
     audio = None
     try:
-        audio = AudioTranscriber()
+        audio = AudioTranscriber()  # standalone task has no source_language; keep Whisper
         return audio.process(video_path)
     finally:
         audio = None
@@ -612,49 +888,73 @@ def process_visual(job_id: str, video_path: str, output_dir: str):
         release_worker_resources("process_visual task")
 
 
-@app.task(bind=True, name="ai_workers.build_rag_index", max_retries=3, autoretry_for=(Exception,), retry_backoff=True)
-def build_rag_index(self, video_id: str):
-    import sys
-    import os
+def _load_stored_utterances(transcript_text: str) -> list:
     import json
+
+    if not transcript_text:
+        return []
+    try:
+        parsed = json.loads(transcript_text)
+    except Exception:
+        return []
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    if isinstance(parsed, dict):
+        segments = parsed.get("segments") or parsed.get("utterances") or []
+        if isinstance(segments, list):
+            return [item for item in segments if isinstance(item, dict)]
+    return []
+
+
+def _index_stored_summary(task, video_id: str) -> bool:
+    """Rebuild one video index from the saved summary. Does not rerun ASR or visual models."""
+    import sys
 
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend"))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
 
     from app.core.database import SessionLocal
+    from app.models.summary import Summary
+    from app.models.video import Video
+    from app.core.constants import RagStatus
+    from ai_workers.modules.fusion.summarizer import Summarizer
+
     db = SessionLocal()
     try:
-        from app.models.summary import Summary
-        from app.models.video import Video
-        from app.core.constants import RagStatus
-        from ai_workers.modules.fusion.summarizer import Summarizer
+        db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.PROCESSING})
+        db.commit()
 
         summary = db.query(Summary).filter(Summary.video_id == video_id).first()
         if not summary:
             raise ValueError(f"No summary found for video {video_id}")
 
-        utterances = []
-        if summary.transcript_text:
-            try:
-                utterances = json.loads(summary.transcript_text)
-            except Exception:
-                pass
-
+        utterances = _load_stored_utterances(summary.transcript_text or "")
         slides = summary.keyframes_json or []
+        if not isinstance(slides, list):
+            slides = []
 
-        summarizer = Summarizer()
-        rag_success = summarizer.build_rag_index(video_id, utterances, slides)
-
-        if rag_success:
-            db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.READY})
-        else:
-            db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.FAILED})
+        rag_success = Summarizer().build_rag_index(video_id, utterances, slides)
+        next_status = RagStatus.READY if rag_success else RagStatus.FAILED
+        db.query(Video).filter(Video.video_id == video_id).update({"rag_status": next_status})
         db.commit()
-    except Exception as e:
-        if self.request.retries >= self.max_retries:
-            from app.models.video import Video
-            from app.core.constants import RagStatus
+        return rag_success
+    except Exception:
+        db.rollback()
+        if task.request.retries >= task.max_retries:
             db.query(Video).filter(Video.video_id == video_id).update({"rag_status": RagStatus.FAILED})
             db.commit()
-        raise e
+        raise
+    finally:
+        db.close()
+
+
+@app.task(bind=True, name="ai_workers.build_rag_index", max_retries=3, autoretry_for=(Exception,), retry_backoff=True)
+def build_rag_index(self, video_id: str):
+    return _index_stored_summary(self, video_id)
+
+
+@app.task(bind=True, name="ai_workers.reindex_video", max_retries=3, autoretry_for=(Exception,), retry_backoff=True)
+def reindex_video(self, video_id: str):
+    """Rebuild the Chroma index for a video that was saved before the chunk schema fix."""
+    return _index_stored_summary(self, video_id)

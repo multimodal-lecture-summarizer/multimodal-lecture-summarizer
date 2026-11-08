@@ -1,0 +1,42 @@
+# GPU worker alone, on any NVIDIA machine (home PC, cloud VM, RunPod...), joining a website
+# that runs elsewhere. Requires in ./.env: SHARED_REDIS_URL (same Redis as the backend).
+# Requires in backend/.env: R2 credentials, GROQ_API_KEY, and the hosted database/Chroma
+# settings if this worker should also run RAG indexing.
+#
+#   docker compose -f docker-compose.worker.yml up --build
+services:
+  gpu_worker:
+    build:
+      context: .
+      dockerfile: ai_workers/Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      CELERY_BROKER_URL: ${SHARED_REDIS_URL:?set SHARED_REDIS_URL in .env}
+      CELERY_RESULT_BACKEND: ${SHARED_REDIS_URL:?set SHARED_REDIS_URL in .env}
+      # Only the GPU queue: RAG indexing ("celery" queue) stays with the machine that owns the database.
+      WORKER_QUEUES: ${WORKER_QUEUES:-gpu}
+      FLORENCE_DEVICE: ${FLORENCE_DEVICE:-cuda}
+      SEMANTIC_CLIP_DEVICE: ${SEMANTIC_CLIP_DEVICE:-cuda}
+      PADDLEOCR_USE_GPU: "0"
+      CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+      # Same switches as docker-compose.gpu.yml; this host is usually a bigger GPU (Colab-class,
+      # 15 GB), so the parallel/resident options are on by default. Override in ./.env.
+      ENABLE_PARALLEL_BRANCHES: ${ENABLE_PARALLEL_BRANCHES:-true}
+      DENOISE_DEVICE: ${DENOISE_DEVICE:-cuda}
+      QWEN_ASR_BATCH_SIZE: ${QWEN_ASR_BATCH_SIZE:-4}
+      ENABLE_LLM_SUMMARIZER: ${ENABLE_LLM_SUMMARIZER:-false}
+      KEYFRAME_CANDIDATES: ${KEYFRAME_CANDIDATES:-3}
+      PREFETCH_MODELS: ${PREFETCH_MODELS:-true}
+      QWEN_KEEP_RESIDENT: ${QWEN_KEEP_RESIDENT:-true}
+      VISUAL_KEEP_RESIDENT: ${VISUAL_KEEP_RESIDENT:-true}
+    volumes:
+      - ./cache:/app/cache
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

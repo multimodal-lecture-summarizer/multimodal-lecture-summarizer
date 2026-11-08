@@ -9,8 +9,10 @@ import {
   Settings, 
   LogOut, 
   Bell, 
-  Globe 
+  Globe,
+  Code2
 } from 'lucide-react';
+import { useDevMode } from '../context/DevModeContext';
 
 interface HeaderProps {
   isLoggedIn?: boolean;
@@ -21,12 +23,49 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
   const toast = useToast();
   const location = useLocation();
   const { t, i18n } = useTranslation();
+  const { isDevMode, toggleDevMode } = useDevMode();
   const isAdminPage = location.pathname.startsWith('/admin');
 
   const toggleLanguage = () => {
     const newLang = i18n.language.startsWith('en') ? 'vi' : 'en';
     i18n.changeLanguage(newLang);
   };
+
+  const renderDevModeToggle = () => (
+    <button
+      type="button"
+      onClick={() => {
+        toggleDevMode();
+        toast.info(
+          !isDevMode
+            ? 'Đã bật Dev Mode: Hiển thị Object Detection & Keyframes'
+            : 'Đã tắt Dev Mode: Chỉ hiển thị nội dung tóm tắt chính',
+          'Chế độ xem'
+        );
+      }}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer select-none ${
+        isDevMode
+          ? 'bg-purple-50 border-purple-300 text-purple-700 shadow-xs'
+          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+      }`}
+      title={isDevMode ? 'Đang bật Dev Mode (bấm để tắt)' : 'Đang tắt Dev Mode (bấm để bật)'}
+      aria-label="Toggle Dev Mode"
+    >
+      <Code2 size={13} className={isDevMode ? 'text-purple-600' : 'text-slate-400'} />
+      <span className="hidden sm:inline text-[11px] font-semibold">Dev Mode</span>
+      <div
+        className={`w-6 h-3 rounded-full relative transition-colors p-0.5 ml-0.5 ${
+          isDevMode ? 'bg-purple-600' : 'bg-slate-300'
+        }`}
+      >
+        <div
+          className={`w-2 h-2 rounded-full bg-white transition-transform ${
+            isDevMode ? 'translate-x-3' : 'translate-x-0'
+          }`}
+        />
+      </div>
+    </button>
+  );
 
   return (
     <header className="glass-panel flex justify-between items-center px-6 md:px-8 w-full h-16 sticky top-0 z-50">
@@ -108,6 +147,8 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
               </Link>
             )}
 
+            {renderDevModeToggle()}
+
             <button onClick={toggleLanguage} className="flex items-center gap-1 font-bold text-xs uppercase px-2 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-700 cursor-pointer">
               <Globe size={14} />
               {i18n.language.startsWith('en') ? 'EN' : 'VI'}
@@ -150,6 +191,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn = true, onLogout }) =
           </>
         ) : (
           <>
+            {renderDevModeToggle()}
             <button onClick={toggleLanguage} className="flex items-center gap-1 font-bold text-xs uppercase px-2 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-700 cursor-pointer">
               <Globe size={14} />
               {i18n.language.startsWith('en') ? 'EN' : 'VI'}

@@ -174,6 +174,24 @@ class ExtractiveSummarizer:
                         "importance_boost": imp_score * 0.15,
                     })
 
+            # If scene is an action demonstration or has detected objects
+            det = s.get("detected_objects", {})
+            tracks = det.get("tracks_summary", []) if isinstance(det, dict) else []
+            counts = s.get("object_counts", {})
+            if tracks or (isinstance(counts, dict) and any(c > 0 for c in counts.values())):
+                obj_parts = [f"{c} {lbl}" for lbl, c in sorted(counts.items()) if c > 0] if counts else [t.get("label") for t in tracks if t.get("label")]
+                if obj_parts:
+                    obj_str = ", ".join(obj_parts[:3])
+                    m = int(s_start) // 60
+                    sec = int(s_start) % 60
+                    candidates.append({
+                        "text": f"Khoảnh khắc thực hành kỹ thuật trực quan với {obj_str} ở mốc {m:02d}:{sec:02d}.",
+                        "start": s_start,
+                        "end": s_end,
+                        "source": "action",
+                        "importance_boost": imp_score * 0.35,
+                    })
+
         return candidates
 
     def _compute_tfidf_scores(
@@ -350,16 +368,36 @@ class ExtractiveSummarizer:
         self,
         candidates: List[Dict[str, Any]],
         scores: List[float],
-        max_takeaways: int = 5,
-    ) -> List[str]:
-        """Extract distinct key takeaway bullet points."""
-        selected = self._select_diverse_sentences(candidates, scores, max_sentences=max_takeaways)
+        max_takeaways: int = 6,
+    ) -> List[Dict[str, Any]]:
+        """Extract 4-6 distinct key takeaway events with actual timestamps and concrete titles."""
+        def format_time(secs: float) -> str:
+            m = int(secs) // 60
+            s = int(secs) % 60
+            return f"{m:02d}:{s:02d}"
+
+        n_takeaways = max(4, min(max_takeaways, len(candidates)))
+        selected = self._select_diverse_sentences(candidates, scores, max_sentences=n_takeaways)
         takeaways = []
         for s in selected:
             text = s["text"].strip()
             if text.endswith("."):
                 text = text[:-1]
-            takeaways.append(text)
+            start_ts = float(s.get("start", 0.0))
+            time_str = format_time(start_ts)
+
+            words = text.split()
+            if len(words) > 7:
+                title = " ".join(words[:5])
+            else:
+                title = text
+
+            takeaways.append({
+                "timestamp": round(start_ts, 2),
+                "time_str": time_str,
+                "title": title,
+                "description": text,
+            })
         return takeaways
 
     def _infer_title(
@@ -367,8 +405,11 @@ class ExtractiveSummarizer:
         candidates: List[Dict[str, Any]],
         slides: List[Dict[str, Any]],
         chapters: List[Dict[str, Any]],
+        output_language: str = "vi",
     ) -> str:
         """Infer a descriptive lecture title from slide OCR, chapter names, or top keywords."""
+        is_en = (output_language or "vi").strip().lower() == "en"
+
         # 1. Check title from first slide (slide 0 OCR header is often the lecture title)
         if slides:
             first_slide = slides[0]
@@ -382,8 +423,9 @@ class ExtractiveSummarizer:
         # 2. Check first chapter title
         if chapters and chapters[0].get("title"):
             first_chap = chapters[0]["title"].strip()
-            if len(first_chap) > 3 and not first_chap.lower().startswith("chương 1: mở đầu"):
-                return f"Bài giảng: {first_chap}"
+            if len(first_chap) > 3 and not first_chap.lower().startswith(("chương 1: mở đầu", "chapter 1")):
+                prefix = "Lecture" if is_en else "Bài giảng"
+                return f"{prefix}: {first_chap}"
 
         # 3. Frequent significant terms
         all_tokens: List[str] = []
@@ -394,9 +436,10 @@ class ExtractiveSummarizer:
             from collections import Counter
             top_words = [w.capitalize() for w, _ in Counter(all_tokens).most_common(3)]
             if top_words:
-                return f"Tóm tắt bài giảng: {' - '.join(top_words)}"
+                prefix = "Lecture Summary" if is_en else "Tóm tắt bài giảng"
+                return f"{prefix}: {' - '.join(top_words)}"
 
-        return "Bản tóm tắt bài giảng (Extractive Summary)"
+        return "Lecture Summary (Extractive Summary)" if is_en else "Bản tóm tắt bài giảng (Extractive Summary)"
 
     def generate_fallback(
         self,
@@ -405,50 +448,178 @@ class ExtractiveSummarizer:
         chapters: List[Dict[str, Any]],
         llm_error: Optional[Any] = None,
         job_id: str = "unknown",
+        output_language: str = "vi",
+        summary_length: str = "medium",
     ) -> Dict[str, Any]:
         """Generate a complete, structured extractive fallback summary matching LLM output schema."""
+        import datetime as dt
+
+        length_key = (summary_length or "medium").strip().lower()
+        if length_key not in ("short", "medium", "detailed"):
+            length_key = "medium"
+
         candidates = self._extract_candidates(utterances, slides)
+        is_en = (output_language or "vi").strip().lower() == "en"
 
         # Edge case: Absolutely no transcript or slide content
         if not candidates:
             duration = 0.0
             if chapters:
                 duration = float(chapters[-1].get("endTime", 0.0))
+            empty_text = "Unable to extract lecture content due to lack of audio and visual data." if is_en else "Không thể trích xuất nội dung bài giảng do thiếu bản ghi âm thanh và hình ảnh."
             return {
                 "status": "failed",
-                "video_title": "Không có dữ liệu bài giảng",
-                "summary": "Không thể trích xuất nội dung bài giảng do thiếu bản ghi âm thanh và hình ảnh.",
+                "video_title": "No Lecture Content Available" if is_en else "Không có dữ liệu bài giảng",
+                "summary": empty_text,
                 "key_takeaways": [],
                 "chapters": chapters or [],
                 "model_used": "Extractive Fallback (Failed: No Content)",
                 "fallback_used": True,
                 "summary_method": "extractive_fallback",
+                "summary_length": length_key,
+                "word_count": 0,
+                "reading_time_sec": 0,
+                "summary_variants": {
+                    length_key: {
+                        "summary_text": empty_text,
+                        "key_takeaways_json": [],
+                        "chapters_json": chapters or [],
+                        "word_count": 0,
+                        "reading_time_sec": 0,
+                        "model_used": "Extractive Fallback (Failed: No Content)",
+                        "summary_length": length_key,
+                        "generated_at": dt.datetime.utcnow().isoformat(),
+                    }
+                },
                 "llm_error": llm_error if isinstance(llm_error, dict) else (llm_error.to_dict() if hasattr(llm_error, "to_dict") else {"error_code": "NO_CONTENT", "message": "No utterances or slides found"}),
             }
 
         # 1. Score candidates
         scores = self._compute_tfidf_scores(candidates, slides)
 
-        # 2. Executive summary (3-5 top sentences, sorted chronologically)
-        executive_sents = self._select_diverse_sentences(candidates, scores, max_sentences=5)
-        exec_summary_text = " ".join([s["text"] for s in executive_sents])
+        # 2. Sentence extraction & structural formatting based on cognitive depth
+        if length_key == "short":
+            # Short: 3-4 key sentences, 1 thesis + 3 bullet guidelines
+            selected_sents = self._select_diverse_sentences(candidates, scores, max_sentences=4)
+            if selected_sents:
+                thesis = selected_sents[0]["text"]
+                bullets = selected_sents[1:4]
+            else:
+                thesis = candidates[0]["text"]
+                bullets = []
 
-        # Markdown formatted executive summary
-        formatted_summary = (
-            f"### Tổng quan bài giảng (Tóm tắt trích xuất tự động)\n\n"
-            f"{exec_summary_text}\n\n"
-            f"> *Ghi chú: Bản tóm tắt được tổng hợp tự động từ các luận điểm then chốt trong lời giảng và nội dung slide.*"
-        )
+            bullet_lines = "\n".join([f"- {b['text']}" for b in bullets])
+            if is_en:
+                formatted_summary = (
+                    f"### Executive Summary (TL;DR)\n\n"
+                    f"{thesis}\n\n"
+                    f"**Core Actionable Guidelines:**\n"
+                    f"{bullet_lines if bullet_lines else '- Focus on core fundamentals.'}\n\n"
+                    f"> *Note: Automated concise executive summary extracted from key lecture moments.*"
+                )
+            else:
+                formatted_summary = (
+                    f"### Tóm tắt Lướt nhanh (Executive TL;DR)\n\n"
+                    f"{thesis}\n\n"
+                    f"**Kim chỉ nam cốt lõi:**\n"
+                    f"{bullet_lines if bullet_lines else '- Nắm vững các thao tác kỹ thuật cơ bản.'}\n\n"
+                    f"> *Ghi chú: Bản tóm tắt cô đọng được trích xuất tự động từ các điểm trọng tâm nhất.*"
+                )
+            exec_summary_text = f"{thesis} " + " ".join([b["text"] for b in bullets])
+            max_takeaways_target = 3
 
-        # 3. Key takeaways (3-7 bullets)
-        key_takeaways = self._extract_key_takeaways(candidates, scores, max_takeaways=5)
+        elif length_key == "detailed":
+            # Detailed: 15-20 sentences organized by chapter/stage with multimodal grounding
+            selected_sents = self._select_diverse_sentences(candidates, scores, max_sentences=18)
+            exec_summary_text = " ".join([s["text"] for s in selected_sents])
+
+            section_blocks = []
+            if chapters:
+                for idx, chap in enumerate(chapters):
+                    c_start = float(chap.get("startTime", 0.0))
+                    c_end = float(chap.get("endTime", c_start + 60.0))
+                    title = chap.get("title") or (f"Chapter {idx+1}" if is_en else f"Chương {idx+1}")
+                    chap_sents = [
+                        s["text"] for s in selected_sents
+                        if float(s.get("start", 0.0)) >= c_start and float(s.get("start", 0.0)) <= c_end
+                    ]
+                    if not chap_sents:
+                        # Fallback candidate within this chapter
+                        for c in candidates:
+                            if c_start <= float(c.get("start", 0.0)) <= c_end:
+                                chap_sents.append(c["text"])
+                                if len(chap_sents) >= 2:
+                                    break
+
+                    body = " ".join(chap_sents) if chap_sents else ("Chi tiết kỹ thuật đang được cập nhật." if not is_en else "Technical details in progress.")
+                    # Find matching slide evidence
+                    evidences = []
+                    for s in slides:
+                        s_st = float(s.get("start_seconds", s.get("timestamp", 0.0)))
+                        if c_start <= s_st <= c_end:
+                            ocr = (s.get("ocr_text") or "").strip()
+                            cap = (s.get("caption") or "").strip()
+                            if ocr:
+                                ocr_snippet = ocr.split("\n")[0][:80]
+                                evidences.append(f"Chữ trên slide: '{ocr_snippet}'" if not is_en else f"Slide text: '{ocr_snippet}'")
+                            if cap and cap not in ("[Nhạc nền / Im lặng]", "Slide"):
+                                evidences.append(f"Hành động trực quan: {cap}" if not is_en else f"Visual action: {cap}")
+                            if len(evidences) >= 2:
+                                break
+                    evidence_str = f"\n*Bằng chứng đa phương thức*: {'; '.join(evidences)}" if evidences else ""
+                    section_blocks.append(f"### {idx+1}. {title}\n{body}{evidence_str}")
+            else:
+                # Chunk selected sentences into 3 structured sections
+                chunk_size = max(1, len(selected_sents) // 3)
+                p1 = " ".join([s["text"] for s in selected_sents[:chunk_size]])
+                p2 = " ".join([s["text"] for s in selected_sents[chunk_size:chunk_size*2]])
+                p3 = " ".join([s["text"] for s in selected_sents[chunk_size*2:]])
+                section_blocks.append(f"### 1. {'Phần mở đầu & Nguyên lý' if not is_en else 'Introduction & Principles'}\n{p1}")
+                section_blocks.append(f"### 2. {'Phân tích Kỹ thuật & Thực hành' if not is_en else 'Technical Analysis & Execution'}\n{p2}")
+                section_blocks.append(f"### 3. {'Tổng kết & Lưu ý an toàn' if not is_en else 'Summary & Safety Notes'}\n{p3}")
+
+            intro_header = "### Hồ sơ Phân tích Chuyên sâu (Comprehensive Study Guide)" if not is_en else "### Comprehensive Multimodal Study Guide"
+            formatted_summary = (
+                f"{intro_header}\n\n"
+                f"{chr(10).join(section_blocks)}\n\n"
+                f"> *{'Tài liệu phân tích chuyên sâu được tổng hợp từ giọng nói, slide OCR và chuỗi hành động thị giác.' if not is_en else 'Comprehensive study guide synthesized from speech transcript, slide OCR, and visual action timelines.'}*"
+            )
+            max_takeaways_target = 7
+
+        else:  # medium (default)
+            # Medium: 7-9 sentences in 2-3 coherent paragraphs
+            selected_sents = self._select_diverse_sentences(candidates, scores, max_sentences=8)
+            exec_summary_text = " ".join([s["text"] for s in selected_sents])
+            mid_point = max(1, len(selected_sents) // 2)
+            p1 = " ".join([s["text"] for s in selected_sents[:mid_point]])
+            p2 = " ".join([s["text"] for s in selected_sents[mid_point:]])
+
+            if is_en:
+                formatted_summary = (
+                    f"### Lecture Overview (Automated Extractive Summary)\n\n"
+                    f"{p1}\n\n"
+                    f"{p2}\n\n"
+                    f"> *Note: This summary was automatically generated from speech transcript and visual slide content.*"
+                )
+            else:
+                formatted_summary = (
+                    f"### Tổng quan bài giảng (Tóm tắt trích xuất tiêu chuẩn)\n\n"
+                    f"{p1}\n\n"
+                    f"{p2}\n\n"
+                    f"> *Ghi chú: Bản tóm tắt tiêu chuẩn được tổng hợp cân đối từ lời giảng và phân cảnh trực quan.*"
+                )
+            max_takeaways_target = 5
+
+        # 3. Key takeaways (scaled according to length tier)
+        key_takeaways = self._extract_key_takeaways(candidates, scores, max_takeaways=max_takeaways_target)
 
         # 4. Update chapters with chapter-scoped summaries
         updated_chapters: List[Dict[str, Any]] = []
         if chapters:
             for idx, c in enumerate(chapters):
                 chap_summary = self._extract_chapter_summary(c, candidates, scores, slides)
-                chap_title = c.get("title") or f"Chương {idx + 1}"
+                default_title = f"Chapter {idx + 1}" if is_en else f"Chương {idx + 1}"
+                chap_title = c.get("title") or default_title
                 updated_chapters.append({
                     "title": chap_title,
                     "startTime": float(c.get("startTime", 0.0)),
@@ -456,17 +627,42 @@ class ExtractiveSummarizer:
                     "summary": chap_summary,
                 })
         else:
-            # If chapters list was empty, create a single overarching chapter
             duration = candidates[-1]["end"] if candidates else 60.0
             updated_chapters.append({
-                "title": "Nội dung bài học",
+                "title": "Lecture Content" if is_en else "Nội dung bài học",
                 "startTime": 0.0,
                 "endTime": duration,
                 "summary": exec_summary_text,
             })
 
         # 5. Title inference
-        video_title = self._infer_title(candidates, slides, chapters)
+        from ai_workers.modules.summarization.summarizer import clean_video_title
+        raw_inferred_title = self._infer_title(candidates, slides, chapters, output_language=output_language)
+        title_evidence_lines = []
+        for slide in slides:
+            title_evidence_lines.extend(
+                line.strip()
+                for line in (slide.get("ocr_text") or "").splitlines()
+                if line.strip()
+            )
+        title_evidence_lines.extend(
+            (utterance.get("text") or "").strip()
+            for utterance in utterances
+            if (utterance.get("text") or "").strip()
+        )
+        title_evidence_lines.extend(
+            (slide.get("caption") or slide.get("description") or "").strip()
+            for slide in slides
+            if (slide.get("caption") or slide.get("description") or "").strip()
+        )
+        video_title = clean_video_title(
+            raw_inferred_title,
+            summary_text=exec_summary_text,
+            lang_code=output_language,
+            chapters=updated_chapters,
+            takeaways=key_takeaways,
+            source_evidence="\n".join(title_evidence_lines),
+        )
 
         # 6. Error metadata packaging
         err_dict = None
@@ -478,6 +674,21 @@ class ExtractiveSummarizer:
             else:
                 err_dict = {"error_code": "LLM_FALLBACK", "message": str(llm_error)}
 
+        words = formatted_summary.split()
+        word_count = len(words)
+        reading_time_sec = max(10, int((word_count / 200) * 60))
+
+        variant_data = {
+            "summary_text": formatted_summary,
+            "key_takeaways_json": key_takeaways,
+            "chapters_json": updated_chapters,
+            "word_count": word_count,
+            "reading_time_sec": reading_time_sec,
+            "model_used": "Extractive Fallback (TF-IDF + Multimodal)",
+            "summary_length": length_key,
+            "generated_at": dt.datetime.utcnow().isoformat(),
+        }
+
         return {
             "status": "done",
             "video_title": video_title,
@@ -488,5 +699,11 @@ class ExtractiveSummarizer:
             "model_used": "Extractive Fallback (TF-IDF + Multimodal)",
             "fallback_used": True,
             "summary_method": "extractive_fallback",
+            "summary_length": length_key,
+            "word_count": word_count,
+            "reading_time_sec": reading_time_sec,
+            "summary_variants": {
+                length_key: variant_data
+            },
             "llm_error": err_dict,
         }

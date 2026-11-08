@@ -65,6 +65,18 @@ class AlreadyExistsException(AppException):
         super().__init__(msg, error_code, status_code, details)
 
 
+class ConflictException(AppException):
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        error_code: ErrorCodes = ErrorCodes.RAG_NOT_READY,
+        status_code: int = 409,
+        details: Optional[Any] = None,
+    ):
+        msg = message or error_code.default_message
+        super().__init__(msg, error_code, status_code, details)
+
+
 class ValidationException(AppException):
     def __init__(
         self,

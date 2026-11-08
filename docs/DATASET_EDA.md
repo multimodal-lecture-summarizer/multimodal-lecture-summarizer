@@ -42,7 +42,7 @@ Tốc độ nói được đo bằng số từ trên giây (**Words Per Second -
 ![Phân phối tốc độ nói (WPS) TED-LIUM](../experiments/images/tedlium_wps.png)
 
 > [!IMPORTANT]
-> Tốc độ nói trung bình ~3.08 WPS là một thử thách đối với các mô hình STT (Speech-to-Text) truyền thống. Người nói quá nhanh (>4 WPS) dễ gây ra lỗi nuốt từ (deletion error), trong khi người nói quá chậm (<1.5 WPS) dễ dẫn đến lỗi lặp/thêm từ (insertion error). Do đó hệ thống cần WhisperX với khả năng căn chỉnh cấp độ từ (word-level alignment) để tối ưu hóa.
+> Tốc độ nói trung bình ~3.08 WPS là một thử thách đối với các mô hình STT (Speech-to-Text) truyền thống. Người nói quá nhanh (>4 WPS) dễ gây ra lỗi nuốt từ (deletion error), trong khi người nói quá chậm (<1.5 WPS) dễ dẫn đến lỗi lặp/thêm từ (insertion error). Do đó hệ thống dùng Faster-Whisper với mốc thời gian từng từ để giữ transcript bám đúng chỗ nói.
 
 ---
 

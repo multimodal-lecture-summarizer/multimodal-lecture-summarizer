@@ -6,6 +6,8 @@ import { CONFIG } from '../config';
 import { VideoStatus } from '../types';
 import { useToast } from '../context/ToastContext';
 import { Skeleton } from '../components/Skeleton';
+import { PerformanceCorrelationWidget } from '../components/PerformanceCorrelationWidget';
+import { EvaluationBenchmarkView } from '../components/EvaluationBenchmarkView';
 import { useTranslation } from 'react-i18next';
 import { parseUTCDate } from '../utils/dateUtils';
 
@@ -94,14 +96,14 @@ const formatTime = (secs: number) => {
 
 const getSystemLogs = (job: any) => {
   const startStr = job.startedAt ? parseUTCDate(job.startedAt)!.toISOString() : new Date().toISOString();
-  let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo mô hình WhisperX trích xuất Audio...`;
+  let logs = `[INFO] ${startStr} - Khởi chạy pipeline phân tích đa phương tiện cho Video ${job.videoId || 'N/A'}.\n[INFO] Khởi tạo Faster-Whisper để nhận dạng giọng nói...`;
   
   const isCompleted = job.status === 'completed' || job.status === 'done' || job.status === 'SUCCESS';
   const isFailed = job.status === 'failed' || job.status === 'FAILED';
   
   if (isCompleted) {
     const endStr = job.completedAt ? parseUTCDate(job.completedAt)!.toISOString() : new Date().toISOString();
-    return logs + `\n[INFO] Hoàn thành chuyển đổi giọng nói (Speech-to-Text).` +
+    return logs + `\n[INFO] Hoàn thành nhận dạng giọng nói.` +
                   `\n[INFO] Khởi chạy trích xuất Keyframes bằng CLIP...` +
                   `\n[INFO] Đọc dữ liệu ảnh và xếp hạng độ quan trọng slide...` +
                   `\n[INFO] Gửi văn bản sang Gemini 1.5 để tạo tóm tắt chương...` +
@@ -116,7 +118,7 @@ const getSystemLogs = (job: any) => {
   if (job.startedAt) {
     const elapsed = (Date.now() - parseUTCDate(job.startedAt)!.getTime()) / 1000;
     if (elapsed > 2) {
-      logs += `\n[INFO] Đang chuyển đổi giọng nói sang văn bản (Speech-to-Text)...`;
+      logs += `\n[INFO] Đang nhận dạng giọng nói sang văn bản...`;
     }
     if (elapsed > 6) {
       logs += `\n[INFO] Hoàn thành bóc băng lời thoại. Bắt đầu trích xuất Keyframes bằng CLIP...`;
@@ -131,7 +133,7 @@ const getSystemLogs = (job: any) => {
       logs += `\n[INFO] Tiến trình RAG: Lưu trữ vector embeddings vào ChromaDB...`;
     }
   } else {
-    logs += `\n[INFO] Đang chạy tác vụ WhisperX và CLIP...`;
+    logs += `\n[INFO] Đang chạy Faster-Whisper và CLIP...`;
   }
   
   return logs;
@@ -145,8 +147,45 @@ interface UserItem {
   joined: string;
 }
 
+const AVAILABLE_FORMATS = ['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv'];
+
+const AVAILABLE_CODECS = [
+  { id: 'h264', label: 'H.264 / AVC', desc: 'Tương thích cao nhất' },
+  { id: 'hevc', label: 'H.265 / HEVC', desc: 'Hiệu suất cao 4K / HD' },
+  { id: 'av1', label: 'AV1', desc: 'Thế hệ mới, mở' },
+  { id: 'vp9', label: 'VP9', desc: 'Chuẩn Web / YouTube' },
+  { id: 'vp8', label: 'VP8', desc: 'WebM kế thừa' },
+  { id: 'mpeg4', label: 'MPEG-4', desc: 'Tương thích truyền thống' },
+];
+
+const RESOLUTION_PRESETS = [
+  { id: '360p', label: '360p (SD - 640 × 360)', width: 640, height: 360 },
+  { id: '480p', label: '480p (SD - 854 × 480)', width: 854, height: 480 },
+  { id: '720p', label: '720p (HD - 1280 × 720)', width: 1280, height: 720 },
+  { id: '1080p', label: '1080p (Full HD - 1920 × 1080)', width: 1920, height: 1080 },
+  { id: '1440p', label: '1440p (2K QHD - 2560 × 1440)', width: 2560, height: 1440 },
+  { id: '2160p', label: '2160p (4K UHD - 3840 × 2160)', width: 3840, height: 2160 },
+];
+
+const DURATION_PRESETS = [
+  { label: '15 phút (900s)', value: 900 },
+  { label: '30 phút (1.800s)', value: 1800 },
+  { label: '45 phút (2.700s)', value: 2700 },
+  { label: '60 phút / 1 giờ (3.600s)', value: 3600 },
+  { label: '120 phút / 2 giờ (7.200s)', value: 7200 },
+  { label: '180 phút / 3 giờ (10.800s)', value: 10800 },
+];
+
+const FILE_SIZE_PRESETS = [
+  { label: '100 MB', value: 100 },
+  { label: '250 MB', value: 250 },
+  { label: '500 MB (Tiêu chuẩn)', value: 500 },
+  { label: '1024 MB (1 GB)', value: 1024 },
+  { label: '2048 MB (2 GB)', value: 2048 },
+];
+
 export const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'videos' | 'celery' | 'system-videos' | 'system-jobs' | 'evaluation'>('stats');
   const toast = useToast();
   const { t } = useTranslation();
 
@@ -159,8 +198,24 @@ export const AdminPage: React.FC = () => {
   // Video Standards state
   const [maxDuration, setMaxDuration] = useState(3600);
   const [allowedFormats, setAllowedFormats] = useState('mp4,avi,mkv');
+  const [allowedCodecs, setAllowedCodecs] = useState('h264,hevc,av1,vp9');
+
+  const getFormatsList = (val: string | string[]): string[] => {
+    if (Array.isArray(val)) return val.map(f => String(f).trim().toLowerCase().replace(/^\./, '')).filter(Boolean);
+    return String(val || '').split(',').map(f => f.trim().toLowerCase().replace(/^\./, '')).filter(Boolean);
+  };
+
+  const getCodecsList = (val: string | string[]): string[] => {
+    if (Array.isArray(val)) return val.map(c => String(c).trim().toLowerCase()).filter(Boolean);
+    return String(val || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+  };
+
   const [maxFileSize, setMaxFileSize] = useState(500);
   const [minAudioQuality, setMinAudioQuality] = useState(0.0);
+  const [minWidth, setMinWidth] = useState<number>(640);
+  const [minHeight, setMinHeight] = useState<number>(360);
+  const [maxWidth, setMaxWidth] = useState<number>(3840);
+  const [maxHeight, setMaxHeight] = useState<number>(2160);
   const [standardsLoading, setStandardsLoading] = useState(false);
   const [standardsMsg, setStandardsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -437,9 +492,18 @@ export const AdminPage: React.FC = () => {
         .then(res => {
           if (res.success && res.data) {
             setMaxDuration(res.data.maxDuration);
-            setAllowedFormats(res.data.allowedFormats);
+            const fmt = res.data.allowedFormats;
+            setAllowedFormats(Array.isArray(fmt) ? fmt.join(',') : String(fmt || 'mp4,avi,mkv'));
+            const cdc = res.data.allowedCodecs;
+            if (cdc) {
+              setAllowedCodecs(Array.isArray(cdc) ? cdc.join(',') : String(cdc));
+            }
             setMaxFileSize(res.data.maxFileSize);
             setMinAudioQuality(res.data.minAudioQuality);
+            if (res.data.minWidth !== undefined) setMinWidth(res.data.minWidth);
+            if (res.data.minHeight !== undefined) setMinHeight(res.data.minHeight);
+            if (res.data.maxWidth !== undefined) setMaxWidth(res.data.maxWidth);
+            if (res.data.maxHeight !== undefined) setMaxHeight(res.data.maxHeight);
           }
         })
         .catch(err => {
@@ -659,11 +723,20 @@ export const AdminPage: React.FC = () => {
     e.preventDefault();
     setStandardsLoading(true);
     setStandardsMsg(null);
+
+    const cleanFormats = getFormatsList(allowedFormats).join(',');
+    const cleanCodecs = getCodecsList(allowedCodecs).join(',');
+
     api.updateStandards({
-      maxDuration,
-      allowedFormats,
-      maxFileSize,
-      minAudioQuality
+      maxDuration: Number(maxDuration) || 3600,
+      allowedFormats: cleanFormats || 'mp4,avi,mkv',
+      allowedCodecs: cleanCodecs || 'h264,hevc',
+      maxFileSize: Number(maxFileSize) || 500,
+      minAudioQuality: Number(minAudioQuality) || 0.0,
+      minWidth: Number(minWidth) || 640,
+      minHeight: Number(minHeight) || 360,
+      maxWidth: Number(maxWidth) || 3840,
+      maxHeight: Number(maxHeight) || 2160,
     })
     .then(res => {
       if (res.success) {
@@ -709,6 +782,14 @@ export const AdminPage: React.FC = () => {
               >
                 <span className="material-symbols-outlined text-sm">bar_chart</span> {t('admin.stats')}
               </button>
+              <button 
+                onClick={() => setActiveTab('evaluation')}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left text-xs font-bold w-full ${
+                  activeTab === 'evaluation' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">model_training</span> Đánh giá & Benchmark
+              </button>
             </nav>
           </div>
 
@@ -737,7 +818,7 @@ export const AdminPage: React.FC = () => {
                   activeTab === 'system-jobs' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">worklist</span> {t('admin.jobs')}
+                <span className="material-symbols-outlined text-sm">task</span> {t('admin.jobs')}
               </button>
               <button 
                 onClick={() => setActiveTab('videos')}
@@ -764,6 +845,11 @@ export const AdminPage: React.FC = () => {
       <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50 custom-scrollbar">
         <div className="max-w-7xl mx-auto space-y-6">
           
+          {/* TAB: EVALUATION BENCHMARK */}
+          {activeTab === 'evaluation' && (
+            <EvaluationBenchmarkView />
+          )}
+
           {/* TAB 1: GENERAL STATS */}
           {activeTab === 'stats' && (
             <div className="space-y-6">
@@ -815,7 +901,7 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-2">
                   <h3 className="text-xs text-slate-500 font-bold flex justify-between items-center">
-                    Tổng tác vụ (Jobs)
+                    Tổng tác vụ
                     <span className="material-symbols-outlined text-indigo-500 text-sm">task</span>
                   </h3>
                   {systemJobsTotal === null ? (
@@ -855,7 +941,7 @@ export const AdminPage: React.FC = () => {
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none">
-                  <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Lưu lượng Video (Job Queue)</h3>
+                  <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Lưu lượng xử lý video</h3>
                   <div className="h-64 relative">
                     <canvas ref={barChartRef}></canvas>
                   </div>
@@ -868,8 +954,11 @@ export const AdminPage: React.FC = () => {
                 </div>
               </div>
               
+              {/* Performance Correlation Widget (RTF Analytics) */}
+              <PerformanceCorrelationWidget />
+
               <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none">
-                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Tác vụ Xử lý Gần Đây (PostgreSQL `videos`)</h3>
+                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Tác vụ xử lý gần đây</h3>
                 <div className="overflow-x-auto border-2 border-slate-200 rounded-xl">
                   {statsLoading ? (
                     <div className="p-12 text-center text-slate-500">
@@ -1030,10 +1119,13 @@ export const AdminPage: React.FC = () => {
           {/* TAB 4: VIDEO STANDARD SETTINGS */}
           {activeTab === 'videos' && (
             <div className="space-y-6">
-              <h1 className="font-heading text-xl font-bold text-slate-900">Cấu Hình Tiêu Chuẩn Phân Tích Video</h1>
+              <div>
+                <h1 className="font-heading text-xl font-bold text-slate-900">Cấu Hình Tiêu Chuẩn Phân Tích Video</h1>
+                <p className="text-xs text-slate-500 font-medium">Thiết lập các điều kiện kỹ thuật tự động kiểm định video trước và trong khi xử lý</p>
+              </div>
               
               <div className="bg-white border-2 border-slate-200 rounded-xl p-6 shadow-none">
-                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4 pb-2 border-b-2 border-slate-100 flex items-center gap-1.5">
+                <h3 className="font-heading text-xs font-bold text-slate-900 mb-6 pb-2 border-b-2 border-slate-100 flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-primary text-base">settings_suggest</span> Giới hạn tải lên &amp; Xác thực video
                 </h3>
                 {standardsLoading ? (
@@ -1042,61 +1134,375 @@ export const AdminPage: React.FC = () => {
                     <p className="text-xs mt-2">Đang tải cấu hình...</p>
                   </div>
                 ) : (
-                  <form onSubmit={handleSaveStandards} className="space-y-4 max-w-xl text-xs text-slate-900 font-body">
-                    <div className="flex flex-col gap-1">
-                      <label className="font-bold text-slate-900">Thời lượng video tối đa (Giây)</label>
-                      <input 
-                        type="number" 
-                        value={maxDuration} 
-                        onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-colors"
-                        required
-                      />
-                      <span className="text-[10px] text-slate-500 font-semibold">Mặc định là 3600 giây (1 giờ). Video dài hơn sẽ bị chặn.</span>
+                  <form onSubmit={handleSaveStandards} className="space-y-6 max-w-2xl text-xs text-slate-900 font-body">
+                    
+                    {/* 1. ALLOWED FORMATS */}
+                    <div className="flex flex-col gap-2 p-4 bg-slate-50/70 border-2 border-slate-200/80 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">video_file</span>
+                          Các định dạng cho phép
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setAllowedFormats('mp4,mkv,avi,mov,webm')}
+                            className="text-[10px] text-primary hover:underline font-bold px-1.5 py-0.5 rounded bg-primary/5 border border-primary/20"
+                          >
+                            Phổ biến
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllowedFormats('mp4,webm')}
+                            className="text-[10px] text-slate-600 hover:text-slate-900 font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200"
+                          >
+                            Web only
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllowedFormats(AVAILABLE_FORMATS.join(','))}
+                            className="text-[10px] text-slate-600 hover:text-slate-900 font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200"
+                          >
+                            Tất cả
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Selectable Format Pills */}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {AVAILABLE_FORMATS.map((fmt) => {
+                          const currentList = getFormatsList(allowedFormats);
+                          const isSelected = currentList.includes(fmt);
+                          return (
+                            <button
+                              type="button"
+                              key={fmt}
+                              onClick={() => {
+                                let newList = [...currentList];
+                                if (isSelected) {
+                                  if (newList.length > 1) {
+                                    newList = newList.filter(f => f !== fmt);
+                                  } else {
+                                    toast.info("Cần giữ ít nhất 1 định dạng video cho phép.", "Thông báo");
+                                    return;
+                                  }
+                                } else {
+                                  newList.push(fmt);
+                                }
+                                setAllowedFormats(newList.join(','));
+                              }}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all border-2 ${
+                                isSelected
+                                  ? 'bg-primary text-white border-primary shadow-sm'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-sm">
+                                {isSelected ? 'check_circle' : 'add_circle'}
+                              </span>
+                              .{fmt.toUpperCase()}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono pt-1">
+                        Đang chọn: <strong className="text-slate-700 font-mono">{getFormatsList(allowedFormats).join(', ') || 'Chưa chọn'}</strong>
+                      </span>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <label className="font-bold text-slate-900">Các định dạng được cho phép (Dấu phẩy phân tách)</label>
-                      <input 
-                        type="text" 
-                        value={allowedFormats} 
-                        onChange={(e) => setAllowedFormats(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-colors"
-                        required
-                      />
-                      <span className="text-[10px] text-slate-500 font-semibold">Ví dụ: mp4,avi,mkv,webm</span>
+                    {/* 2. ALLOWED CODECS */}
+                    <div className="flex flex-col gap-2 p-4 bg-slate-50/70 border-2 border-slate-200/80 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">developer_board</span>
+                          Bộ giải mã video cho phép (Codecs)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setAllowedCodecs('h264,hevc,av1,vp9')}
+                            className="text-[10px] text-primary hover:underline font-bold px-1.5 py-0.5 rounded bg-primary/5 border border-primary/20"
+                          >
+                            Khuyên dùng
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllowedCodecs('h264,hevc')}
+                            className="text-[10px] text-slate-600 hover:text-slate-900 font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200"
+                          >
+                            Tương thích cao
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllowedCodecs(AVAILABLE_CODECS.map(c => c.id).join(','))}
+                            className="text-[10px] text-slate-600 hover:text-slate-900 font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200"
+                          >
+                            Tất cả
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Selectable Codec Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {AVAILABLE_CODECS.map((codec) => {
+                          const currentList = getCodecsList(allowedCodecs);
+                          const isSelected = currentList.includes(codec.id);
+                          return (
+                            <button
+                              type="button"
+                              key={codec.id}
+                              onClick={() => {
+                                let newList = [...currentList];
+                                if (isSelected) {
+                                  if (newList.length > 1) {
+                                    newList = newList.filter(c => c !== codec.id);
+                                  } else {
+                                    toast.info("Cần giữ ít nhất 1 codec video cho phép.", "Thông báo");
+                                    return;
+                                  }
+                                } else {
+                                  newList.push(codec.id);
+                                }
+                                setAllowedCodecs(newList.join(','));
+                              }}
+                              className={`p-2.5 rounded-xl text-left border-2 transition-all flex items-start gap-2.5 ${
+                                isSelected
+                                  ? 'bg-primary/5 border-primary text-slate-900 shadow-sm'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                                isSelected ? 'bg-primary text-white' : 'bg-slate-200 text-slate-400'
+                              }`}>
+                                <span className="material-symbols-outlined text-xs">
+                                  {isSelected ? 'check' : 'remove'}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs">{codec.label}</div>
+                                <div className="text-[10px] text-slate-500 font-normal truncate">{codec.desc}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono pt-1">
+                        Đang chọn: <strong className="text-slate-700 font-mono">{getCodecsList(allowedCodecs).join(', ') || 'Chưa chọn'}</strong>
+                      </span>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <label className="font-bold text-slate-900">Dung lượng file tối đa (Megabytes)</label>
-                      <input 
-                        type="number" 
-                        value={maxFileSize} 
-                        onChange={(e) => setMaxFileSize(parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-colors"
-                        required
-                      />
-                      <span className="text-[10px] text-slate-500 font-semibold">Giới hạn dung lượng tối đa cho mỗi lần tải video lên.</span>
+                    {/* 3. RESOLUTION DROPDOWNS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50/70 border-2 border-slate-200/80 rounded-xl">
+                      {/* Min Resolution */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">aspect_ratio</span>
+                          Độ phân giải tối thiểu
+                        </label>
+                        <select
+                          value={
+                            RESOLUTION_PRESETS.find(p => p.width === minWidth && p.height === minHeight)?.id || 'custom'
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val !== 'custom') {
+                              const found = RESOLUTION_PRESETS.find(p => p.id === val);
+                              if (found) {
+                                setMinWidth(found.width);
+                                setMinHeight(found.height);
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none text-xs font-bold text-slate-800"
+                        >
+                          {RESOLUTION_PRESETS.filter(p => p.height <= 1080).map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.label}
+                            </option>
+                          ))}
+                          <option value="custom">Tùy chỉnh kích thước...</option>
+                        </select>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="flex-1 flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                            <span className="text-slate-400 text-[10px] mr-1.5 font-bold">R:</span>
+                            <input
+                              type="number"
+                              value={minWidth}
+                              onChange={(e) => setMinWidth(parseInt(e.target.value) || 0)}
+                              className="w-full font-mono font-bold text-slate-800 outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono">px</span>
+                          </div>
+                          <span className="text-slate-400 font-bold">×</span>
+                          <div className="flex-1 flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                            <span className="text-slate-400 text-[10px] mr-1.5 font-bold">C:</span>
+                            <input
+                              type="number"
+                              value={minHeight}
+                              onChange={(e) => setMinHeight(parseInt(e.target.value) || 0)}
+                              className="w-full font-mono font-bold text-slate-800 outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono">px</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Max Resolution */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">fullscreen</span>
+                          Độ phân giải tối đa
+                        </label>
+                        <select
+                          value={
+                            RESOLUTION_PRESETS.find(p => p.width === maxWidth && p.height === maxHeight)?.id || 'custom'
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val !== 'custom') {
+                              const found = RESOLUTION_PRESETS.find(p => p.id === val);
+                              if (found) {
+                                setMaxWidth(found.width);
+                                setMaxHeight(found.height);
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none text-xs font-bold text-slate-800"
+                        >
+                          {RESOLUTION_PRESETS.filter(p => p.height >= 720).map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.label}
+                            </option>
+                          ))}
+                          <option value="custom">Tùy chỉnh kích thước...</option>
+                        </select>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="flex-1 flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                            <span className="text-slate-400 text-[10px] mr-1.5 font-bold">R:</span>
+                            <input
+                              type="number"
+                              value={maxWidth}
+                              onChange={(e) => setMaxWidth(parseInt(e.target.value) || 0)}
+                              className="w-full font-mono font-bold text-slate-800 outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono">px</span>
+                          </div>
+                          <span className="text-slate-400 font-bold">×</span>
+                          <div className="flex-1 flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                            <span className="text-slate-400 text-[10px] mr-1.5 font-bold">C:</span>
+                            <input
+                              type="number"
+                              value={maxHeight}
+                              onChange={(e) => setMaxHeight(parseInt(e.target.value) || 0)}
+                              className="w-full font-mono font-bold text-slate-800 outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono">px</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <label className="font-bold text-slate-900">Chất lượng âm thanh tối thiểu (SNR)</label>
+                    {/* 4. DURATION & FILE SIZE DROPDOWNS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Max Duration */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">schedule</span>
+                          Thời lượng video tối đa
+                        </label>
+                        <select
+                          value={
+                            DURATION_PRESETS.some(d => d.value === maxDuration) ? maxDuration : 'custom'
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val !== 'custom') {
+                              setMaxDuration(parseInt(val));
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none text-xs font-bold text-slate-800"
+                        >
+                          {DURATION_PRESETS.map((dur) => (
+                            <option key={dur.value} value={dur.value}>
+                              {dur.label}
+                            </option>
+                          ))}
+                          <option value="custom">Tùy chỉnh số giây...</option>
+                        </select>
+                        <div className="flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                          <input
+                            type="number"
+                            value={maxDuration}
+                            onChange={(e) => setMaxDuration(parseInt(e.target.value) || 0)}
+                            className="w-full font-mono font-bold text-slate-800 outline-none"
+                          />
+                          <span className="text-[10px] text-slate-400 font-mono">giây (~{Math.round(maxDuration / 60)} phút)</span>
+                        </div>
+                      </div>
+
+                      {/* Max File Size */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">inventory_2</span>
+                          Dung lượng tệp tối đa
+                        </label>
+                        <select
+                          value={
+                            FILE_SIZE_PRESETS.some(f => f.value === maxFileSize) ? maxFileSize : 'custom'
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val !== 'custom') {
+                              setMaxFileSize(parseInt(val));
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none text-xs font-bold text-slate-800"
+                        >
+                          {FILE_SIZE_PRESETS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                          <option value="custom">Tùy chỉnh số MB...</option>
+                        </select>
+                        <div className="flex items-center bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+                          <input
+                            type="number"
+                            value={maxFileSize}
+                            onChange={(e) => setMaxFileSize(parseInt(e.target.value) || 0)}
+                            className="w-full font-mono font-bold text-slate-800 outline-none"
+                          />
+                          <span className="text-[10px] text-slate-400 font-mono">MB</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5. AUDIO SNR QUALITY */}
+                    <div className="flex flex-col gap-1 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">graphic_eq</span>
+                          Chất lượng âm thanh tối thiểu (SNR dB)
+                        </label>
+                        <span className="text-[10px] text-slate-500 font-semibold">Để 0.0 để không bắt buộc</span>
+                      </div>
                       <input 
                         type="number" 
-                        step="0.1"
+                        step="0.5"
                         value={minAudioQuality} 
                         onChange={(e) => setMinAudioQuality(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-colors"
+                        className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-colors font-mono font-bold"
                         required
                       />
-                      <span className="text-[10px] text-slate-500 font-semibold">Tỷ lệ Tín hiệu trên Nhiễu (SNR) tối thiểu. Để 0.0 để không kiểm tra.</span>
                     </div>
 
                     {standardsMsg && (
-                      <div className={`text-xs font-bold flex items-center gap-1.5 ${
-                        standardsMsg.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+                      <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                        standardsMsg.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'
                       }`}>
-                        <span className="material-symbols-outlined text-sm">
+                        <span className="material-symbols-outlined text-base">
                           {standardsMsg.type === 'success' ? 'check_circle' : 'warning'}
                         </span>
                         {standardsMsg.text}
@@ -1104,7 +1510,7 @@ export const AdminPage: React.FC = () => {
                     )}
 
                     <div className="pt-2">
-                      <button type="submit" className="btn primary px-5 py-2.5">
+                      <button type="submit" className="btn primary px-6 py-2.5 flex items-center gap-2 shadow-sm font-bold">
                         <span className="material-symbols-outlined text-base">save</span> Lưu cấu hình vào DB
                       </button>
                     </div>
@@ -1122,7 +1528,7 @@ export const AdminPage: React.FC = () => {
               <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none space-y-4">
                 <div className="flex justify-between items-center pb-3 border-b-2 border-slate-100 text-xs">
                   <h3 className="font-heading font-bold text-slate-900">Các tiến trình AI đang hoạt động trong hàng đợi</h3>
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full font-bold">Celery Worker: Active (1)</span>
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full font-bold">Máy chủ xử lý: Đang hoạt động (1)</span>
                 </div>
                 
                 <div className="overflow-x-auto border-2 border-slate-200 rounded-xl">
@@ -1206,7 +1612,7 @@ export const AdminPage: React.FC = () => {
               <h1 className="font-heading text-xl font-bold text-slate-900">Quản Lý Toàn Bộ Video Hệ Thống</h1>
               
               <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none">
-                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Danh sách Video đã tải lên (PostgreSQL `videos` table)</h3>
+                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Danh sách video đã tải lên</h3>
                 <div className="overflow-x-auto border-2 border-slate-200 rounded-xl">
                   {videoLoading ? (
                     <table className="w-full text-left text-xs border-collapse font-body">
@@ -1215,7 +1621,7 @@ export const AdminPage: React.FC = () => {
                           <th className="p-3">Video ID</th>
                           <th className="p-3">User ID</th>
                           <th className="p-3">Nguồn / File</th>
-                          <th className="p-3">Độ dài (Giây)</th>
+                          <th className="p-3">Thời lượng (giây)</th>
                           <th className="p-3">Ngôn ngữ</th>
                           <th className="p-3">Trạng thái</th>
                           <th className="p-3">Ngày tải</th>
@@ -1240,7 +1646,7 @@ export const AdminPage: React.FC = () => {
                           <th className="p-3">Video ID</th>
                           <th className="p-3">User ID</th>
                           <th className="p-3">Nguồn / File</th>
-                          <th className="p-3">Độ dài (Giây)</th>
+                          <th className="p-3">Thời lượng (giây)</th>
                           <th className="p-3">Ngôn ngữ</th>
                           <th className="p-3">Trạng thái</th>
                           <th className="p-3">Ngày tải</th>
@@ -1319,10 +1725,10 @@ export const AdminPage: React.FC = () => {
           {/* TAB: SYSTEM JOBS MANAGEMENT */}
           {activeTab === 'system-jobs' && (
             <div className="space-y-6">
-              <h1 className="font-heading text-xl font-bold text-slate-900">Quản Lý Toàn Bộ Tác Vụ (Jobs)</h1>
+              <h1 className="font-heading text-xl font-bold text-slate-900">Quản Lý Toàn Bộ Tác Vụ</h1>
               
               <div className="bg-white border-2 border-slate-200 rounded-xl p-5 shadow-none">
-                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Danh sách tiến trình chạy ngầm (PostgreSQL `jobs` table)</h3>
+                <h3 className="font-heading text-xs font-bold text-slate-900 mb-4">Danh sách tiến trình xử lý nền</h3>
                 <div className="overflow-x-auto border-2 border-slate-200 rounded-xl">
                   {jobsLoading ? (
                     <table className="w-full text-left text-xs border-collapse font-body">
@@ -1431,7 +1837,7 @@ export const AdminPage: React.FC = () => {
                   <span className="font-mono text-[10px] bg-slate-50 px-2 py-1 border-2 border-slate-200 rounded">{selectedVideo.videoId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-500 font-bold">User ID (Sở hữu):</span>
+                  <span className="text-slate-500 font-bold">Mã người dùng sở hữu:</span>
                   <span className="font-mono text-[10px] bg-slate-50 px-2 py-1 border-2 border-slate-200 rounded">{selectedVideo.userId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 sm:col-span-2">
@@ -1488,7 +1894,7 @@ export const AdminPage: React.FC = () => {
               {!loadingSummary && videoSummary && (
                 <div className="pt-4 border-t-2 border-slate-100 space-y-4">
                   <div>
-                    <h3 className="font-heading font-bold text-slate-900 mb-2 text-xs">Tóm Tắt Toàn Văn (AI Summary)</h3>
+                    <h3 className="font-heading font-bold text-slate-900 mb-2 text-xs">Bản tóm tắt toàn văn</h3>
                     <div className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl text-slate-600 leading-relaxed max-h-40 overflow-y-auto custom-scrollbar font-semibold">
                       {videoSummary.summaryText}
                     </div>
@@ -1572,7 +1978,7 @@ export const AdminPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar text-slate-900 font-body">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-500 font-bold">Job ID (Tác vụ):</span>
+                  <span className="text-slate-500 font-bold">Mã tác vụ:</span>
                   <span className="font-mono text-[10px] bg-slate-50 px-2 py-1 border-2 border-slate-200 rounded">{selectedJob.jobId || 'N/A'}</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -1609,7 +2015,7 @@ export const AdminPage: React.FC = () => {
 
               {selectedJob.errorLog && (
                 <div className="pt-4 border-t-2 border-slate-100 space-y-2">
-                  <h3 className="text-red-500 font-bold text-xs">Nhật ký báo lỗi (Error Log / Traceback)</h3>
+                  <h3 className="text-red-500 font-bold text-xs">Nhật ký báo lỗi chi tiết</h3>
                   <pre className="bg-red-50 text-red-600 border-2 border-red-200 p-4 rounded-xl text-[10px] font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
                     {selectedJob.errorLog}
                   </pre>
@@ -1618,7 +2024,7 @@ export const AdminPage: React.FC = () => {
               
               {!selectedJob.errorLog && (
                 <div className="pt-4 border-t-2 border-slate-100 space-y-2">
-                  <h3 className="text-emerald-500 font-bold text-xs">Nhật ký tiến trình (System Log)</h3>
+                  <h3 className="text-emerald-500 font-bold text-xs">Nhật ký tiến trình hệ thống</h3>
                   <pre className="bg-slate-50 border-2 border-slate-200 p-4 rounded-xl text-[10px] font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed text-slate-600 font-semibold">
                     {selectedJob.logs && selectedJob.logs.length > 0 
                       ? selectedJob.logs.join('\n') 

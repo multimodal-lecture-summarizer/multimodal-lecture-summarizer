@@ -7,6 +7,7 @@ from app.schemas.user import (
     TokenData,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    UserPreferencesUpdate,
 )
 from app.schemas.video import (
     VideoCreate,
@@ -15,11 +16,32 @@ from app.schemas.video import (
     VideoStandardDTO,
     VideoMetadataDTO,
     VideoSceneDTO,
+    KeyframeBBoxDTO,
+    ObjectTrackSummaryDTO,
+    SceneDetectedObjectsDTO,
+    VideoObjectsSummaryDTO,
+    ObjectOccurrenceSceneDTO,
+    VideoObjectLabelDetailDTO,
+    VideoObjectsDetailResponseDTO,
 )
 from app.schemas.job import JobDTO
-from app.schemas.summary import SummaryDTO, ChapterDTO, KeyframeDTO
+from app.schemas.summary import SummaryDTO, ChapterDTO, KeyframeDTO, ResummarizeRequest
+from app.schemas.evaluation import (
+    ObjectDetectionBenchmarkItemDTO,
+    ODEvalMetricsDTO,
+    EvaluationDTO,
+    EvaluationResponse,
+    VideoEvaluationResultDTO,
+)
 from app.schemas.qa import QAAskRequest, QALogDTO
-from app.schemas.stats import AdminDashboardStats, SystemStatDTO
+from app.schemas.stats import (
+    AdminDashboardStats,
+    SystemStatDTO,
+    PerformanceAnalyticsDTO,
+    PerformanceSummaryDTO,
+    ScatterDataPointDTO,
+    DurationBucketDTO,
+)
 
 __all__ = [
     "BaseDTO",
@@ -33,19 +55,37 @@ __all__ = [
     "TokenData",
     "ForgotPasswordRequest",
     "ResetPasswordRequest",
+    "UserPreferencesUpdate",
     "VideoCreate",
     "VideoDTO",
     "VideoStandardBase",
     "VideoStandardDTO",
     "VideoMetadataDTO",
     "VideoSceneDTO",
+    "KeyframeBBoxDTO",
+    "ObjectTrackSummaryDTO",
+    "SceneDetectedObjectsDTO",
+    "VideoObjectsSummaryDTO",
+    "ObjectOccurrenceSceneDTO",
+    "VideoObjectLabelDetailDTO",
+    "VideoObjectsDetailResponseDTO",
+    "ODEvalMetricsDTO",
+    "ObjectDetectionBenchmarkItemDTO",
+    "EvaluationDTO",
+    "EvaluationResponse",
+    "VideoEvaluationResultDTO",
     "JobDTO",
     "SummaryDTO",
     "ChapterDTO",
     "KeyframeDTO",
+    "ResummarizeRequest",
     "QAAskRequest",
     "QALogDTO",
     "AdminDashboardStats",
     "SystemStatDTO",
+    "PerformanceAnalyticsDTO",
+    "PerformanceSummaryDTO",
+    "ScatterDataPointDTO",
+    "DurationBucketDTO",
 ]
 

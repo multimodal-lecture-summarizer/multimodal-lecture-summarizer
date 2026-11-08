@@ -2,7 +2,8 @@ fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic[email]>=2.6.0
 pydantic-settings>=2.2.0
-SQLAlchemy>=2.0.0
+# 2.1 switches the default postgresql:// driver to psycopg 3; the app uses psycopg2.
+SQLAlchemy>=2.0.0,<2.1
 psycopg2-binary>=2.9.9
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
@@ -16,3 +17,5 @@ celery>=5.4.0
 redis>=5.0.0
 python-docx>=1.1.0
 fpdf2>=2.7.9
+openai>=1.30
+tenacity>=8.2.0
