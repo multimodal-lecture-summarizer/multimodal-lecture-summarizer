@@ -34,13 +34,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# constraints.txt pins every package to the versions of the last image that built and ran. Without it
+# pip backtracks through hundreds of onnxruntime/protobuf releases (paddlepaddle needs protobuf<5,
+# chromadb's OpenTelemetry needs >=5) and the install can run for hours. Regenerate it from a
+# working image: docker run --rm --entrypoint pip <image> freeze | grep -v ' @ '
+COPY docker/all-in-one/constraints.txt docker/all-in-one/constraints.txt
 COPY ai_workers/requirements.txt ai_workers/requirements.txt
-RUN pip install -r ai_workers/requirements.txt
+RUN pip install -c docker/all-in-one/constraints.txt -r ai_workers/requirements.txt
 COPY ai_workers/requirements-tracking.txt ai_workers/requirements-tracking.txt
 # trackers declares numpy>=2 but runs on the pinned numpy 1.26.4: install it without its deps.
 RUN pip install --no-deps -r ai_workers/requirements-tracking.txt
 COPY backend/requirements.txt backend/requirements.txt
-RUN pip install -r backend/requirements.txt
+RUN pip install -c docker/all-in-one/constraints.txt -r backend/requirements.txt
 
 # Faster-Whisper (CTranslate2) loads cuDNN/cuBLAS by name; use the copies installed with torch.
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib
