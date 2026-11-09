@@ -46,14 +46,19 @@ def build_config_fingerprint(
     florence_device: str,
     sprint_stack: str,
     pipeline_version: str = PIPELINE_VERSION,
+    scene_segmenter: str = "content",
 ) -> str:
-    raw = "|".join([
+    parts = [
         pipeline_version,
         asr_model or "",
         source_language or "auto",
         florence_device or "",
         sprint_stack or "",
-    ])
+    ]
+    # Only a non-default segmenter changes the hash, so existing checkpoints stay valid.
+    if (scene_segmenter or "content") != "content":
+        parts.append(f"segmenter={scene_segmenter}")
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

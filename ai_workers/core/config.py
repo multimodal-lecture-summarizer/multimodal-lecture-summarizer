@@ -56,6 +56,12 @@ class WorkerSettings(BaseSettings):
 
     # Visual module
     SCENE_THRESHOLD: float = 27.0
+    # "content" (default): PySceneDetect ContentDetector on the whole frame.
+    # "slide": block comparison on the static slide area; falls back to "content" when it cannot
+    # judge a video. "slide" also keeps every segment through the filter and sprint stages.
+    SCENE_SEGMENTER: str = "content"
+    # Safety cap on segments in "slide" mode (an embedded video can otherwise blow up the count).
+    SLIDE_MAX_SEGMENTS: int = 80
     KEYFRAME_STRATEGY: str = "sharpest"
     # Candidate frames sampled per scene when picking the sharpest keyframe. Each is a video seek,
     # so fewer candidates extract faster (Colab notebook: 3); 7 keeps the original behavior.

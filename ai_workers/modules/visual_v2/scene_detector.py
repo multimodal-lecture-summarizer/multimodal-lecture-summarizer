@@ -14,16 +14,49 @@ class SceneDetector:
         self.config = config or {}
         self.detector = self.config.get("detector", "content")
         self.threshold = self.config.get("threshold", 27.0)
+        # An explicit threshold/detector is a ContentDetector request (experiment sweeps), so it
+        # must not be redirected by the SCENE_SEGMENTER environment flag.
+        explicit_content = "threshold" in self.config or "detector" in self.config
+        default_segmenter = "content" if explicit_content else worker_settings.SCENE_SEGMENTER
+        self.segmenter = str(self.config.get("segmenter", default_segmenter) or "content").strip().lower()
+        # Segmenter that actually produced the last scene list ("slide" or "content"); a slide
+        # request that falls back reports "content".
+        self.segmenter_used = "content"
 
     def detect_scenes(self, video_path: str) -> list[dict[str, Any]]:
-        """Detect scene boundaries in video using PySceneDetect.
+        """Detect scene boundaries in video.
+
+        Uses the slide segmenter when SCENE_SEGMENTER=slide, otherwise (or when the slide
+        segmenter cannot judge the video) PySceneDetect's ContentDetector.
 
         Returns:
             List of scenes: [{scene_index, start_seconds, end_seconds, start_timecode, end_timecode, start_frame, end_frame}]
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found at: {video_path}")
-            
+
+        self.segmenter_used = "content"
+        if self.segmenter == "slide":
+            from ai_workers.modules.visual_v2.slide_segmenter import SlideSegmenter
+
+            started = time.perf_counter()
+            try:
+                scenes = SlideSegmenter().detect(video_path)
+                self.segmenter_used = "slide"
+                print(
+                    f"[OK] Slide segmenter found {len(scenes)} segments in "
+                    f"{time.perf_counter() - started:.1f}s.",
+                    flush=True,
+                )
+                return scenes
+            except Exception as seg_err:
+                print(
+                    f"[SlideSegmenter] Falling back to ContentDetector: {seg_err}",
+                    flush=True,
+                )
+        return self._detect_content(video_path)
+
+    def _detect_content(self, video_path: str) -> list[dict[str, Any]]:
         print(f"Detecting scenes using PySceneDetect for: {video_path}...")
         from scenedetect import open_video, SceneManager
         from scenedetect.detectors import ContentDetector
@@ -89,11 +122,22 @@ class SceneDetector:
             end_f = scene["end_frame"]
             total_scene_frames = max(1, end_f - start_f + 1)
 
-            if strategy in ("sharpest", "smart"):
+            if strategy in ("sharpest", "smart", "last_stable"):
                 # Sample evenly spaced candidate frames across the scene. Every candidate is a
                 # seek that decodes from the previous video keyframe, so each one costs real time.
                 num_cands = min(max(1, worker_settings.KEYFRAME_CANDIDATES), max(1, total_scene_frames))
-                if num_cands <= 2:
+                if strategy == "last_stable":
+                    # A slide that builds up is complete near its end, so look in the last third,
+                    # stopping short of the next change.
+                    span = end_f - start_f
+                    lo = start_f + span * 2 / 3
+                    hi = max(lo, end_f - span / 10.0)
+                    if num_cands <= 1 or hi - lo < 1:
+                        candidates = [int((lo + hi) / 2)]
+                    else:
+                        step = (hi - lo) / (num_cands - 1)
+                        candidates = [int(lo + i * step) for i in range(num_cands)]
+                elif num_cands <= 2:
                     candidates = [(start_f + end_f) // 2]
                 else:
                     step = (end_f - start_f) / (num_cands + 1)
@@ -168,5 +212,6 @@ class SceneDetector:
 
     def process(self, video_path: str, output_dir: str) -> dict[str, Any]:
         scenes = self.detect_scenes(video_path)
-        keyframes = self.extract_keyframes(video_path, scenes, output_dir)
-        return {"scenes": scenes, "keyframes": keyframes}
+        strategy = "last_stable" if self.segmenter_used == "slide" else "sharpest"
+        keyframes = self.extract_keyframes(video_path, scenes, output_dir, strategy=strategy)
+        return {"scenes": scenes, "keyframes": keyframes, "segmenter": self.segmenter_used}

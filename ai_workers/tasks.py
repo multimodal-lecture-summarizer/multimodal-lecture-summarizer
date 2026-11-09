@@ -135,6 +135,7 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
         source_language=source_language,
         florence_device=worker_settings.FLORENCE_DEVICE,
         sprint_stack=worker_settings.SPRINT_STACK,
+        scene_segmenter=(worker_settings.SCENE_SEGMENTER or "content").strip().lower(),
     )
     source_sha256 = ""
     if os.path.isfile(video_path) and not str(video_path).startswith(("http://", "https://")):
@@ -474,8 +475,12 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                 check_revoked()
                 log_step("Bắt đầu phân tích nội dung slide (CLIP embeddings)...", "semantic", 58)
                 semantic = SemanticAnalyzer()
-                log_step("Đang chạy lọc slide trùng lặp bằng thuật toán K-Means...", "semantic", 60)
-                filtered_scenes = semantic.filter_scenes_clip(branch_visual_result.get("scenes", []))
+                if branch_visual_result.get("segmenter") == "slide":
+                    log_step("Đang bỏ các đoạn slide gần trùng liền kề (chế độ slide)...", "semantic", 60)
+                    filtered_scenes = semantic.filter_slide_segments(branch_visual_result.get("scenes", []))
+                else:
+                    log_step("Đang chạy lọc slide trùng lặp bằng phân cụm CLIP...", "semantic", 60)
+                    filtered_scenes = semantic.filter_scenes_clip(branch_visual_result.get("scenes", []))
                 log_step(f"Đã lọc còn {len(filtered_scenes)} slide đặc trưng. Bắt đầu Florence-2 captioning/OCR...", "semantic", 64)
                 semantic.caption_scenes_florence2(filtered_scenes)
                 log_step("Đã hoàn thành Florence-2 captioning. Bắt đầu OCR nội dung slide...", "semantic", 67)
@@ -585,11 +590,19 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
                         default=0.0
                     )
                     effective_min_chap = 25.0 if (0 < total_dur <= 600.0) else worker_settings.MIN_CHAPTER_SEC
+                    # Slide mode must not run the density prune, so the default stack becomes "slides".
+                    stack_name = worker_settings.SPRINT_STACK
+                    if (
+                        isinstance(visual_result, dict)
+                        and visual_result.get("segmenter") == "slide"
+                        and stack_name.strip().lower() == "recommended"
+                    ):
+                        stack_name = "slides"
                     qp = apply_quality_postprocess(
                         chapters=chapters,
                         keyframes=keyframes,
                         utterances=utterances,
-                        stack_name=worker_settings.SPRINT_STACK,
+                        stack_name=stack_name,
                         min_chapter_sec=effective_min_chap,
                     )
                     chapters = qp["chapters"]

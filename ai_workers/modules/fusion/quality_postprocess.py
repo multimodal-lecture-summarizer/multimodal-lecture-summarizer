@@ -26,8 +26,12 @@ FULL_STACK_S10 = [
     "sprint9",
     "sprint10",
 ]
+# Slide mode: same as recommended without the density prune (sprint4_v2), which would drop
+# quickly changing slides (max 2 keyframes per 30 s).
+SLIDES_STACK = ["sprint1", "sprint3"]
 STACK_PRESETS = {
     "recommended": RECOMMENDED_STACK,
+    "slides": SLIDES_STACK,
     "sprint10": FULL_STACK_S10,
     "full": FULL_STACK_S10,
 }

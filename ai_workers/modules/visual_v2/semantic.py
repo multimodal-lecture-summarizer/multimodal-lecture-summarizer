@@ -508,6 +508,98 @@ class SemanticAnalyzer:
             gc.collect()
             print("[Semantic] CLIP model released successfully.")
 
+    def _embed_keyframes(self, scenes: list[dict[str, Any]]) -> np.ndarray:
+        """L2-normalised CLIP image embeddings, one row per scene keyframe."""
+        processor, model = self.load_clip()
+        rows = []
+        with torch.no_grad():
+            for i in range(0, len(scenes), 32):
+                images = [
+                    Image.open(s["keyframe_path"]).convert("RGB") for s in scenes[i:i + 32]
+                ]
+                pixel_values = processor(images=images, return_tensors="pt").to(self.device)["pixel_values"]
+                vision = model.vision_model(pixel_values=pixel_values)
+                pooled = vision.pooler_output if hasattr(vision, "pooler_output") else vision[1]
+                feats = model.visual_projection(pooled)
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+                rows.append(feats.cpu().numpy())
+        return np.vstack(rows)
+
+    def filter_slide_segments(
+        self,
+        scenes: list[dict[str, Any]],
+        max_segments: int | None = None,
+        dedup_similarity: float = 0.985,
+    ) -> list[dict[str, Any]]:
+        """Slide mode filter: keep every segment except near-identical neighbours.
+
+        Unlike ``filter_scenes_clip`` this has no graphic filter, clustering or keyframe cap, so a
+        full-screen slide is never discarded as a logo. A segment whose keyframe is almost the same
+        as the previous kept one is merged into it (its time range extends the kept segment).
+        Above ``max_segments`` the longest segments are kept.
+        """
+        limit = int(max_segments if max_segments is not None else worker_settings.SLIDE_MAX_SEGMENTS)
+        valid = [s for s in scenes if s.get("keyframe_path") and os.path.exists(s["keyframe_path"])]
+        if not valid:
+            return []
+
+        kept = valid
+        if len(valid) > 1:
+            try:
+                embeddings = self._embed_keyframes(valid)
+            except Exception as embed_err:
+                print(f"[Semantic] Slide dedup skipped, CLIP embedding failed: {embed_err}")
+                embeddings = None
+            if embeddings is not None:
+                kept = [valid[0]]
+                last_emb = embeddings[0]
+                for scene, emb in zip(valid[1:], embeddings[1:]):
+                    if float(np.dot(emb, last_emb)) > dedup_similarity:
+                        kept[-1]["end_seconds"] = scene.get("end_seconds", kept[-1]["end_seconds"])
+                        kept[-1]["end_timecode"] = scene.get("end_timecode", kept[-1].get("end_timecode"))
+                        kept[-1]["end_frame"] = scene.get("end_frame", kept[-1].get("end_frame"))
+                    else:
+                        kept.append(scene)
+                        last_emb = emb
+                print(f"[Semantic] Merged {len(valid) - len(kept)} near-duplicate adjacent slides.")
+
+        if limit > 0 and len(kept) > limit:
+            print(f"[Semantic] {len(kept)} slide segments exceed SLIDE_MAX_SEGMENTS={limit}; keeping the longest.")
+            longest = sorted(
+                kept,
+                key=lambda s: float(s.get("end_seconds", 0.0)) - float(s.get("start_seconds", 0.0)),
+                reverse=True,
+            )[:limit]
+            keep_ids = {id(s) for s in longest}
+            # Dropped segments are absorbed by the previous kept one so the timeline has no gaps.
+            capped: list[dict[str, Any]] = []
+            leading: dict[str, Any] | None = None  # dropped head segment, absorbed by the first kept
+            for s in kept:
+                if id(s) in keep_ids:
+                    if leading is not None:
+                        for key in ("start_seconds", "start_timecode", "start_frame"):
+                            if key in leading:
+                                s[key] = leading[key]
+                        leading = None
+                    capped.append(s)
+                elif capped:
+                    for key in ("end_seconds", "end_timecode", "end_frame"):
+                        if key in s:
+                            capped[-1][key] = s[key]
+                elif leading is None:
+                    leading = s
+            kept = capped
+
+        durations = [
+            max(0.0, float(s.get("end_seconds", 0.0)) - float(s.get("start_seconds", 0.0))) for s in kept
+        ]
+        longest_dur = max(durations) if durations else 0.0
+        for scene, dur in zip(kept, durations):
+            share = dur / longest_dur if longest_dur > 0 else 0.5
+            scene["importanceScore"] = round(0.2 + 0.8 * share, 2)
+        print(f"[Semantic] Slide mode kept {len(kept)} of {len(scenes)} segments.")
+        return kept
+
     def caption_scenes_florence2(self, scenes: list[dict[str, Any]]):
         """Generate detailed captions for scenes using Florence-2."""
         if not scenes:
