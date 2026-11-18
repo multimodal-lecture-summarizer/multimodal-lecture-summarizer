@@ -80,10 +80,12 @@ class WorkerSettings(BaseSettings):
     OCR_MAX_BLOCKS_PER_SCENE: int = 200
 
     # Object Detection & Tracking module: RT-DETR-R18vd (detector) + BoT-SORT (tracker), the models
-    # the benchmark selected (benchmark/docs/BENCHMARK.md, 03a detection and 03b tracking). On by
-    # default; the detector weights are fetched and loaded at worker start-up (resident with the
-    # other visual models) so no job pays for them. Set ENABLE_OBJECT_TRACKING=false to skip it.
-    ENABLE_OBJECT_TRACKING: bool = True
+    # the benchmark selected (benchmark/docs/BENCHMARK.md, 03a detection and 03b tracking). Off by
+    # default: COCO classes mislabel slide frames (book, stop sign, tv...) and the stage took about
+    # 60% of a job's time on slide lectures; the slide-element detector below covers slides. When
+    # enabled, the detector weights are fetched and loaded at worker start-up (resident with the
+    # other visual models) so no job pays for them. Set ENABLE_OBJECT_TRACKING=true to turn it on.
+    ENABLE_OBJECT_TRACKING: bool = False
     OBJECT_DETECTOR_MODEL: str = "PekingU/rtdetr_r18vd"
     # Boxes reported downstream need this confidence (some classes need more, see HIGH_CONF_CLASSES).
     OBJECT_CONF_THRESHOLD: float = 0.40

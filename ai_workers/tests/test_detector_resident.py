@@ -44,11 +44,11 @@ def fake_detector(monkeypatch):
     DETECTOR_SLOT.clear()
 
 
-def test_object_tracking_is_on_by_default():
+def test_object_tracking_is_off_by_default():
     from ai_workers.core.config import worker_settings
 
     fields = type(worker_settings).model_fields
-    assert fields["ENABLE_OBJECT_TRACKING"].default is True
+    assert fields["ENABLE_OBJECT_TRACKING"].default is False
 
 
 def test_models_are_the_benchmark_selection():

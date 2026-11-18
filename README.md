@@ -46,7 +46,7 @@ VIDEO-SUMMARIZATION-SYSTEM/
 | Audio | Nhận dạng lời nói + word timestamp | `en`: Qwen3-ASR 0.6B + Qwen3-ForcedAligner (mặc định, lỗi thì lùi về Faster-Whisper). `vi`: Faster-Whisper `small`. `auto`: nhận diện ngôn ngữ trước rồi chọn engine. Đặt `ASR_ENGLISH_BACKEND=whisper` để luôn dùng Faster-Whisper. |
 | Speaker | Gán người nói khi có token | pyannote 3.1 chỉ chạy nếu có `HF_TOKEN`. Không có token thì `diarization_status=skipped`, không gán speaker giả. |
 | Visual | Phát hiện cảnh, trích keyframe | PySceneDetect `ContentDetector` (mặc định); bộ nhận biết slide khi đặt `SCENE_SEGMENTER=slide` |
-| Semantic | OCR slide, hiểu nội dung ảnh | PaddleOCR, CLIP, Florence-2 (CPU); RT-DETR-R18vd + BoT-SORT (bật mặc định, `ENABLE_OBJECT_TRACKING`) |
+| Semantic | OCR slide, hiểu nội dung ảnh | PaddleOCR, CLIP, Florence-2 (CPU); RT-DETR-R18vd + BoT-SORT (tắt mặc định, bật bằng `ENABLE_OBJECT_TRACKING=true`) |
 | Timeline | Alignment, chia chương, RAG | ChromaDB, cross-modal matching |
 | Text | Tóm tắt | Đầu ra `en` có GPU: LED, transcript xen OCR (`LED_INCLUDE_OCR`). Trường hợp còn lại: LLM qua OpenRouter hoặc Groq. LLM lỗi: tóm tắt trích xuất dự phòng. |
 
