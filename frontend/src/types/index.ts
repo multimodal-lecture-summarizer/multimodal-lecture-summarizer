@@ -191,6 +191,9 @@ export interface SceneDetectedObjects {
   keyframeDetections?: KeyframeBBox[];
   tracks_summary?: ObjectTrackSummary[];
   tracksSummary?: ObjectTrackSummary[];
+  // Tables, charts, photos and illustrations from the fine-tuned slide-element detector.
+  slide_elements?: KeyframeBBox[];
+  slideElements?: KeyframeBBox[];
 }
 
 export interface VideoObjectsSummary {

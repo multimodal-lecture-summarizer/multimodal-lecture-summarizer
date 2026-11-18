@@ -156,6 +156,35 @@ const LABEL_COLORS: Record<
     badgeDot: 'bg-cyan-500',
     text: 'text-cyan-300',
   },
+  // Slide-element detector classes (fine-tuned YOLO11n on LVVO).
+  table: {
+    border: 'border-lime-500',
+    bg: 'bg-lime-500/15',
+    badgeBg: 'bg-lime-50 text-lime-800 border-lime-200',
+    badgeDot: 'bg-lime-500',
+    text: 'text-lime-300',
+  },
+  chart: {
+    border: 'border-yellow-500',
+    bg: 'bg-yellow-500/15',
+    badgeBg: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+    badgeDot: 'bg-yellow-500',
+    text: 'text-yellow-300',
+  },
+  photo: {
+    border: 'border-pink-500',
+    bg: 'bg-pink-500/15',
+    badgeBg: 'bg-pink-50 text-pink-800 border-pink-200',
+    badgeDot: 'bg-pink-500',
+    text: 'text-pink-300',
+  },
+  illustration: {
+    border: 'border-cyan-500',
+    bg: 'bg-cyan-500/15',
+    badgeBg: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+    badgeDot: 'bg-cyan-500',
+    text: 'text-cyan-300',
+  },
 };
 
 const FALLBACK_PALETTES = [
@@ -199,6 +228,18 @@ const isNoiseClass = (label: string, conf: number) => {
   const lbl = (label || '').trim().toLowerCase();
   return LOW_RELEVANCE_NOISE_CLASSES.has(lbl) && conf < 0.65;
 };
+
+// A scene carries two kinds of boxes: COCO detections from the tracker and slide elements
+// (table, chart, photo, illustration). Slide elements have no track id.
+type SceneDetections = NonNullable<VideoScene['detectedObjectsJson']>;
+
+const getCocoBoxes = (det: SceneDetections): KeyframeBBox[] =>
+  det.keyframeBboxes || det.keyframe_bboxes || det.keyframeDetections || det.keyframe_detections || [];
+
+const getSlideElementBoxes = (det: SceneDetections): KeyframeBBox[] =>
+  det.slideElements || det.slide_elements || [];
+
+const getAllBoxes = (det: SceneDetections): KeyframeBBox[] => [...getCocoBoxes(det), ...getSlideElementBoxes(det)];
 
 export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
   videoId,
@@ -265,7 +306,9 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
 
       if (det) {
         foundAny = true;
-        const bboxes = det.keyframeBboxes || det.keyframe_bboxes || det.keyframeDetections || det.keyframe_detections || [];
+        const bboxes = getAllBoxes(det);
+        const sceneKey = scene.sceneIndex ?? scene.scene_index ?? 0;
+        getSlideElementBoxes(det).forEach((_, i) => videoTrackKeys.add(`slide_${sceneKey}_${i}`));
         const tracks = det.tracksSummary || det.tracks_summary || [];
 
         bboxes.forEach((b) => {
@@ -332,7 +375,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
       const counts = scene.objectCountsJson || scene.object_counts_json || {};
 
       if (det) {
-        const bboxes = det.keyframeBboxes || det.keyframe_bboxes || det.keyframeDetections || det.keyframe_detections || [];
+        const bboxes = getAllBoxes(det);
         const tracks = det.tracksSummary || det.tracks_summary || [];
         const hasBox = bboxes.some((b) => b.label?.trim().toLowerCase() === target);
         const hasTrack = tracks.some((t) => t.label?.trim().toLowerCase() === target);
@@ -371,12 +414,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
   const getSceneFilteredCounts = useCallback((scene: VideoScene) => {
     const det = scene.detectedObjectsJson || scene.detected_objects_json;
     if (det) {
-      const rawBoxes: KeyframeBBox[] =
-        det.keyframeBboxes ||
-        det.keyframe_bboxes ||
-        det.keyframeDetections ||
-        det.keyframe_detections ||
-        [];
+      const rawBoxes: KeyframeBBox[] = getAllBoxes(det);
       const rawTracks: ObjectTrackSummary[] = det.tracksSummary || det.tracks_summary || [];
 
       const activeCounts: Record<string, number> = {};
@@ -424,18 +462,14 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
     const det = activeScene.detectedObjectsJson || activeScene.detected_objects_json;
     if (!det) return { currentBboxes: [], currentTracks: [], rawKeyframeBoxCount: 0 };
 
-    const rawBoxes: KeyframeBBox[] =
-      det.keyframeBboxes ||
-      det.keyframe_bboxes ||
-      det.keyframeDetections ||
-      det.keyframe_detections ||
-      [];
+    const rawBoxes: KeyframeBBox[] = getAllBoxes(det);
+    const slideBoxes = getSlideElementBoxes(det);
     let rawTracks: ObjectTrackSummary[] = det.tracksSummary || det.tracks_summary || [];
 
-    // Synthesize tracks from keyframe bboxes if tracks_summary was empty in DB (e.g. keyframe single-frame detections)
-    if (rawTracks.length === 0 && rawBoxes.length > 0) {
-      rawTracks = rawBoxes.map((b, idx) => ({
-        track_id: b.trackId ?? b.track_id ?? (idx + 1),
+    // Boxes without a stored track (keyframe-only detections, slide elements) get one row each.
+    const synthesizeTracks = (boxes: KeyframeBBox[], idOffset: number): ObjectTrackSummary[] =>
+      boxes.map((b, idx) => ({
+        track_id: b.trackId ?? b.track_id ?? idOffset + idx + 1,
         label: b.label,
         avg_confidence: b.confidence ?? 0.5,
         first_seen_sec: activeScene.startSeconds ?? activeScene.start_seconds ?? 0,
@@ -445,7 +479,11 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
         in_keyframe: true,
         best_timestamp_sec: activeScene.startSeconds ?? activeScene.start_seconds ?? 0,
       }));
-    }
+
+    rawTracks =
+      rawTracks.length === 0
+        ? synthesizeTracks(rawBoxes, 0)
+        : [...rawTracks, ...synthesizeTracks(slideBoxes, 1000)];
 
     const filteredBoxes = rawBoxes.filter((b) => {
       const conf = b.confidence || 0;
