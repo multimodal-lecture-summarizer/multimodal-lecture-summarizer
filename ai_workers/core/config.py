@@ -98,6 +98,17 @@ class WorkerSettings(BaseSettings):
     OBJECT_TRACKING_CMC_DOWNSCALE: int = 2
     OBJECT_TRACKING_DEVICE: str = "auto"
 
+    # Slide-element detection: YOLO11n fine-tuned on LVVO (table, chart, photo, illustration), the
+    # model the fine-tune benchmark selected (lvvo-ft-261115-v1, test mAP 0.519 vs 0.085 zero-shot).
+    # Runs on the kept slide keyframes, alongside the COCO tracker. Path to the fine-tuned
+    # `selected.pt` (seed 1, best validation mAP); empty = stage off. The Colab notebook sets it to
+    # the Drive copy when that file exists.
+    SLIDE_ELEMENT_DETECTOR_WEIGHTS: str = ""
+    # Boxes reported downstream need this confidence (not benchmarked: mAP is threshold-free; 0.25 is
+    # the benchmark's precision/recall diagnostic threshold).
+    SLIDE_ELEMENT_CONF_THRESHOLD: float = 0.25
+    SLIDE_ELEMENT_DEVICE: str = "auto"
+
     # English summaries: "led" (default) runs the benchmarked LED map-reduce summarizer when
     # output_language == "en" and a CUDA GPU exists; "llm" keeps the Groq/OpenRouter path only.
     SUMMARIZER_ENGLISH_BACKEND: str = "led"

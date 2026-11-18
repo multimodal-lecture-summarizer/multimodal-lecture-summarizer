@@ -37,6 +37,9 @@ scipy>=1.13.1
 rich>=13.0.0
 requests>=2.28.0
 pydeprecate>=0.9,<0.14
+# Slide-element detection: YOLO11n fine-tuned on LVVO, same ultralytics version the fine-tune used.
+# AGPL-3.0: distributing the worker (or offering it as a network service) carries AGPL obligations.
+ultralytics==8.4.190
 
 # Semantic: OCR, CLIP, Florence-2
 paddlepaddle==2.6.2

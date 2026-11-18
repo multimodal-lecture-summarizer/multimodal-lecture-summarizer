@@ -490,6 +490,24 @@ def process_video(self, job_id: str, video_path: str, config_stack: str = "hybri
 
                 del semantic
                 release_worker_resources("semantic stage")
+
+                # Stage 4.5: slide elements (tables, charts, photos, illustrations) on the kept keyframes.
+                # Optional: a failure here only loses these boxes, never the job.
+                from ai_workers.modules.visual_v2.slide_element_detector import (
+                    detect_slide_elements,
+                    slide_element_detection_enabled,
+                )
+
+                if slide_element_detection_enabled():
+                    check_revoked()
+                    log_step("Đang phát hiện bảng, biểu đồ, ảnh và hình minh họa trên slide (YOLO11n fine-tune)...", "semantic", 70)
+                    try:
+                        element_counts = detect_slide_elements(filtered_scenes)
+                        log_step(f"Đã phát hiện phần tử slide: {element_counts or 'không có'}.", "semantic", 71)
+                    except Exception as slide_err:  # noqa: BLE001
+                        print(f"[SlideEl] Warning: slide-element detection failed: {slide_err}")
+                    finally:
+                        release_worker_resources("slide element stage")
                 return branch_visual_result, branch_objects_summary, filtered_scenes
 
             if worker_settings.ENABLE_PARALLEL_BRANCHES:

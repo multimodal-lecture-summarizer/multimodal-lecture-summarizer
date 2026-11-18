@@ -99,6 +99,13 @@ def _prefetch_detector() -> None:
     preload_detector_model()
 
 
+def _prefetch_slide_elements() -> None:
+    # The weights are a local (Drive) file, so there is nothing to download; this only loads them.
+    from ai_workers.modules.visual_v2.slide_element_detector import preload_slide_element_detector
+
+    preload_slide_element_detector()
+
+
 def prefetch_tasks() -> list[tuple[str, Callable[[], None]]]:
     tasks: list[tuple[str, Callable[[], None]]] = [("whisper", _prefetch_whisper)]
     if worker_settings.ASR_ENGLISH_BACKEND == "qwen3":
@@ -107,6 +114,8 @@ def prefetch_tasks() -> list[tuple[str, Callable[[], None]]]:
     tasks.append(("paddleocr", _prefetch_paddleocr))
     if worker_settings.ENABLE_OBJECT_TRACKING:
         tasks.append(("detector", _prefetch_detector))
+    if worker_settings.SLIDE_ELEMENT_DETECTOR_WEIGHTS.strip():
+        tasks.append(("slide-elements", _prefetch_slide_elements))
     if worker_settings.SUMMARIZER_ENGLISH_BACKEND == "led":
         tasks.append(("led", _prefetch_led))
     return tasks

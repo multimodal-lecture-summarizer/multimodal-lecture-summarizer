@@ -46,6 +46,10 @@ class ObjectTrackSummaryDTO(CamelModel):
 class SceneDetectedObjectsDTO(CamelModel):
     keyframe_bboxes: List[KeyframeBBoxDTO] = Field(default=[], description="Bounding boxes detected on the keyframe image")
     tracks_summary: List[ObjectTrackSummaryDTO] = Field(default=[], description="Continuous object tracks throughout the scene")
+    slide_elements: List[KeyframeBBoxDTO] = Field(
+        default=[],
+        description="Tables, charts, photos and illustrations on the keyframe (fine-tuned YOLO11n; track_id is unset)",
+    )
 
 
 class VideoObjectsSummaryDTO(CamelModel):

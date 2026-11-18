@@ -103,6 +103,7 @@ class ExtractiveSummarizer:
         self,
         utterances: List[Dict[str, Any]],
         slides: List[Dict[str, Any]],
+        is_en: bool = False,
     ) -> List[Dict[str, Any]]:
         """Extract candidate sentences with source timestamp metadata."""
         candidates: List[Dict[str, Any]] = []
@@ -184,8 +185,13 @@ class ExtractiveSummarizer:
                     obj_str = ", ".join(obj_parts[:3])
                     m = int(s_start) // 60
                     sec = int(s_start) % 60
+                    action_text = (
+                        f"Visual demonstration featuring {obj_str} at {m:02d}:{sec:02d}."
+                        if is_en
+                        else f"Khoảnh khắc thực hành kỹ thuật trực quan với {obj_str} ở mốc {m:02d}:{sec:02d}."
+                    )
                     candidates.append({
-                        "text": f"Khoảnh khắc thực hành kỹ thuật trực quan với {obj_str} ở mốc {m:02d}:{sec:02d}.",
+                        "text": action_text,
                         "start": s_start,
                         "end": s_end,
                         "source": "action",
@@ -331,6 +337,7 @@ class ExtractiveSummarizer:
         candidates: List[Dict[str, Any]],
         scores: List[float],
         slides: List[Dict[str, Any]],
+        is_en: bool = False,
     ) -> str:
         """Extract a 1-3 sentence summary bounded strictly within the chapter time window."""
         c_start = float(chapter.get("startTime", 0.0))
@@ -358,10 +365,12 @@ class ExtractiveSummarizer:
                 if ocr:
                     first_line = ocr.split("\n")[0].strip()
                     if first_line:
-                        return f"Nội dung slide chính: {first_line}."
+                        return f"Main slide content: {first_line}." if is_en else f"Nội dung slide chính: {first_line}."
                 if cap and cap not in ["[Nhạc nền / Im lặng]", "Slide"]:
-                    return f"Mô tả phân đoạn: {cap}."
+                    return f"Segment description: {cap}." if is_en else f"Mô tả phân đoạn: {cap}."
 
+        if is_en:
+            return f"Summary of section {chapter.get('title', 'lecture')} ({int(c_start)}s - {int(c_end)}s)."
         return f"Tóm tắt nội dung phần {chapter.get('title', 'bài học')} (khoảng thời gian {int(c_start)}s - {int(c_end)}s)."
 
     def _extract_key_takeaways(
@@ -458,8 +467,8 @@ class ExtractiveSummarizer:
         if length_key not in ("short", "medium", "detailed"):
             length_key = "medium"
 
-        candidates = self._extract_candidates(utterances, slides)
         is_en = (output_language or "vi").strip().lower() == "en"
+        candidates = self._extract_candidates(utterances, slides, is_en=is_en)
 
         # Edge case: Absolutely no transcript or slide content
         if not candidates:
@@ -566,7 +575,8 @@ class ExtractiveSummarizer:
                                 evidences.append(f"Hành động trực quan: {cap}" if not is_en else f"Visual action: {cap}")
                             if len(evidences) >= 2:
                                 break
-                    evidence_str = f"\n*Bằng chứng đa phương thức*: {'; '.join(evidences)}" if evidences else ""
+                    evidence_label = "Multimodal evidence" if is_en else "Bằng chứng đa phương thức"
+                    evidence_str = f"\n*{evidence_label}*: {'; '.join(evidences)}" if evidences else ""
                     section_blocks.append(f"### {idx+1}. {title}\n{body}{evidence_str}")
             else:
                 # Chunk selected sentences into 3 structured sections
@@ -578,7 +588,7 @@ class ExtractiveSummarizer:
                 section_blocks.append(f"### 2. {'Phân tích Kỹ thuật & Thực hành' if not is_en else 'Technical Analysis & Execution'}\n{p2}")
                 section_blocks.append(f"### 3. {'Tổng kết & Lưu ý an toàn' if not is_en else 'Summary & Safety Notes'}\n{p3}")
 
-            intro_header = "### Hồ sơ Phân tích Chuyên sâu (Comprehensive Study Guide)" if not is_en else "### Comprehensive Multimodal Study Guide"
+            intro_header = "### Hồ sơ Phân tích Chuyên sâu" if not is_en else "### Comprehensive Multimodal Study Guide"
             formatted_summary = (
                 f"{intro_header}\n\n"
                 f"{chr(10).join(section_blocks)}\n\n"
@@ -617,7 +627,7 @@ class ExtractiveSummarizer:
         updated_chapters: List[Dict[str, Any]] = []
         if chapters:
             for idx, c in enumerate(chapters):
-                chap_summary = self._extract_chapter_summary(c, candidates, scores, slides)
+                chap_summary = self._extract_chapter_summary(c, candidates, scores, slides, is_en=is_en)
                 default_title = f"Chapter {idx + 1}" if is_en else f"Chương {idx + 1}"
                 chap_title = c.get("title") or default_title
                 updated_chapters.append({
