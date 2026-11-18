@@ -65,6 +65,22 @@ def sentence_prefix(text: str, word_cap: int) -> str:
     return " ".join(text.split()[:word_cap])
 
 
+def describe_raw(raw: str, summary: str, word_cap: int) -> str:
+    """One log line telling whether a short summary comes from LED itself or from sentence_prefix.
+
+    raw: what LED generated; summary: what sentence_prefix kept. Reports word counts, sentence
+    count, the longest sentence, and whether raw ends with terminal punctuation.
+    """
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", raw.strip()) if s]
+    lengths = [len(s.split()) for s in sentences] or [0]
+    terminated = bool(re.search(r"[.!?][\"')\]]*$", raw.strip()))
+    return (
+        f"raw {len(raw.split())} từ, {len(sentences)} câu (dài nhất {max(lengths)} từ), "
+        f"kết thúc bằng dấu câu: {'có' if terminated else 'không'}; "
+        f"giữ {len(summary.split())}/{word_cap} từ sau sentence_prefix."
+    )
+
+
 def led_map_reduce(
     source_ids: list[int],
     encode: Callable[[str], list[int]],
@@ -245,10 +261,15 @@ def build_led_result(
         return None
 
     generate_calls = [0]
+    last_note: dict[str, int] = {}
 
     def counted_generate(ids: list[int], max_new_tokens: int) -> str:
         generate_calls[0] += 1
-        return led.generate(ids, max_new_tokens)
+        text = led.generate(ids, max_new_tokens)
+        # Re-encoded length is close to the generated token count; near the budget means LED
+        # ran out of tokens instead of stopping on its own end-of-sequence token.
+        last_note.update(input_tokens=len(ids), output_tokens=len(led.encode(text)), budget=max_new_tokens)
+        return text
 
     source, ocr_words = transcript, 0
     if worker_settings.LED_INCLUDE_OCR:
@@ -287,8 +308,15 @@ def build_led_result(
     _say(
         f"LED: model sẵn sàng sau {load_seconds:.1f}s, sinh {generate_calls[0]} lần trong {generate_seconds:.1f}s."
     )
+    if last_note:
+        _say(
+            f"Lần sinh cuối: {last_note['input_tokens']} token vào, "
+            f"~{last_note['output_tokens']}/{last_note['budget']} token ra."
+        )
 
-    summary = sentence_prefix(raw, WORD_CAPS.get(length_key, WORD_CAPS["medium"]))
+    word_cap = WORD_CAPS.get(length_key, WORD_CAPS["medium"])
+    summary = sentence_prefix(raw, word_cap)
+    _say(describe_raw(raw, summary, word_cap))
     if not summary:
         _say("LED trả về bản tóm tắt rỗng, chuyển sang LLM.")
         return None

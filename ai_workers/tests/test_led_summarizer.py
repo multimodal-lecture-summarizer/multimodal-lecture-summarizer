@@ -10,6 +10,7 @@ from ai_workers.modules.summarization.led_summarizer import (
     PAYLOAD_CAP,
     REDUCE_TOKENS,
     LedError,
+    describe_raw,
     led_map_reduce,
     sentence_prefix,
 )
@@ -42,6 +43,15 @@ def test_sentence_prefix_drops_unterminated_tail():
 
 def test_sentence_prefix_cuts_oversized_first_sentence():
     assert sentence_prefix("a b c d e f g h", 3) == "a b c"
+
+
+def test_describe_raw_reports_what_sentence_prefix_dropped():
+    raw = "One two three. " + " ".join(["w"] * 10) + " end"  # long unterminated second sentence
+    summary = sentence_prefix(raw, 5)
+    line = describe_raw(raw, summary, 5)
+    assert line.startswith("raw 14 từ, 2 câu (dài nhất 11 từ), kết thúc bằng dấu câu: không;")
+    assert line.endswith("giữ 3/5 từ sau sentence_prefix.")
+    assert "kết thúc bằng dấu câu: có" in describe_raw("Done.", "Done.", 5)
 
 
 def test_short_source_is_a_single_final_pass():
