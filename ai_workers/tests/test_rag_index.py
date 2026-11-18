@@ -15,7 +15,12 @@ if backend_dir not in sys.path:
 
 from app.services.chromadb import ChromaDBService
 from ai_workers.modules.fusion.quality_postprocess import normalize_for_backend
-from ai_workers.modules.summarization.summarizer import Summarizer, normalize_slides
+from ai_workers.modules.summarization.summarizer import (
+    Summarizer,
+    normalize_slides,
+    object_counts_from_slide,
+    slide_evidence,
+)
 
 
 class HashEmbedding(EmbeddingFunction):
@@ -95,6 +100,28 @@ def test_legacy_keyframe_keeps_ocr_caption_objects_and_url():
     assert metadatas[0]["keyframe_url"] == "https://cdn.example/kf.png"
     assert metadatas[0]["start_seconds"] == 0.0
     assert metadatas[0]["end_seconds"] > metadatas[0]["start_seconds"]
+
+
+def test_object_counts_include_slide_elements():
+    chart = {"label": "chart", "confidence": 0.8, "bbox_norm": [0.1, 0.1, 0.5, 0.5]}
+    table = {"label": "table", "confidence": 0.6, "bbox_norm": [0.5, 0.5, 0.9, 0.9]}
+
+    # Tracker off: slide elements are the only objects on the keyframe.
+    only_slide = {"detected_objects": {"keyframe_bboxes": [], "tracks_summary": [], "slide_elements": [chart, chart, table]}}
+    assert object_counts_from_slide(only_slide) == {"chart": 2, "table": 1}
+
+    # Tracker on: COCO counts and slide elements are added together.
+    both = {
+        "object_counts": {"person": 1},
+        "detected_objects": {"tracks_summary": [{"label": "person"}], "slide_elements": [table]},
+    }
+    assert object_counts_from_slide(both) == {"person": 1, "table": 1}
+
+    # Stored scene schema: JSON string under detected_objects_json.
+    stored = {"detected_objects_json": "{\"slide_elements\": [{\"label\": \"photo\"}]}"}
+    assert object_counts_from_slide(stored) == {"photo": 1}
+
+    assert "Đối tượng xuất hiện: 2 chart, 1 table" in slide_evidence(normalize_slides([only_slide])[0])[0]
 
 
 def test_normalize_slides_reads_old_and_new_time_fields():

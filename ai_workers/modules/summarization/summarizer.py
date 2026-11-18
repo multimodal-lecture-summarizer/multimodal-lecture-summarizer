@@ -481,34 +481,39 @@ def _as_count_map(value: Any) -> dict[str, int]:
     return counts
 
 
-def object_counts_from_slide(slide: dict) -> dict[str, int]:
-    """Read object counts from the current or legacy keyframe schema."""
-    counts = _as_count_map(slide.get("object_counts"))
-    if counts:
-        return counts
-    counts = _as_count_map(slide.get("object_counts_json"))
-    if counts:
-        return counts
+def _count_labels(items: Any, counts: dict[str, int]) -> None:
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        if label:
+            counts[label] = counts.get(label, 0) + 1
 
-    detected = slide.get("detected_objects")
+
+def object_counts_from_slide(slide: dict) -> dict[str, int]:
+    """Read object counts from the current or legacy keyframe schema.
+
+    COCO counts come from `object_counts` (or the stored `object_counts_json`), else from
+    `tracks_summary`. Slide elements (table, chart, photo, illustration) live only in
+    `detected_objects.slide_elements` and are always added on top.
+    """
+    detected = slide.get("detected_objects") or slide.get("detected_objects_json")
     if isinstance(detected, str):
         try:
             detected = json.loads(detected)
         except json.JSONDecodeError:
             detected = None
-    tracks = []
+
+    counts = _as_count_map(slide.get("object_counts")) or _as_count_map(slide.get("object_counts_json"))
+    if not counts:
+        if isinstance(detected, dict):
+            _count_labels(detected.get("tracks_summary"), counts)
+        elif isinstance(detected, list):
+            _count_labels(detected, counts)
     if isinstance(detected, dict):
-        tracks = detected.get("tracks_summary") or []
-    elif isinstance(detected, list):
-        tracks = detected
-    counts = {}
-    if isinstance(tracks, list):
-        for track in tracks:
-            if not isinstance(track, dict):
-                continue
-            label = str(track.get("label") or "").strip()
-            if label:
-                counts[label] = counts.get(label, 0) + 1
+        _count_labels(detected.get("slide_elements"), counts)
     return counts
 
 
@@ -816,17 +821,7 @@ class Summarizer:
 
             s_ocr = (s.get("ocr_text") or "").strip()
 
-            obj_parts = []
-            counts = s.get("object_counts")
-            if isinstance(counts, dict) and any(c > 0 for c in counts.values()):
-                obj_parts = [f"{c} {lbl}" for lbl, c in sorted(counts.items()) if c > 0]
-            elif isinstance(s.get("detected_objects"), dict):
-                tracks = s["detected_objects"].get("tracks_summary", [])
-                if tracks:
-                    from collections import Counter
-                    lbls = [t.get("label") for t in tracks if t.get("label")]
-                    obj_parts = [f"{c} {lbl}" for lbl, c in Counter(lbls).items()]
-            obj_desc = ", ".join(obj_parts) if obj_parts else "None detected"
+            obj_desc = format_object_counts(object_counts_from_slide(s)) or "None detected"
 
             entry_parts = [f"[{t_start} - {t_end}]"]
             entry_parts.append(f"Transcript: {s_script if s_script else '[No speech detected]'}")

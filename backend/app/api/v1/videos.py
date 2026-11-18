@@ -35,6 +35,15 @@ from app.services.video_inspector import inspect_video_streams, validate_video_s
 router = APIRouter(route_class=CamelCaseAPIRoute)
 
 
+def _keyframe_boxes(det: dict) -> list:
+    """Boxes scored on a scene keyframe: COCO `keyframe_bboxes` plus slide-element boxes.
+
+    Both carry `label` and `confidence`; slide elements are stored only under
+    `slide_elements` and have no matching `object_counts` entry.
+    """
+    return list(det.get("keyframe_bboxes") or []) + list(det.get("slide_elements") or [])
+
+
 
 
 
@@ -944,8 +953,8 @@ def get_video_scenes(
             counts = s.object_counts_json or {}
             matched = False
 
-            # 1. Check keyframe_bboxes
-            for box in (det.get("keyframe_bboxes") or []):
+            # 1. Check keyframe boxes: COCO keyframe_bboxes and slide elements (table, chart, ...)
+            for box in _keyframe_boxes(det):
                 lbl = str(box.get("label", "")).strip().lower()
                 conf = float(box.get("confidence") or 0.0)
                 label_ok = (target_label is None) or (lbl == target_label)
@@ -1021,8 +1030,8 @@ def get_video_objects(
         counts = s.object_counts_json or {}
         scene_labels_seen: Dict[str, Dict[str, Any]] = {}
 
-        # Inspect keyframe_bboxes
-        for box in (det.get("keyframe_bboxes") or []):
+        # Inspect keyframe boxes: COCO keyframe_bboxes and slide elements (table, chart, ...)
+        for box in _keyframe_boxes(det):
             lbl = str(box.get("label", "")).strip().lower()
             if not lbl:
                 continue

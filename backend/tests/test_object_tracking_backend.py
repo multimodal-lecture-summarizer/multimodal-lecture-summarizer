@@ -492,6 +492,65 @@ class ObjectTrackingBackendTests(unittest.TestCase):
         self.assertEqual(phone_obj.scenes_count, 1)
         self.assertEqual(phone_obj.scenes[0].scene_index, 2)
 
+    def test_slide_elements_are_filterable_and_aggregated(self):
+        mock_video = Video(video_id=self.video_id, user_id=self.user_id, title="Slide elements")
+        # Object tracking off: the scene has no COCO boxes or counts, only slide elements.
+        slide_scene = VideoScene(
+            scene_id=uuid.uuid4(),
+            video_id=self.video_id,
+            scene_index=0,
+            start_seconds=0.0,
+            end_seconds=30.0,
+            start_timecode="00:00:00.000",
+            end_timecode="00:00:30.000",
+            start_frame=0,
+            end_frame=900,
+            keyframe_path="kf/0.jpg",
+            keyframe_url="https://pub.dev/0.jpg",
+            caption="Results slide",
+            detected_objects_json={
+                "keyframe_bboxes": [],
+                "tracks_summary": [],
+                "slide_elements": [
+                    {"label": "chart", "confidence": 0.81, "bbox_norm": [0.1, 0.1, 0.5, 0.5]},
+                    {"label": "table", "confidence": 0.40, "bbox_norm": [0.5, 0.5, 0.9, 0.9]},
+                ],
+            },
+            object_counts_json={},
+        )
+
+        mock_db = MagicMock()
+
+        def mock_query(model):
+            mock_q = MagicMock()
+            if model == Video:
+                mock_q.filter.return_value.first.return_value = mock_video
+            elif model == Summary:
+                mock_q.filter.return_value.first.return_value = None
+            elif model == VideoScene:
+                mock_q.filter.return_value.order_by.return_value.all.return_value = [slide_scene]
+            return mock_q
+
+        mock_db.query.side_effect = mock_query
+
+        def scenes(label, min_conf=None):
+            return get_video_scenes(
+                video_id=self.video_id, object_label=label, min_confidence=min_conf,
+                db=mock_db, current_user=self.regular_user,
+            ).data
+
+        self.assertEqual(len(scenes("chart")), 1)
+        self.assertEqual(len(scenes("TABLE")), 1)
+        self.assertEqual(len(scenes("table", 0.5)), 0)  # table box is 0.40
+        self.assertEqual(len(scenes("photo")), 0)
+
+        dto = get_video_objects(
+            video_id=self.video_id, min_confidence=None, db=mock_db, current_user=self.regular_user,
+        ).data
+        self.assertEqual({o.label for o in dto.objects}, {"chart", "table"})
+        chart = next(o for o in dto.objects if o.label == "chart")
+        self.assertEqual(chart.scenes[0].max_confidence, 0.81)
+
     # -------------------------------------------------------------------------
     # 5. Database Model Columns
     # -------------------------------------------------------------------------
