@@ -43,12 +43,12 @@ VIDEO-SUMMARIZATION-SYSTEM/
 
 | Tầng | Chức năng | Công nghệ |
 |------|-----------|-----------| 
-| Audio | Nhận dạng lời nói + word timestamp | Faster-Whisper `small` (đa ngôn ngữ). `vi`/`en` được truyền từ upload; `auto` để model tự nhận. |
+| Audio | Nhận dạng lời nói + word timestamp | `en`: Qwen3-ASR 0.6B + Qwen3-ForcedAligner (mặc định, lỗi thì lùi về Faster-Whisper). `vi`: Faster-Whisper `small`. `auto`: nhận diện ngôn ngữ trước rồi chọn engine. Đặt `ASR_ENGLISH_BACKEND=whisper` để luôn dùng Faster-Whisper. |
 | Speaker | Gán người nói khi có token | pyannote 3.1 chỉ chạy nếu có `HF_TOKEN`. Không có token thì `diarization_status=skipped`, không gán speaker giả. |
-| Visual | Phát hiện cảnh, trích keyframe | PySceneDetect |
-| Semantic | OCR slide, hiểu nội dung ảnh | PaddleOCR, CLIP, GPT-4o vision |
+| Visual | Phát hiện cảnh, trích keyframe | PySceneDetect `ContentDetector` (mặc định); bộ nhận biết slide khi đặt `SCENE_SEGMENTER=slide` |
+| Semantic | OCR slide, hiểu nội dung ảnh | PaddleOCR, CLIP, Florence-2 (CPU); RT-DETR-R18vd + BoT-SORT (bật mặc định, `ENABLE_OBJECT_TRACKING`) |
 | Timeline | Alignment, chia chương, RAG | ChromaDB, cross-modal matching |
-| Text | Tóm tắt có trích dẫn | GPT-4o / Ollama |
+| Text | Tóm tắt | Đầu ra `en` có GPU: LED, transcript xen OCR (`LED_INCLUDE_OCR`). Trường hợp còn lại: LLM qua OpenRouter hoặc Groq. LLM lỗi: tóm tắt trích xuất dự phòng. |
 
 ## 3. Hướng dẫn Cài đặt & Khởi chạy
 
@@ -91,12 +91,16 @@ celery -A ai_workers.core.celery_app worker --loglevel=info --pool=solo --concur
 
 ### 4.1 Mô tả tập dữ liệu
 
-Quá trình thực nghiệm được tiến hành độc lập trên hai tập dữ liệu khác nhau, phục vụ cho hai bài toán cốt lõi của hệ thống: nhận dạng giọng nói và tóm tắt video.
+Đánh giá được thực hiện độc lập theo từng thành phần trong workspace `benchmark/` cùng cấp với repository này; giao thức và kết quả nằm ở `benchmark/docs/BENCHMARK.md`. Chưa có lần chạy đầu-cuối được chấm điểm, nên các bộ dữ liệu dưới đây không đánh giá toàn hệ thống.
 
-*   **TEDLIUM**: Đây là một kho dữ liệu âm thanh chuyên dụng được trích xuất từ các bài diễn thuyết thực tế bằng tiếng Anh. Môi trường âm thanh trong tập dữ liệu này rất sát với bài toán thực tế mà đồ án hướng tới: diễn giả nói chuyện trong một hội trường lớn, có tiếng ồn nền, có sự đa dạng về ngữ điệu và tốc độ nói. Việc sử dụng TEDLIUM giúp đo đạc chính xác khả năng bóc tách khoảng lặng và độ chuẩn xác của mô hình giải mã văn bản.
-*   **TVSUM**: Tập dữ liệu này chứa năm mươi video ngắn được thu thập từ YouTube, bao trùm mười chủ đề khác nhau như tin tức, phim tài liệu, bài giảng và hướng dẫn thực hành. Điểm giá trị nhất của TVSUM là mỗi video đều đi kèm với nhãn đánh giá mức độ quan trọng ở cấp độ khung hình do con người gán thủ công. Dữ liệu này đóng vai trò làm tiêu chuẩn vàng để hệ thống đối chiếu và đo lường khả năng trích xuất các khung hình mang tính trọng tâm.
+*   **TED-LIUM Release 3 (ASR)**: 507 đoạn validation và 1.155 đoạn test, bài nói TED tiếng Anh. Chỉ ở mức chẩn đoán vì tập test đã lộ; chưa đại diện cho âm thanh giảng đường.
+*   **IIIT-CVID (OCR)**: 15.379 ảnh cắt validation và 1.754 khung test với 40.063 nhãn. Kết luận là `no_selection`.
+*   **TIB (tóm tắt văn bản)**: 300 bản ghi validation để chọn và 523 bản ghi test để xác nhận, tham chiếu là abstract của tác giả.
+*   **MLPDataset (chuyển slide)**: 333 nguồn; đánh giá chẩn đoán trên 11 video tinh chỉnh và 7 video báo cáo với nhãn phát hành chưa qua duyệt.
 
-*Chi tiết kết quả Phân tích Khám phá Dữ liệu (EDA) có thể tham khảo tại báo cáo: [docs/DATASET_EDA.md](docs/DATASET_EDA.md)*
+TVSum không thuộc benchmark hiện tại; phần mô tả về bộ này trong `docs/DATASET_EDA.md` chỉ còn giá trị lịch sử.
+
+*Phân tích khám phá dữ liệu hiện hành nằm ở `benchmark/docs/DATASET_EDA.md`.*
 
 ## 5. Tài liệu dự án
 
@@ -112,7 +116,7 @@ Quá trình thực nghiệm được tiến hành độc lập trên hai tập d
 | [docs/MODEL_SELECTION_README.md](docs/MODEL_SELECTION_README.md) | Báo cáo lựa chọn mô hình Multi-Model dựa trên số liệu thực nghiệm |
 | [docs/SPRINT_QUALITY_DEPLOYMENT.md](docs/SPRINT_QUALITY_DEPLOYMENT.md) | Báo cáo Quality Gates & Sprint Stack (S1–S10) |
 | [docs/STACK_COMPARISON.md](docs/STACK_COMPARISON.md) | So sánh Local GPU vs API vs Hybrid |
-| [docs/DATASET_EDA.md](docs/DATASET_EDA.md) | CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG (Phân tích khám phá dữ liệu TEDLIUM & TVSum) |
+| [docs/DATASET_EDA.md](docs/DATASET_EDA.md) | CHƯƠNG 4: THỰC NGHIỆM VÀ ĐÁNH GIÁ HỆ THỐNG (TEDLIUM & TVSum, tài liệu lịch sử) |
 | [docs/BENCHMARK.md](docs/BENCHMARK.md) | Khung benchmark trên video thực tế |
 | [docs/florence-2-cpu-reproducibility.md](docs/florence-2-cpu-reproducibility.md) | Nguyên nhân Florence-2 sinh text rác trên CPU và giải pháp tái lập Windows/Linux |
 
@@ -125,7 +129,7 @@ AI Workers hỗ trợ 3 stack:
 
 ## 7. Trạng thái dự án
 
-**v0.2.0 — Microservice Architecture:** Kiến trúc 3 tầng (Frontend, Backend API, AI Workers) đã sẵn sàng. Các module AI stage đang ở dạng stub — triển khai theo lộ trình.
+**v0.2.0 — Microservice Architecture:** Kiến trúc 3 tầng (Frontend, Backend API, AI Workers) chạy pipeline AI thực, chi tiết ở [docs/current-system-architecture.md](docs/current-system-architecture.md). Số đo hiện có chỉ ở mức từng thành phần; chưa có lần chạy đầu-cuối được chấm điểm.
 
 ## 8. License
 

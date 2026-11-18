@@ -22,6 +22,7 @@ import {
   FileText,
   BarChart3,
 } from 'lucide-react';
+import { useTranslation, Trans } from 'react-i18next';
 import { api } from '../services/api';
 import { formatSeconds, resolveKeyframeUrl } from '../utils/scene-format';
 import {
@@ -65,6 +66,7 @@ const Highlighted: React.FC<{ text: string; query: string }> = ({ text, query })
 );
 
 export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onSeekVideo }) => {
+  const { t } = useTranslation();
   const [scenes, setScenes] = useState<OcrScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,10 +95,10 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
           setSelectedIdx((list.find((s) => s.blocks.length > 0) ?? list[0]).index);
         }
       } else {
-        throw new Error(res.message || 'Không thể tải danh sách phân cảnh bài giảng.');
+        throw new Error(res.message || t('scene.load_failed'));
       }
     } catch (err: any) {
-      setError(err.message || 'Lỗi kết nối khi tải dữ liệu OCR.');
+      setError(err.message || t('scene.connection_error_ocr'));
     } finally {
       setLoading(false);
     }
@@ -215,7 +217,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 flex items-center justify-between">
           <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</span>
           <button type="button" onClick={fetchScenes} className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded cursor-pointer">
-            Thử lại
+            {t('scene.retry')}
           </button>
         </div>
       </div>
@@ -229,11 +231,11 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
       </div>
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-base font-bold text-slate-900 font-heading">Nhận dạng chữ trên slide (OCR)</h2>
+          <h2 className="text-base font-bold text-slate-900 font-heading">{t('scene.ocr_title')}</h2>
           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">PaddleOCR</span>
         </div>
         <p className="text-xs text-slate-500 mt-0.5 font-body">
-          Văn bản, độ tin cậy và vị trí từng dòng chữ được nhận dạng trên ảnh đại diện của mỗi phân cảnh.
+          {t('scene.ocr_subtitle')}
         </p>
       </div>
     </div>
@@ -245,9 +247,9 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
         {header}
         <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-1.5">
           <ScanText className="w-6 h-6 text-slate-400 mx-auto" />
-          <p className="text-xs font-semibold text-slate-700 font-body">Chưa có dữ liệu OCR chi tiết cho video này.</p>
+          <p className="text-xs font-semibold text-slate-700 font-body">{t('scene.ocr_empty')}</p>
           <p className="text-[11px] text-slate-500 max-w-lg mx-auto font-body">
-            Video được xử lý trước khi hệ thống lưu kết quả OCR, hoặc các khung hình không chứa chữ. Hãy xử lý lại video để xem.
+            {t('scene.ocr_empty_hint')}
           </p>
         </div>
       </div>
@@ -294,16 +296,16 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         {header}
         <div className="flex items-center gap-2 flex-wrap text-xs font-body">
-          {pill(<Layers className="w-3.5 h-3.5 text-primary" />, 'Cảnh có chữ:', `${totals.withText}/${scenes.length}`)}
-          {pill(<ScanText className="w-3.5 h-3.5 text-slate-500" />, 'Dòng:', String(totals.blocks))}
-          {pill(<FileText className="w-3.5 h-3.5 text-slate-500" />, 'Từ:', String(totals.words))}
-          {pill(<BarChart3 className="w-3.5 h-3.5 text-slate-500" />, 'Tin cậy TB:', totals.blocks ? `${Math.round(totals.avg * 100)}%` : '—')}
+          {pill(<Layers className="w-3.5 h-3.5 text-primary" />, t('scene.ocr_scenes_with_text'), `${totals.withText}/${scenes.length}`)}
+          {pill(<ScanText className="w-3.5 h-3.5 text-slate-500" />, t('scene.ocr_lines'), String(totals.blocks))}
+          {pill(<FileText className="w-3.5 h-3.5 text-slate-500" />, t('scene.ocr_words'), String(totals.words))}
+          {pill(<BarChart3 className="w-3.5 h-3.5 text-slate-500" />, t('scene.ocr_avg_conf'), totals.blocks ? `${Math.round(totals.avg * 100)}%` : '—')}
           {hasAnyBlocks && (
             <button
               type="button"
               onClick={exportJson}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium cursor-pointer"
-              title="Tải toàn bộ kết quả OCR (JSON)"
+              title={t('scene.ocr_download')}
             >
               <Download className="w-3.5 h-3.5" /> JSON
             </button>
@@ -319,18 +321,18 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm chữ trong tất cả slide..."
-            aria-label="Tìm chữ trong kết quả OCR"
+            placeholder={t('scene.ocr_search')}
+            aria-label={t('scene.ocr_search_aria')}
             className="pl-8 pr-3 py-1.5 w-64 border border-slate-200 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
         {query && (
-          <span className="text-slate-500">{filteredScenes.length} cảnh khớp</span>
+          <span className="text-slate-500">{t('scene.n_scenes_match', { n: filteredScenes.length })}</span>
         )}
         <span className="mx-1 text-slate-300">|</span>
-        {chip('all', `Tất cả (${scenes.length})`)}
-        {chip('with', 'Có chữ')}
-        {chip('without', 'Không có chữ')}
+        {chip('all', `${t('scene.all')} (${scenes.length})`)}
+        {chip('with', t('scene.with_text'))}
+        {chip('without', t('scene.without_text'))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -338,13 +340,13 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
         <div className="lg:col-span-4 min-w-0 border border-slate-200 rounded-xl overflow-hidden bg-slate-50 flex flex-col max-h-[580px]">
           <div className="px-4 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between">
             <span className="font-bold text-xs text-slate-700 flex items-center gap-1.5 font-heading">
-              <Clock className="w-3.5 h-3.5 text-slate-400" /> Phân cảnh bài giảng
+              <Clock className="w-3.5 h-3.5 text-slate-400" /> {t('scene.lecture_scenes')}
             </span>
-            <span className="text-[11px] text-slate-500 font-medium">{filteredScenes.length} cảnh</span>
+            <span className="text-[11px] text-slate-500 font-medium">{t('scene.n_scenes', { n: filteredScenes.length })}</span>
           </div>
           <div className="overflow-y-auto custom-scrollbar flex-1 p-2 space-y-1.5">
             {filteredScenes.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 font-body">Không có phân cảnh nào phù hợp bộ lọc.</div>
+              <div className="p-6 text-center text-xs text-slate-400 font-body">{t('scene.no_scene_match')}</div>
             ) : (
               filteredScenes.map((s, i) => {
                 const vis = visibleOf(s);
@@ -363,7 +365,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                     <div className="flex items-start gap-2.5">
                       <div className="w-16 h-10 bg-slate-900 rounded overflow-hidden shrink-0 relative border border-slate-200">
                         {thumb ? (
-                          <img src={thumb} alt={`Cảnh ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                          <img src={thumb} alt={t('scene.scene_n', { n: i + 1 })} className="w-full h-full object-cover" loading="lazy" />
                         ) : null}
                         <span className="absolute bottom-0.5 right-0.5 px-1 bg-black/80 text-[8px] font-mono-data font-bold text-white rounded">
                           {formatSeconds(s.startSec)}
@@ -372,7 +374,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                       <div className="flex-1 min-w-0 font-body">
                         <div className="flex items-center justify-between">
                           <span className={`text-xs font-bold ${isActive ? 'text-primary' : 'text-slate-900'}`}>
-                            Cảnh {s.index}
+                            {t('scene.scene_n', { n: s.index })}
                           </span>
                           <span className="text-[10px] font-mono-data text-slate-500">
                             {formatSeconds(s.startSec)} - {formatSeconds(s.endSec)}
@@ -380,11 +382,11 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                         </div>
                         <div className="flex items-center gap-1 mt-1">
                           {vis.length === 0 ? (
-                            <span className="text-[9px] text-slate-400 italic">Không có chữ</span>
+                            <span className="text-[9px] text-slate-400 italic">{t('scene.without_text')}</span>
                           ) : (
                             <>
                               <span className="px-1.5 rounded text-[9px] font-medium border bg-slate-50 text-slate-700 border-slate-200">
-                                {vis.length} dòng
+                                {t('scene.n_lines', { n: vis.length })}
                               </span>
                               <span className={`px-1.5 rounded text-[9px] font-medium border ${BAND_STYLE[confidenceBand(avg)].badge}`}>
                                 {Math.round(avg * 100)}%
@@ -410,14 +412,14 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
         {/* Inspector */}
         <div className="lg:col-span-8 min-w-0 space-y-3.5">
           {!activeScene ? (
-            <div className="p-8 text-center text-xs text-slate-400 border border-slate-200 rounded-xl">Chọn một phân cảnh để xem chi tiết.</div>
+            <div className="p-8 text-center text-xs text-slate-400 border border-slate-200 rounded-xl">{t('scene.pick_scene')}</div>
           ) : (
             <>
               <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col">
                 <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-white font-body">
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm font-heading">Cảnh {activeScene.index}</span>
+                      <span className="font-bold text-sm font-heading">{t('scene.scene_n', { n: activeScene.index })}</span>
                       <span className="text-slate-500">|</span>
                       <span className="font-mono-data text-slate-300">
                         {formatSeconds(activeScene.startSec)} - {formatSeconds(activeScene.endSec)}
@@ -425,16 +427,16 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                     </div>
                     <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span>Hiện <strong>{activeBlocks.length}</strong> dòng chữ (≥ {Math.round(minConf * 100)}%)</span>
+                      <span><Trans i18nKey="scene.showing_lines" values={{ n: activeBlocks.length, pct: Math.round(minConf * 100) }} components={{ strong: <strong /> }} /></span>
                       {stats.hidden > 0 && (
-                        <span className="text-amber-400 text-[10px]">· {stats.hidden} dòng bị ẩn bởi ngưỡng</span>
+                        <span className="text-amber-400 text-[10px]">· {t('scene.hidden_by_threshold', { n: stats.hidden })}</span>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <label className="flex items-center gap-1.5">
                       <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-[10px] text-slate-400">Ngưỡng:</span>
+                      <span className="text-[10px] text-slate-400">{t('scene.threshold')}</span>
                       <input
                         type="range"
                         min={0.5}
@@ -443,7 +445,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                         value={minConf}
                         onChange={(e) => setMinConf(parseFloat(e.target.value))}
                         className="w-14 h-1 bg-slate-700 rounded cursor-pointer accent-primary"
-                        aria-label="Ngưỡng độ tin cậy OCR"
+                        aria-label={t('scene.ocr_threshold_aria')}
                       />
                       <span className="font-mono-data text-[10px] text-slate-300 w-7">{Math.round(minConf * 100)}%</span>
                     </label>
@@ -455,7 +457,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                       }`}
                     >
                       {showBoxes ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                      {showBoxes ? 'Hiện khung' : 'Ẩn khung'}
+                      {showBoxes ? t('scene.show_boxes') : t('scene.hide_boxes')}
                     </button>
                     <button
                       type="button"
@@ -465,14 +467,14 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                         showLabels ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                       }`}
                     >
-                      Nhãn chữ
+                      {t('scene.text_labels')}
                     </button>
                     <button
                       type="button"
                       onClick={() => onSeekVideo(activeScene.startSec)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium cursor-pointer shadow-xs"
                     >
-                      <Play className="w-3 h-3 fill-current" /> Tua video
+                      <Play className="w-3 h-3 fill-current" /> {t('scene.seek_video')}
                     </button>
                   </div>
                 </div>
@@ -481,7 +483,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                 <div className="w-full bg-slate-950 flex items-center justify-center overflow-hidden select-none p-1">
                   {imageUrl ? (
                     <div className="relative inline-block max-w-full">
-                      <img src={imageUrl} alt={`Keyframe cảnh ${activeScene.index}`} className="block max-w-full max-h-[360px] w-auto h-auto" />
+                      <img src={imageUrl} alt={t('scene.keyframe_alt', { n: activeScene.index })} className="block max-w-full max-h-[360px] w-auto h-auto" />
                       {showBoxes && (
                         <>
                           <svg
@@ -533,13 +535,13 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                       )}
                     </div>
                   ) : (
-                    <div className="text-slate-500 text-xs font-body py-16">Không tìm thấy ảnh đại diện của cảnh này</div>
+                    <div className="text-slate-500 text-xs font-body py-16">{t('scene.no_thumb')}</div>
                   )}
                 </div>
 
                 {/* Legend */}
                 <div className="px-4 py-1.5 bg-slate-900 border-t border-slate-800 flex items-center gap-4 text-[10px] text-slate-400">
-                  <span>Độ tin cậy:</span>
+                  <span>{t('scene.confidence_label')}</span>
                   {(['high', 'mid', 'low'] as ConfidenceBand[]).map((k) => (
                     <span key={k} className="flex items-center gap-1">
                       <span className="w-2.5 h-2.5 rounded-sm" style={{ background: BAND_STYLE[k].color }} />
@@ -552,18 +554,18 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
               {/* Tabs */}
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                 <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-semibold font-heading">
-                  {tabBtn('blocks', <ListFilter className="w-3.5 h-3.5" />, `Khối văn bản (${activeBlocks.length})`)}
-                  {tabBtn('text', <FileText className="w-3.5 h-3.5" />, 'Văn bản đầy đủ')}
-                  {tabBtn('stats', <BarChart3 className="w-3.5 h-3.5" />, 'Thống kê')}
+                  {tabBtn('blocks', <ListFilter className="w-3.5 h-3.5" />, t('scene.text_blocks', { n: activeBlocks.length }))}
+                  {tabBtn('text', <FileText className="w-3.5 h-3.5" />, t('scene.full_text'))}
+                  {tabBtn('stats', <BarChart3 className="w-3.5 h-3.5" />, t('scene.stats'))}
                 </div>
 
                 {activeTab === 'blocks' && (
                   <div className="p-3 max-h-[260px] overflow-y-auto overflow-x-auto custom-scrollbar">
                     {activeBlocks.length === 0 ? (
                       <div className="p-6 text-center text-xs text-slate-400 font-body space-y-1">
-                        <p>Cảnh này không có chữ đạt ngưỡng ≥ {Math.round(minConf * 100)}%.</p>
+                        <p>{t('scene.no_text_above', { pct: Math.round(minConf * 100) })}</p>
                         {stats.hidden > 0 && (
-                          <p className="text-[11px] text-amber-500 font-medium">Có {stats.hidden} dòng ở ngưỡng thấp hơn; hạ thanh trượt để xem.</p>
+                          <p className="text-[11px] text-amber-500 font-medium">{t('scene.lines_below_hint', { n: stats.hidden })}</p>
                         )}
                       </div>
                     ) : (
@@ -571,12 +573,12 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                         <thead>
                           <tr className="border-b border-slate-200 text-slate-500 text-[10px] font-semibold uppercase tracking-wider sticky top-0 bg-white z-10">
                             <th className="py-1.5 px-2.5">#</th>
-                            <th className="py-1.5 px-2.5">Văn bản</th>
-                            <th className="py-1.5 px-2.5">Độ tin cậy</th>
-                            <th className="py-1.5 px-2.5">Vị trí (x,y)</th>
-                            <th className="py-1.5 px-2.5">Kích thước</th>
-                            <th className="py-1.5 px-2.5">Ký tự</th>
-                            <th className="py-1.5 px-2.5 text-right">Chép</th>
+                            <th className="py-1.5 px-2.5">{t('scene.col_text')}</th>
+                            <th className="py-1.5 px-2.5">{t('scene.col_confidence')}</th>
+                            <th className="py-1.5 px-2.5">{t('scene.col_position')}</th>
+                            <th className="py-1.5 px-2.5">{t('scene.col_size')}</th>
+                            <th className="py-1.5 px-2.5">{t('scene.col_chars')}</th>
+                            <th className="py-1.5 px-2.5 text-right">{t('scene.col_copy')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -619,8 +621,8 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); copy(key, b.text); }}
                                     className="inline-flex items-center p-1 bg-slate-100 hover:bg-primary hover:text-white rounded cursor-pointer"
-                                    title="Sao chép dòng này"
-                                    aria-label="Sao chép dòng này"
+                                    title={t('scene.copy_line')}
+                                    aria-label={t('scene.copy_line')}
                                   >
                                     {copiedKey === key ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                                   </button>
@@ -639,7 +641,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                     <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-[11px] text-slate-700 font-heading">
-                          Văn bản theo thứ tự đọc ({activeBlocks.length} dòng)
+                          {t('scene.reading_order', { n: activeBlocks.length })}
                         </span>
                         <button
                           type="button"
@@ -648,26 +650,26 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                           className="inline-flex items-center gap-1 px-2 py-0.5 bg-white hover:bg-primary hover:text-white border border-slate-200 rounded text-[10px] font-medium cursor-pointer disabled:opacity-40"
                         >
                           {copiedKey === 'scene' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                          Sao chép
+                          {t('scene.copy')}
                         </button>
                       </div>
                       {activeBlocks.length === 0 ? (
-                        <p className="text-slate-400">Không có chữ đạt ngưỡng.</p>
+                        <p className="text-slate-400">{t('scene.no_text_threshold')}</p>
                       ) : (
                         <p className="text-slate-800 whitespace-pre-wrap">
                           <Highlighted text={buildSceneText(activeBlocks)} query={search} />
                         </p>
                       )}
                       {stats.hidden > 0 && (
-                        <p className="text-[10px] text-amber-600">{stats.hidden} dòng bị ẩn do ngưỡng độ tin cậy.</p>
+                        <p className="text-[10px] text-amber-600">{t('scene.hidden_by_conf', { n: stats.hidden })}</p>
                       )}
                     </div>
                     <details className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                       <summary className="cursor-pointer font-semibold text-[11px] text-slate-700 font-heading">
-                        Chuỗi OCR thô lưu cho tóm tắt (ocr_text)
+                        {t('scene.raw_ocr')}
                       </summary>
                       <p className="mt-1.5 text-slate-700 whitespace-pre-wrap break-words">
-                        {activeScene.ocrText || 'Trống.'}
+                        {activeScene.ocrText || t('scene.empty')}
                       </p>
                     </details>
                   </div>
@@ -677,14 +679,14 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                   <div className="p-3.5 space-y-4 text-xs max-h-[260px] overflow-y-auto custom-scrollbar font-body">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        ['Dòng hiển thị', `${stats.kept}`],
-                        ['Dòng bị ẩn', `${stats.hidden}`],
-                        ['Ký tự', `${stats.chars}`],
-                        ['Từ', `${stats.words}`],
-                        ['Tin cậy TB', stats.kept ? `${(stats.avg * 100).toFixed(1)}%` : '—'],
-                        ['Thấp nhất', stats.kept ? `${(stats.min * 100).toFixed(1)}%` : '—'],
-                        ['Cao nhất', stats.kept ? `${(stats.max * 100).toFixed(1)}%` : '—'],
-                        ['Diện tích chữ', `${(stats.coverage * 100).toFixed(1)}%`],
+                        [t('scene.st_shown'), `${stats.kept}`],
+                        [t('scene.st_hidden'), `${stats.hidden}`],
+                        [t('scene.col_chars'), `${stats.chars}`],
+                        [t('scene.st_words'), `${stats.words}`],
+                        [t('scene.st_avg'), stats.kept ? `${(stats.avg * 100).toFixed(1)}%` : '—'],
+                        [t('scene.st_min'), stats.kept ? `${(stats.min * 100).toFixed(1)}%` : '—'],
+                        [t('scene.st_max'), stats.kept ? `${(stats.max * 100).toFixed(1)}%` : '—'],
+                        [t('scene.st_coverage'), `${(stats.coverage * 100).toFixed(1)}%`],
                       ].map(([k, v]) => (
                         <div key={k} className="p-2 bg-slate-50 border border-slate-200 rounded-lg">
                           <div className="text-[10px] text-slate-500">{k}</div>
@@ -693,7 +695,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                       ))}
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-slate-700 mb-1.5 font-heading">Phân bố độ tin cậy (%)</div>
+                      <div className="text-[11px] font-semibold text-slate-700 mb-1.5 font-heading">{t('scene.conf_distribution')}</div>
                       <div className="space-y-1">
                         {stats.histogram.map((n, i) => {
                           const max = Math.max(1, ...stats.histogram);
@@ -712,7 +714,7 @@ export const SceneOcrExplorer: React.FC<SceneOcrExplorerProps> = ({ videoId, onS
                         })}
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1.5">
-                        PaddleOCR loại sẵn các dòng dưới 50%, nên không có dữ liệu dưới ngưỡng này.
+                        {t('scene.paddle_note')}
                       </p>
                     </div>
                   </div>

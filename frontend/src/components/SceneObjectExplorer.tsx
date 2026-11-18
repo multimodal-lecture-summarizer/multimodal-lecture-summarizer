@@ -22,6 +22,7 @@ import {
   ListFilter,
   CheckCircle2,
 } from 'lucide-react';
+import { useTranslation, Trans } from 'react-i18next';
 import { api } from '../services/api';
 import { CONFIG } from '../config';
 import type { VideoScene, KeyframeBBox, ObjectTrackSummary } from '../types';
@@ -203,6 +204,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
   videoId,
   onSeekVideo,
 }) => {
+  const { t } = useTranslation();
   const [scenes, setScenes] = useState<VideoScene[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -234,11 +236,11 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
           setSelectedSceneIndex(firstIdx);
         }
       } else {
-        throw new Error(res.message || 'Không thể tải danh sách phân cảnh bài giảng.');
+        throw new Error(res.message || t('scene.load_failed'));
       }
     } catch (err: any) {
       console.error('Error fetching video scenes for OD:', err);
-      setError(err.message || 'Lỗi kết nối khi tải phân đoạn video.');
+      setError(err.message || t('scene.connection_error_video'));
     } finally {
       setLoading(false);
     }
@@ -503,7 +505,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
     setSelectedTrackId(null);
   };
 
-  // Explicit seek triggered only when user clicks "Tua video"
+  // Explicit seek triggered only when user clicks "{t('scene.seek_video')}"
   const handleSeekTrack = (trk: ObjectTrackSummary) => {
     const bestSec =
       trk.bestTimestampSec ??
@@ -541,7 +543,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
           <div className="flex items-center gap-2">
             <Video className="w-5 h-5 text-primary animate-pulse" />
             <span className="text-sm font-semibold text-slate-800 font-heading">
-              Đang tải dữ liệu nhận diện đối tượng theo phân cảnh...
+              {t('scene.loading_objects')}
             </span>
           </div>
           <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />
@@ -567,7 +569,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
             onClick={fetchScenesData}
             className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-body transition-colors cursor-pointer"
           >
-            Thử lại
+            {t('scene.retry')}
           </button>
         </div>
       </div>
@@ -580,16 +582,16 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
         <div className="flex items-center gap-2">
           <Video className="w-5 h-5 text-primary" />
           <h2 className="text-base font-bold text-slate-900 font-heading">
-            Nhận diện & Theo dõi Đối tượng (Object Tracking)
+            {t('scene.objects_title')}
           </h2>
         </div>
         <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-1.5">
           <Box className="w-6 h-6 text-slate-400 mx-auto" />
           <p className="text-xs font-semibold text-slate-700 font-body">
-            Chưa có dữ liệu đối tượng trong video này.
+            {t('scene.no_objects')}
           </p>
           <p className="text-[11px] text-slate-500 max-w-lg mx-auto font-body">
-            Video chưa qua bước phân tích thị giác hoặc các khung hình không chứa đối tượng đạt ngưỡng độ tin cậy.
+            {t('scene.no_objects_hint')}
           </p>
         </div>
       </div>
@@ -608,14 +610,14 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-slate-900 font-heading">
-                  Nhận diện & Theo dõi Đối tượng
+                  {t('scene.objects_title')}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                  Thị giác máy tính
+                  {t('scene.computer_vision')}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-body">
-                Thống kê sự hiện diện của người, phương tiện và công cụ hỗ trợ trong từng phân đoạn bài giảng.
+                {t('scene.objects_subtitle')}
               </p>
             </div>
           </div>
@@ -625,12 +627,12 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
         <div className="flex items-center gap-2 shrink-0 text-xs font-body">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
             <Box className="w-3.5 h-3.5 text-primary" />
-            <span className="text-slate-500">Đối tượng duy nhất:</span>
+            <span className="text-slate-500">{t('scene.unique_objects')}</span>
             <span className="font-semibold text-slate-900">{totalUniqueTracks || '—'}</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
             <Layers className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-slate-500">Tổng phân cảnh:</span>
+            <span className="text-slate-500">{t('scene.total_scenes')}</span>
             <span className="font-semibold text-slate-900">{scenes.length}</span>
           </div>
         </div>
@@ -640,7 +642,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-body custom-scrollbar">
         <span className="text-slate-400 font-semibold text-xs shrink-0 flex items-center gap-1">
           <Tag className="w-3.5 h-3.5 text-slate-400" />
-          Lọc nhãn:
+          {t('scene.filter_labels')}
         </span>
 
         {/* All Scenes */}
@@ -653,7 +655,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
               : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
           }`}
         >
-          Tất cả ({scenes.length})
+          {t('scene.all')} ({scenes.length})
         </button>
 
         {/* Dynamic Label Chips */}
@@ -678,9 +680,9 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
                   isSelected ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
-                title={`Xuất hiện trong ${stats.sceneCount} phân cảnh`}
+                title={t('scene.appears_in_scenes', { n: stats.sceneCount })}
               >
-                {stats.sceneCount} cảnh
+                {t('scene.n_scenes', { n: stats.sceneCount })}
               </span>
             </button>
           );
@@ -694,17 +696,17 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
           <div className="px-4 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between">
             <span className="font-bold text-xs text-slate-700 flex items-center gap-1.5 font-heading">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
-              Phân cảnh bài giảng
+              {t('scene.lecture_scenes')}
             </span>
             <span className="text-[11px] text-slate-500 font-medium">
-              {filteredScenes.length} cảnh
+              {t('scene.n_scenes', { n: filteredScenes.length })}
             </span>
           </div>
 
           <div className="divide-y divide-slate-200/70 overflow-y-auto custom-scrollbar flex-1 p-2 space-y-1.5">
             {filteredScenes.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-400 font-body">
-                Không có phân cảnh nào chứa nhãn "{selectedLabelFilter}".
+                {t('scene.no_scene_with_label', { label: selectedLabelFilter })}
               </div>
             ) : (
               filteredScenes.map((scene, idx) => {
@@ -737,13 +739,13 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                         {formattedKfUrl ? (
                           <img
                             src={formattedKfUrl}
-                            alt={`Cảnh ${displayNum}`}
+                            alt={t('scene.scene_n', { n: displayNum })}
                             className="w-full h-full object-cover"
                             loading="lazy"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-500 text-[9px]">
-                            Ảnh tĩnh
+                            {t('scene.still_image')}
                           </div>
                         )}
                         <span className="absolute bottom-0.5 right-0.5 px-1 bg-black/80 text-[8px] font-mono-data font-bold text-white rounded">
@@ -756,7 +758,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             <span className={`text-xs font-bold ${isActive ? 'text-primary' : 'text-slate-900'}`}>
-                              Cảnh {displayNum}
+                              {t('scene.scene_n', { n: displayNum })}
                             </span>
                             {sIdx !== displayNum && (
                               <span className="px-1 py-0.2 rounded text-[9px] text-slate-400 bg-slate-100">
@@ -772,7 +774,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                         {/* Counts */}
                         <div className="flex items-center gap-1 flex-wrap mt-1">
                           {Object.entries(counts).length === 0 ? (
-                            <span className="text-[9px] text-slate-400 italic">Không có đối tượng</span>
+                            <span className="text-[9px] text-slate-400 italic">{t('scene.no_object_short')}</span>
                           ) : (
                             Object.entries(counts).map(([lbl, cnt]) => {
                               const style = getColorForLabel(lbl);
@@ -810,7 +812,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white text-sm font-heading">
-                    Cảnh {activeDisplayIndex}
+                    {t('scene.scene_n', { n: activeDisplayIndex })}
                   </span>
                   <span className="text-slate-500">|</span>
                   <span className="font-mono-data text-slate-300 text-xs">
@@ -821,15 +823,15 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   <span>
-                    Hiện <strong>{currentBboxes.length}</strong> đối tượng trên ảnh đại diện
+                    <Trans i18nKey="scene.showing_on_thumb" values={{ n: currentBboxes.length }} components={{ strong: <strong /> }} />
                   </span>
                   <span className="text-slate-600">•</span>
                   <span>
-                    Tổng <strong>{currentTracks.length}</strong> đối tượng trong cảnh này (≥ {Math.round(minConfidenceFilter * 100)}%)
+                    <Trans i18nKey="scene.total_in_scene" values={{ n: currentTracks.length, pct: Math.round(minConfidenceFilter * 100) }} components={{ strong: <strong /> }} />
                   </span>
                   {rawKeyframeBoxCount > 0 && currentBboxes.length === 0 && (
                     <span className="text-amber-400 text-[10px]">
-                      (Có {rawKeyframeBoxCount} đối tượng ở ngưỡng thấp hơn)
+                      ({t('scene.n_below_threshold', { n: rawKeyframeBoxCount })})
                     </span>
                   )}
                 </div>
@@ -840,7 +842,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 {/* Confidence Slider */}
                 <div className="flex items-center gap-1.5">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-[10px] text-slate-400">Ngưỡng:</span>
+                  <span className="text-[10px] text-slate-400">{t('scene.threshold')}</span>
                   <input
                     type="range"
                     min={0.1}
@@ -868,24 +870,24 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                   {showBoundingBoxes ? (
                     <>
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Hiện khung</span>
+                      <span>{t('scene.show_boxes')}</span>
                     </>
                   ) : (
                     <>
                       <EyeOff className="w-3.5 h-3.5" />
-                      <span>Ẩn khung</span>
+                      <span>{t('scene.hide_boxes')}</span>
                     </>
                   )}
                 </button>
 
-                {/* Tua video Button */}
+                {/* {t('scene.seek_video')} Button */}
                 <button
                   type="button"
                   onClick={() => onSeekVideo(activeScene?.startSeconds || 0)}
                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors cursor-pointer shadow-xs"
                 >
                   <Play className="w-3 h-3 fill-current" />
-                  <span>Tua video</span>
+                  <span>{t('scene.seek_video')}</span>
                 </button>
               </div>
             </div>
@@ -895,12 +897,12 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
               {keyframeImageUrl ? (
                 <img
                   src={keyframeImageUrl}
-                  alt={`Keyframe Cảnh ${activeDisplayIndex}`}
+                  alt={t('scene.keyframe_alt', { n: activeDisplayIndex })}
                   className="w-full h-full object-contain"
                 />
               ) : (
                 <div className="text-slate-500 text-xs font-body">
-                  Không tìm thấy ảnh đại diện của cảnh này
+                  {t('scene.no_thumb')}
                 </div>
               )}
 
@@ -991,7 +993,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 }`}
               >
                 <ListFilter className="w-3.5 h-3.5" />
-                Danh sách đối tượng ({currentTracks.length})
+                {t('scene.object_list')} ({currentTracks.length})
               </button>
               <button
                 type="button"
@@ -1003,7 +1005,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                Thông tin phân cảnh
+                {t('scene.scene_info')}
               </button>
             </div>
 
@@ -1012,10 +1014,10 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
               <div className="p-3 max-h-[220px] overflow-y-auto overflow-x-auto custom-scrollbar">
                 {currentTracks.length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400 font-body space-y-1">
-                    <p>Chưa có đối tượng nào đạt ngưỡng độ tin cậy ≥ {Math.round(minConfidenceFilter * 100)}%.</p>
+                    <p>{t('scene.none_above_threshold', { pct: Math.round(minConfidenceFilter * 100) })}</p>
                     {rawKeyframeBoxCount > 0 && (
                       <p className="text-[11px] text-amber-500 font-medium">
-                        Có {rawKeyframeBoxCount} đối tượng ở ngưỡng thấp hơn. Bạn có thể hạ thanh trượt "Ngưỡng" xuống để xem chi tiết.
+                        {t('scene.lower_threshold_hint', { n: rawKeyframeBoxCount })}
                       </p>
                     )}
                   </div>
@@ -1023,13 +1025,13 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                   <table className="w-full text-xs text-left font-body">
                     <thead>
                       <tr className="border-b border-slate-200 text-slate-500 text-[10px] font-semibold uppercase tracking-wider sticky top-0 bg-white z-10">
-                        <th className="py-1.5 px-2.5">Mã</th>
-                        <th className="py-1.5 px-2.5">Đối tượng</th>
-                        <th className="py-1.5 px-2.5">Trạng thái xuất hiện</th>
-                        <th className="py-1.5 px-2.5">Độ tin cậy</th>
-                        <th className="py-1.5 px-2.5">Khoảng thời gian</th>
-                        <th className="py-1.5 px-2.5">Số khung</th>
-                        <th className="py-1.5 px-2.5 text-right">Tua video</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_id')}</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_object')}</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_status')}</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_confidence')}</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_range')}</th>
+                        <th className="py-1.5 px-2.5">{t('scene.col_frames')}</th>
+                        <th className="py-1.5 px-2.5 text-right">{t('scene.seek_video')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1094,16 +1096,16 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                               {inKeyframe ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  Trên ảnh đại diện
+                                  {t('scene.on_thumb')}
                                 </span>
                               ) : (
                                 <div className="flex flex-col">
                                   <span
                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                                    title={`Xuất hiện ngoài frame tĩnh lúc ${formatSeconds(firstSec)} - ${formatSeconds(lastSec)}`}
+                                    title={t('scene.appears_offframe', { from: formatSeconds(firstSec), to: formatSeconds(lastSec) })}
                                   >
                                     <Clock className="w-3 h-3 text-amber-600 shrink-0" />
-                                    <span>Xuất hiện lúc {formatSeconds(firstSec)} - {formatSeconds(lastSec)}</span>
+                                    <span>{t('scene.appears_at', { from: formatSeconds(firstSec), to: formatSeconds(lastSec) })}</span>
                                   </span>
                                 </div>
                               )}
@@ -1133,7 +1135,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                                   handleSeekTrack(trk);
                                 }}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 hover:bg-primary hover:text-white rounded text-[10px] font-medium transition-all cursor-pointer shadow-xs"
-                                title={`Tua đến thời điểm rõ nhất (${formatSeconds(bestSec)})`}
+                                title={t('scene.seek_best', { time: formatSeconds(bestSec) })}
                               >
                                 <Play className="w-2.5 h-2.5 fill-current" />
                                 <span className="font-mono-data">{formatSeconds(bestSec)}</span>
@@ -1155,10 +1157,10 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                   <span className="font-semibold text-[11px] text-slate-700 flex items-center gap-1 font-heading">
                     <Video className="w-3.5 h-3.5 text-primary" />
-                    Mô tả hình ảnh (Visual Caption):
+                    {t('scene.visual_caption')}
                   </span>
                   <p className="text-slate-800">
-                    {activeScene?.caption || 'Chưa có mô tả khung cảnh tự động cho phân đoạn này.'}
+                    {activeScene?.caption || t('scene.no_caption')}
                   </p>
                 </div>
 
@@ -1166,10 +1168,10 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                   <span className="font-semibold text-[11px] text-slate-700 flex items-center gap-1 font-heading">
                     <FileText className="w-3.5 h-3.5 text-primary" />
-                    Lời giảng tương ứng (Audio Transcript):
+                    {t('scene.audio_transcript')}
                   </span>
                   <p className="text-slate-800">
-                    {activeScene?.script || 'Chưa ghi nhận lời giảng trong khoảng thời gian này.'}
+                    {activeScene?.script || t('scene.no_script')}
                   </p>
                 </div>
 
@@ -1178,7 +1180,7 @@ export const SceneObjectExplorer: React.FC<SceneObjectExplorerProps> = ({
                   <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
                     <span className="font-semibold text-[11px] text-slate-700 flex items-center gap-1 font-heading">
                       <Box className="w-3.5 h-3.5 text-primary" />
-                      Văn bản trên slide (OCR Text):
+                      {t('scene.ocr_text')}
                     </span>
                     <p className="text-slate-800 whitespace-pre-wrap">
                       {activeScene.ocrText || activeScene.ocr_text}

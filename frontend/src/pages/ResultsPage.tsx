@@ -154,42 +154,44 @@ const parseTimeText = (timeStr: string) => {
   return 0;
 };
 
-// Format reading duration in humanized Vietnamese
-const formatReadingTime = (totalSeconds: number): string => {
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+// Format reading duration in humanized text
+const formatReadingTime = (totalSeconds: number, t: TFn): string => {
   if (totalSeconds < 60) {
-    return `${Math.max(10, totalSeconds)} giây`;
+    return t('results.n_seconds', { n: Math.max(10, totalSeconds) });
   }
   const mins = Math.floor(totalSeconds / 60);
   const remSecs = totalSeconds % 60;
   if (remSecs === 0) {
-    return `${mins} phút`;
+    return t('results.n_minutes', { n: mins });
   }
-  return `${mins} phút ${remSecs} giây`;
+  return t('results.n_min_sec', { m: mins, s: remSecs });
 };
 
 const LENGTH_OPTIONS: { id: SummaryLength; label: string; badge: string; description: string }[] = [
   {
     id: 'short',
-    label: 'Ngắn gọn',
-    badge: 'Tóm tắt ngắn gọn',
-    description: 'Nắm nhanh thông điệp & hành động cốt lõi'
+    label: 'results.len_short_label',
+    badge: 'results.len_short_badge',
+    description: 'results.len_short_desc'
   },
   {
     id: 'medium',
-    label: 'Tiêu chuẩn',
-    badge: 'Tổng quan tiêu chuẩn',
-    description: 'Nội dung cân bằng, đầy đủ'
+    label: 'results.len_medium_label',
+    badge: 'results.len_medium_badge',
+    description: 'results.len_medium_desc'
   },
   {
     id: 'detailed',
-    label: 'Chi tiết',
-    badge: 'Phân tích chi tiết',
-    description: 'Nghiên cứu & phân tích chuyên sâu'
+    label: 'results.len_detailed_label',
+    badge: 'results.len_detailed_badge',
+    description: 'results.len_detailed_desc'
   }
 ];
 
 // Ergonomic markdown formatter with clickable timestamp badges and bold styling
-const renderFormattedSummary = (text: string, onSeek: (seconds: number) => void) => {
+const renderFormattedSummary = (text: string, onSeek: (seconds: number) => void, t: TFn) => {
   if (!text) return null;
 
   const lines = text.split('\n');
@@ -222,7 +224,7 @@ const renderFormattedSummary = (text: string, onSeek: (seconds: number) => void)
                 onSeek(secs);
               }}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 text-xs font-mono font-medium text-primary bg-primary/10 hover:bg-primary hover:text-white rounded transition-all duration-150 cursor-pointer align-baseline select-none active:scale-95 group/ts"
-              title={`Chuyển tới mốc ${cleanTime} và phát video`}
+              title={t('results.seek_to', { time: cleanTime })}
             >
               <Play className="w-2.5 h-2.5 fill-current shrink-0 opacity-80 group-hover/ts:opacity-100" />
               <span>{cleanTime}</span>
@@ -360,7 +362,7 @@ export const ResultsPage: React.FC = () => {
   const [expandedChapterIdx, setExpandedChapterIdx] = useState<number | null>(null);
   useEffect(() => {
     if (!videoId) {
-      setError("Không tìm thấy ID video bài giảng. Vui lòng quay lại lịch sử.");
+      setError(t('results.err_no_id'));
       return;
     }
 
@@ -373,13 +375,13 @@ export const ResultsPage: React.FC = () => {
     ])
     .then(([videoRes, summaryRes]) => {
       if (!videoRes.success || !videoRes.data) {
-        throw new Error(videoRes.message || "Không thể tải chi tiết video.");
+        throw new Error(videoRes.message || t('results.err_load_video'));
       }
       setVideoData(videoRes.data);
       setDuration(videoRes.data.duration || 0);
 
       if (!summaryRes.success || !summaryRes.data) {
-        throw new Error(summaryRes.message || "Không thể tải tóm tắt video.");
+        throw new Error(summaryRes.message || t('results.err_load_summary'));
       }
 
       const loadedData = summaryRes.data;
@@ -497,7 +499,7 @@ export const ResultsPage: React.FC = () => {
     })
     .catch(err => {
       console.error("Failed to load video/summary:", err);
-      setError(err.message || "Lỗi tải dữ liệu bài giảng từ máy chủ.");
+      setError(err.message || t('results.err_load_lecture'));
       setLoading(false);
     });
   }, [videoId]);
@@ -700,17 +702,17 @@ export const ResultsPage: React.FC = () => {
 
 
         const lengthLabels: Record<SummaryLength, string> = {
-          short: 'Ngắn gọn (TL;DR)',
-          medium: 'Tiêu chuẩn',
-          detailed: 'Chi tiết'
+          short: t('results.len_short_tldr'),
+          medium: t('results.len_medium_label'),
+          detailed: t('results.len_detailed_label')
         };
-        toast.success(`Đã hoàn tất bản tóm tắt cấp độ ${lengthLabels[targetLength]}.`, 'Cập nhật tóm tắt');
+        toast.success(t('results.toast_summary_done', { level: lengthLabels[targetLength] }), t('results.toast_summary_updated'));
       } else {
-        throw new Error(res.message || 'Không thể tạo bản tóm tắt mới.');
+        throw new Error(res.message || t('results.err_resummarize'));
       }
     } catch (err: any) {
       console.error('Error resummarizing:', err);
-      toast.error(err.message || 'Có lỗi xảy ra khi tạo bản tóm tắt theo độ dài yêu cầu.', 'Tạo tóm tắt thất bại');
+      toast.error(err.message || t('results.err_resummarize_len'), t('results.toast_summary_failed'));
     } finally {
       setIsRegeneratingSummary(false);
     }
@@ -724,10 +726,10 @@ export const ResultsPage: React.FC = () => {
     try {
       await navigator.clipboard.writeText(textToCopy);
       setIsCopiedSummary(true);
-      toast.info('Nội dung tóm tắt đã được lưu vào bộ nhớ tạm.', 'Đã sao chép');
+      toast.info(t('results.toast_copied_body'), t('results.toast_copied'));
       setTimeout(() => setIsCopiedSummary(false), 2000);
     } catch (err) {
-      toast.error('Không thể truy cập bộ nhớ tạm trên thiết bị.', 'Sao chép thất bại');
+      toast.error(t('results.toast_copy_failed_body'), t('results.toast_copy_failed'));
     }
   };
 
@@ -899,7 +901,7 @@ export const ResultsPage: React.FC = () => {
           to="/history" 
           className="px-6 py-2 bg-slate-900 text-white rounded hover:bg-primary font-semibold text-sm transition-all"
         >
-          Quay lại Lịch sử
+          {t('results.back_to_history')}
         </Link>
       </div>
     );
@@ -921,33 +923,33 @@ export const ResultsPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 select-none">
               <span className="material-symbols-outlined text-sm text-slate-400">download</span>
-              Xuất tài liệu:
+              {t('results.export_label')}
             </span>
             <div className="inline-flex items-center p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-medium gap-0.5">
               <button 
                 onClick={() => handleExport('docx')} 
-                title="Xuất tài liệu Microsoft Word (.docx)"
+                title={t('results.export_docx_title')}
                 className="px-2.5 py-1 rounded-md hover:bg-white hover:text-slate-900 hover:shadow-2xs text-slate-700 transition-all flex items-center gap-1 font-medium"
               >
                 <span className="material-symbols-outlined text-sm text-blue-600">article</span> Word
               </button>
               <button 
                 onClick={() => handleExport('pdf')} 
-                title="Xuất tài liệu PDF (.pdf)"
+                title={t('results.export_pdf_title')}
                 className="px-2.5 py-1 rounded-md hover:bg-white hover:text-slate-900 hover:shadow-2xs text-slate-700 transition-all flex items-center gap-1 font-medium"
               >
                 <span className="material-symbols-outlined text-sm text-red-500">picture_as_pdf</span> PDF
               </button>
               <button 
                 onClick={() => handleExport('srt')} 
-                title="Xuất tệp phụ đề (.srt)"
+                title={t('results.export_srt_title')}
                 className="px-2.5 py-1 rounded-md hover:bg-white hover:text-slate-900 hover:shadow-2xs text-slate-700 transition-all flex items-center gap-1 font-medium"
               >
                 <span className="material-symbols-outlined text-sm text-emerald-600">subtitles</span> SRT
               </button>
               <button 
                 onClick={() => handleExport('txt')} 
-                title="Xuất bản ghi văn bản thuần (.txt)"
+                title={t('results.export_txt_title')}
                 className="px-2.5 py-1 rounded-md hover:bg-white hover:text-slate-900 hover:shadow-2xs text-slate-700 transition-all flex items-center gap-1 font-medium"
               >
                 <span className="material-symbols-outlined text-sm text-slate-500">description</span> TXT
@@ -1149,7 +1151,7 @@ export const ResultsPage: React.FC = () => {
       <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6 mt-8">
         <h2 className="font-headline-md text-lg font-bold text-slate-900 flex items-center gap-2">
            <span className="material-symbols-outlined text-primary">insights</span>
-           {t('results.lecture_overview', 'Tổng quan & Phân tích bài giảng')}
+           {t('results.lecture_overview')}
         </h2>
 
         {/* Key Takeaways & Highlights Component synchronized with active summary length */}
@@ -1168,10 +1170,10 @@ export const ResultsPage: React.FC = () => {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="material-symbols-outlined text-primary text-xl">subject</span>
                   <h3 className="font-bold text-slate-900 text-sm md:text-base truncate">
-                    {t('results.content_summary', 'Tóm tắt nội dung bài giảng')}
+                    {t('results.content_summary')}
                   </h3>
                   <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 shrink-0">
-                    {LENGTH_OPTIONS.find(o => o.id === activeSummaryLength)?.badge}
+                    {t(LENGTH_OPTIONS.find(o => o.id === activeSummaryLength)?.badge ?? '')}
                   </span>
                 </div>
 
@@ -1193,13 +1195,13 @@ export const ResultsPage: React.FC = () => {
                               ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                               : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                           } ${isRegeneratingSummary ? 'opacity-60 cursor-not-allowed' : 'active:scale-95'}`}
-                          title={`${option.label}: ${option.description} ${isCached ? '• Đã lưu sẵn sàng (chuyển đổi 0ms)' : '• Tạo nội dung theo yêu cầu'}`}
+                          title={`${t(option.label)}: ${t(option.description)} ${isCached ? t('results.len_cached_short') : t('results.len_on_demand')}`}
                         >
-                          <span>{option.label}</span>
+                          <span>{t(option.label)}</span>
                           {isCached && (
                             <span
                               className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
-                              title="Bản tóm tắt đã có sẵn trong bộ nhớ đệm (chuyển đổi 0ms)"
+                              title={t('results.len_cached_long')}
                             />
                           )}
                         </button>
@@ -1216,7 +1218,7 @@ export const ResultsPage: React.FC = () => {
                       className={`p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-slate-200/50 transition-colors border border-slate-200/80 ${
                         isRegeneratingSummary ? 'cursor-not-allowed opacity-50' : 'cursor-pointer active:scale-95'
                       }`}
-                      title="Tạo lại bản tóm tắt cho chế độ hiện tại"
+                      title={t('results.regenerate')}
                     >
                       <RotateCw className={`w-3.5 h-3.5 ${isRegeneratingSummary ? 'animate-spin text-primary' : ''}`} />
                     </button>
@@ -1224,7 +1226,7 @@ export const ResultsPage: React.FC = () => {
                       type="button"
                       onClick={handleCopySummary}
                       className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-slate-200/50 transition-colors border border-slate-200/80 cursor-pointer active:scale-95"
-                      title={isCopiedSummary ? "Đã sao chép vào bộ nhớ tạm" : "Sao chép toàn bộ nội dung"}
+                      title={isCopiedSummary ? t('results.copied_clipboard') : t('results.copy_all')}
                     >
                       {isCopiedSummary ? (
                         <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -1241,14 +1243,14 @@ export const ResultsPage: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span>
-                    Độ dài: <strong className="font-semibold text-slate-700">{liveWordCount} từ</strong>
+                    {t('results.length_label')} <strong className="font-semibold text-slate-700">{t('results.n_words', { n: liveWordCount })}</strong>
                   </span>
                 </div>
                 <span className="text-slate-300">•</span>
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span>
-                    Thời gian đọc: <strong className="font-semibold text-slate-700">~{formatReadingTime(liveReadingTimeSec)}</strong>
+                    {t('results.reading_time')} <strong className="font-semibold text-slate-700">~{formatReadingTime(liveReadingTimeSec, t)}</strong>
                   </span>
                 </div>
                 {liveModelUsed && (
@@ -1257,7 +1259,7 @@ export const ResultsPage: React.FC = () => {
                     <div className="flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span className="truncate max-w-[200px]" title={liveModelUsed}>
-                        Mô hình: <strong className="font-semibold text-slate-700">{liveModelUsed}</strong>
+                        {t('results.model_label')} <strong className="font-semibold text-slate-700">{liveModelUsed}</strong>
                       </span>
                     </div>
                   </>
@@ -1270,7 +1272,7 @@ export const ResultsPage: React.FC = () => {
                   <div className="flex items-center gap-2.5 p-3.5 rounded-lg bg-primary/5 border border-primary/20 text-xs font-medium text-primary">
                     <RotateCw className="w-4 h-4 animate-spin shrink-0 text-primary" />
                     <span>
-                      Đang tổng hợp bản tóm tắt {activeSummaryLength === 'short' ? 'ngắn gọn' : activeSummaryLength === 'detailed' ? 'chi tiết' : 'tiêu chuẩn'} từ dữ liệu bài giảng...
+                      {t('results.generating', { level: t(LENGTH_OPTIONS.find(o => o.id === activeSummaryLength)?.label ?? '').toLowerCase() })}
                     </span>
                   </div>
                   <div className="space-y-3 mt-5">
@@ -1283,10 +1285,10 @@ export const ResultsPage: React.FC = () => {
               ) : (
                 <div className="flex-1 p-5 bg-[#FAF5FF] text-slate-700 overflow-y-auto custom-scrollbar max-h-[520px]">
                   {currentSummaryText ? (
-                    renderFormattedSummary(currentSummaryText, (secs) => seekAndPlayTo(secs, true))
+                    renderFormattedSummary(currentSummaryText, (secs) => seekAndPlayTo(secs, true), t)
                   ) : (
                     <div className="py-8 text-center text-sm text-slate-400 italic">
-                      Chưa có nội dung tóm tắt cho bài giảng này.
+                      {t('results.no_summary')}
                     </div>
                   )}
                 </div>
@@ -1316,7 +1318,7 @@ export const ResultsPage: React.FC = () => {
                             ? 'border-l-4 border-l-primary bg-primary/10 text-slate-900 font-bold shadow-xs' 
                             : 'border-l-4 border-l-transparent bg-[#FAF5FF] text-slate-600 hover:bg-primary/5 hover:text-slate-900'
                         }`}
-                        title={`Phát video từ phân chương: ${chapter.title} (${chapter.start})`}
+                        title={t('results.play_chapter', { title: chapter.title, start: chapter.start })}
                       >
                         <div className="flex flex-col gap-1 pr-2 flex-1 min-w-0">
                           <span className="text-xs truncate font-medium group-hover/ch:text-primary transition-colors" title={chapter.title}>{chapter.title}</span>
@@ -1342,7 +1344,7 @@ export const ResultsPage: React.FC = () => {
                       
                       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
                         <div className="px-3 pb-3 pt-1 text-[11px] text-slate-500 bg-[#FAF5FF]/50 border-t border-slate-100 italic leading-relaxed">
-                          {chapter.summary || "Chưa có nội dung tóm tắt."}
+                          {chapter.summary || t('results.no_chapter_summary')}
                         </div>
                       </div>
                     </div>
@@ -1377,7 +1379,7 @@ export const ResultsPage: React.FC = () => {
                     {t('results.keyframes')}
                   </h2>
                   <p className="text-[11px] text-slate-500 italic mt-1">
-                    {t('results.importance_desc', '* Độ quan trọng: Mức độ tương đồng ngữ nghĩa, hành động và chất lượng hình ảnh do AI đánh giá')}
+                    {t('results.importance_desc')}
                   </p>
                 </div>
                 
@@ -1391,7 +1393,7 @@ export const ResultsPage: React.FC = () => {
                         key={idx} 
                         onClick={() => seekAndPlayTo(kf.timestamp, true)}
                         className="group border border-slate-200/60 rounded-xl overflow-hidden hover:border-primary transition-all duration-300 cursor-pointer active:scale-[0.99] bg-[#FAF5FF] flex flex-col justify-between shadow-xs hover:shadow-md"
-                        title={`Xem và phát video từ mốc ${formatTime(kf.timestamp)}`}
+                        title={t('results.play_from', { time: formatTime(kf.timestamp) })}
                       >
                         <div className="relative aspect-video w-full bg-black overflow-hidden shrink-0">
                           <img 
