@@ -77,11 +77,19 @@ Image dùng chung cho mọi máy: `ai_workers/Dockerfile` (Python 3.11, torch 2.
 
 Colab không chạy được Docker, nên notebook cài cùng các file requirements với image Docker vào một venv Python 3.11.
 
-1. Push code lên GitHub (notebook clone nhánh `feat/update-project`; sửa `BRANCH` nếu khác).
+1. Push code lên GitHub (notebook clone nhánh `main`, sửa `BRANCH` nếu khác; nếu `/content/mls` đã có từ lần chạy trước thì cell cài đặt tự đưa nó về commit mới nhất và in commit đó ra).
 2. Mở `ai_workers/colab_gpu_worker.ipynb` trên Colab, chọn runtime GPU.
 3. Thêm Colab Secrets theo bảng trong notebook (`SHARED_REDIS_URL`, `CF_R2_*`, `GROQ_API_KEY`, tùy chọn `OPENROUTER_API_KEY`, `HF_TOKEN`, `GITHUB_TOKEN`).
 4. Chạy lần lượt các cell. Cell cài đặt chạy song song apt/clone/tạo venv rồi LFS/`uv pip install`. Cell cuối chạy worker và in log; khi thấy `colab@... ready.` là website bắt đầu gửi job sang Colab.
 5. Dừng cell cuối (hoặc runtime hết hạn) → job mới tự quay về worker CPU.
+
+### 4.1 Chạy hàng loạt và đo thời gian
+
+`ai_workers/colab_batch_30_videos.ipynb` chạy cùng pipeline cho một danh sách video (mặc định 30 video YouTube) mà không cần website, Redis hay R2. Script `ai_workers/batch_runner.py` nạp model một lần, gọi `process_video` tuần tự và ghi mỗi video một dòng vào `MyDrive/mls-batch/<RUN_NAME>.csv` (thời gian tải, thời gian xử lý, thời lượng video, hệ số realtime, thời gian từng giai đoạn, số cảnh, số hộp phần tử slide...). Chạy lại thì video đã xong được bỏ qua. Cell cuối gộp CSV thành `.xlsx` (3 sheet: `videos`, `tổng hợp`, `giai đoạn`) và tải về.
+
+- Các cột `stage_*_sec` là khoảng thời gian giữa log đầu và log cuối của giai đoạn; nhánh audio và visual chạy song song nên đừng cộng chúng, dùng `processing_sec`.
+- YouTube hay chặn IP của Colab: video bị chặn ghi `download_failed`. Đặt file `<video_id>.mp4` tải sẵn vào `MyDrive/mls-batch/videos` thì lần chạy sau dùng file đó. Để tải cả danh sách trên máy bạn: `pip install yt-dlp` rồi `python -m ai_workers.batch_download_videos` (tạo `videos.zip`; dùng đúng cấu hình tải của pipeline, vì yt-dlp mặc định bị YouTube trả 403). Upload `videos.zip` vào `MyDrive/mls-batch/`, notebook tự giải nén.
+- Không có R2 nên bước tải keyframe lên R2 bị bỏ qua, các thời gian khác không đổi so với website.
 
 Song song trong một job: notebook đặt `ENABLE_PARALLEL_BRANCHES=true`, nên nhánh audio (ASR + diarization) và nhánh visual (scene → semantic) chạy đồng thời, upload keyframe R2 dùng 8 thread. Nhánh nào hết VRAM/RAM sẽ tự chạy lại tuần tự; đặt `false` để quay về chạy tuần tự hoàn toàn. Mặc định ngoài Colab là `false`. Khi khởi động, worker tự tải sẵn model (Whisper, Qwen3-ASR, CLIP, PaddleOCR, LED) ở luồng nền (`PREFETCH_MODELS=auto`, bật trên Colab); trong nhánh audio, khử nhiễu và nạp Qwen3-ASR chạy cùng lúc. Log có dòng `[Prefetch] <model> ready in …s`. Qwen3-ASR còn được nạp lên GPU ngay lúc khởi động và giữ lại giữa các job (`QWEN_KEEP_RESIDENT=auto`, bật trên Colab), nên job không phải nạp lại ~2 phút; log có `Qwen3-ASR is resident on the GPU`. Job đến sớm hơn sẽ đợi lần nạp này, không nạp lần hai. CLIP, Florence-2 và PaddleOCR cũng được giữ sẵn như vậy (`VISUAL_KEEP_RESIDENT=auto`, thêm ~3,5 GB VRAM); log có `[Resident] <model> loaded in …s and kept`. LED (tóm tắt tiếng Anh) cũng được giữ sẵn (`LED_KEEP_RESIDENT=auto`, ~1 GB VRAM); log job có `[LED] model sẵn sàng sau Xs, sinh N lần trong Ys` để thấy thời gian nạp và sinh. Khi khử nhiễu GPU nhanh (chunk đầu dưới 0,08x thời gian thực) ASR chạy một batch đủ `QWEN_ASR_BATCH_SIZE` chunk, ngược lại giữ batch nhỏ để ASR bắt đầu sớm.
 

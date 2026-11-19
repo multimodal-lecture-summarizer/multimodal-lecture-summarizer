@@ -53,3 +53,7 @@ benchmarks/data/cached_features/*
 !benchmarks/data/cached_features/manifest.json
 !benchmarks/data/*.py
 plans/**/probes/cache/
+
+# Videos downloaded for the Colab batch notebook (ai_workers/batch_download_videos.py)
+batch_videos/
+videos.zip
