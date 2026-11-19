@@ -45,6 +45,15 @@ def test_sentence_prefix_cuts_oversized_first_sentence():
     assert sentence_prefix("a b c d e f g h", 3) == "a b c"
 
 
+def test_sentence_prefix_fills_short_budget_from_run_on_sentence():
+    short = " ".join(["a"] * 10) + "."
+    run_on = " ".join(["b"] * 30) + ", " + " ".join(["c"] * 200) + "."
+    result = sentence_prefix(f"{short} {run_on}", 100)
+    assert result.startswith(short)
+    assert result.endswith(".")
+    assert 60 <= len(result.split()) <= 100
+
+
 def test_describe_raw_reports_what_sentence_prefix_dropped():
     raw = "One two three. " + " ".join(["w"] * 10) + " end"  # long unterminated second sentence
     summary = sentence_prefix(raw, 5)

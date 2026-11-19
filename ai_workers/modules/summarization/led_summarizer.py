@@ -57,12 +57,29 @@ def sentence_prefix(text: str, word_cap: int) -> str:
     for sentence in sentences:
         count = len(sentence.split())
         if used + count > word_cap:
+            # LED often writes one run-on sentence; dropping it would leave a stub, so when less
+            # than half the budget is used, fill the rest with a clause-bounded cut of it.
+            if picked and used < word_cap / 2:
+                clipped = _clause_prefix(sentence, word_cap - used)
+                if clipped:
+                    picked.append(clipped)
             break
         picked.append(sentence)
         used += count
     if picked:
         return " ".join(picked)
     return " ".join(text.split()[:word_cap])
+
+
+def _clause_prefix(sentence: str, word_cap: int) -> str:
+    """Leading words of a sentence within word_cap, cut at the last comma/semicolon when one is
+    in the second half of the cut, and closed with a period."""
+    words = sentence.split()[:word_cap]
+    for index in range(len(words) - 1, word_cap // 2 - 1, -1):
+        if words[index].endswith((",", ";", ":")):
+            words = words[: index + 1]
+            break
+    return " ".join(words).rstrip(",;: ") + "."
 
 
 def describe_raw(raw: str, summary: str, word_cap: int) -> str:
