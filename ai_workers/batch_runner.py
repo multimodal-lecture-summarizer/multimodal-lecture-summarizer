@@ -220,17 +220,19 @@ def acquire(entry: Dict[str, Any], work_dir: Path, video_dir: Optional[Path], ma
     """Return (path or URL for process_video, whether it is a temporary local file to delete)."""
     url = entry["url"]
     if is_youtube(url):
-        from ai_workers.core.youtube_ingest import download_youtube
+        video_id = youtube_id(url)
+        # A pre-downloaded copy wins over YouTube: it is the same file on every run (a Colab download
+        # may pick another format) and it avoids the slow retries when YouTube blocks Colab.
+        local = _find_local_copy(video_dir, video_id)
+        if local is None:
+            from ai_workers.core.youtube_ingest import download_youtube
 
-        video_id = youtube_id(url) or uuid.uuid4().hex[:11]
-        try:
-            return download_youtube(url, str(work_dir / f"{video_id}.mp4"), max_duration), True
-        except Exception as err:  # noqa: BLE001 - bot checks and blocked IPs surface as many types
-            local = _find_local_copy(video_dir, video_id)
-            if local is None:
+            try:
+                return download_youtube(url, str(work_dir / f"{video_id or uuid.uuid4().hex[:11]}.mp4"), max_duration), True
+            except Exception as err:  # noqa: BLE001 - bot checks and blocked IPs surface as many types
                 raise RuntimeError(f"{type(err).__name__}: {str(err)[:300]}") from err
-            print(f"[BATCH] YouTube refused the download ({type(err).__name__}); using {local.name} from the video folder.")
-            source = local
+        print(f"[BATCH] Using {local.name} from the video folder instead of downloading it.")
+        source = local
     elif is_remote_url(url):
         return url, False  # process_video downloads it itself
     else:

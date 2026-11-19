@@ -103,10 +103,13 @@ def test_tee_keeps_everything_but_echoes_only_progress_lines():
     ]
 
 
-def test_acquire_uses_a_predownloaded_copy_when_youtube_refuses(tmp_path, monkeypatch):
+def test_acquire_prefers_a_predownloaded_copy_and_falls_back_to_youtube(tmp_path, monkeypatch):
     import ai_workers.core.youtube_ingest as ingest
 
+    asked = []
+
     def refuse(url, dest, max_duration=0):
+        asked.append(url)
         raise RuntimeError("Sign in to confirm you're not a bot")
 
     monkeypatch.setattr(ingest, "download_youtube", refuse)
@@ -119,6 +122,7 @@ def test_acquire_uses_a_predownloaded_copy_when_youtube_refuses(tmp_path, monkey
     path, is_temp = br.acquire({"url": "https://www.youtube.com/watch?v=FLWvcdfGPxs"}, work, videos, 3600)
     assert is_temp and path == str(work / "FLWvcdfGPxs.mp4")
     assert (videos / "FLWvcdfGPxs.mp4").exists()  # the Drive copy stays untouched
+    assert asked == []  # YouTube is not contacted when the file is there
 
     try:
         br.acquire({"url": "https://www.youtube.com/watch?v=ZZZZZZZZZZZ"}, work, videos, 3600)
@@ -126,3 +130,4 @@ def test_acquire_uses_a_predownloaded_copy_when_youtube_refuses(tmp_path, monkey
         assert "bot" in str(err)
     else:
         raise AssertionError("expected the download error to propagate")
+    assert len(asked) == 1
